@@ -1,0 +1,56 @@
+{
+  "app": {
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "C:\\Users\\35595\\.ohos\\config\\default_ArkTavernSolo_VCKYIZ53w6TojxFKwd8cs1OsWSAXt-gkx45zl-FDB38=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001B5928FAF4EECA54F67FC400FEF482E2111547D61953BDFC11CE27B5343431D2D9490A773F1FEF88",
+          "profile": "C:\\Users\\35595\\.ohos\\config\\default_ArkTavernSolo_VCKYIZ53w6TojxFKwd8cs1OsWSAXt-gkx45zl-FDB38=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "C:\\Users\\35595\\.ohos\\config\\default_ArkTavernSolo_VCKYIZ53w6TojxFKwd8cs1OsWSAXt-gkx45zl-FDB38=.p12",
+          "storePassword": "0000001BA9E1319C7C304569E0D56B52197D7C296F8919FAD01A3FF9A3EADCB756338CF25C8D55E8FCA7B8"
+        }
+      }
+    ],
+    "products": [
+      {
+        "name": "default",
+        "signingConfig": "default",
+        "targetSdkVersion": "6.1.1(24)",
+        "compatibleSdkVersion": "6.1.1(24)",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "caseSensitiveCheck": true,
+            "useNormalizedOHMUrl": true
+          }
+        }
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug",
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "./entry",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    }
+  ]
+}

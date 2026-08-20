@@ -1,0 +1,22 @@
+{
+  "src": [
+    "pages/Index",
+    "pages/ChatPage",
+    "pages/CharacterListPage",
+    "pages/CharacterEditPage",
+    "pages/AddCharacterPage",
+    "pages/LorebookPage",
+    "pages/ModelSettingsPage",
+    "pages/ModelConfigEditPage",
+    "pages/AppSettingsPage",
+    "pages/PromptPresetListPage",
+    "pages/PromptPresetEditPage",
+    "pages/BranchMapPage",
+    "pages/ChatBackgroundSettingsPage",
+    "pages/MemoryManagementPage",
+    "pages/ContextBudgetPage",
+    "pages/MarketDetailPage",
+    "pages/AiCharacterMakerPage",
+    "pages/AiCharacterPreviewPage"
+  ]
+}

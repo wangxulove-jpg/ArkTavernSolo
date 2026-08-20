@@ -1,0 +1,3956 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "module description"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "description"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "ArkTavern"
+    },
+    {
+      "name": "permission_internet_reason",
+      "value": "Access network for AI chat streaming"
+    },
+    {
+      "name": "nav_chat_empty",
+      "value": "在下方输入消息开始聊天"
+    },
+    {
+      "name": "chat_no_model",
+      "value": "尚未配置模型"
+    },
+    {
+      "name": "chat_go_settings",
+      "value": "前往模型设置"
+    },
+    {
+      "name": "chat_input_placeholder",
+      "value": "输入消息…"
+    },
+    {
+      "name": "chat_stop",
+      "value": "停止"
+    },
+    {
+      "name": "chat_clear",
+      "value": "清空"
+    },
+    {
+      "name": "chat_regenerate",
+      "value": "重新生成"
+    },
+    {
+      "name": "chat_copy_success",
+      "value": "已复制"
+    },
+    {
+      "name": "nav_lorebook_title",
+      "value": "世界书"
+    },
+    {
+      "name": "nav_model_settings_title",
+      "value": "模型设置"
+    },
+    {
+      "name": "nav_app_settings_title",
+      "value": "应用设置"
+    },
+    {
+      "name": "settings_theme_section",
+      "value": "外观"
+    },
+    {
+      "name": "settings_theme_title",
+      "value": "主题"
+    },
+    {
+      "name": "settings_theme_desc",
+      "value": "选择应用整体配色"
+    },
+    {
+      "name": "settings_theme_follow_system",
+      "value": "跟随设备"
+    },
+    {
+      "name": "settings_theme_follow_system_desc",
+      "value": "根据系统浅色与深色外观自动切换"
+    },
+    {
+      "name": "settings_theme_light",
+      "value": "浅色"
+    },
+    {
+      "name": "settings_theme_light_desc",
+      "value": "明亮清爽的浅色界面"
+    },
+    {
+      "name": "settings_theme_dark",
+      "value": "深色"
+    },
+    {
+      "name": "settings_theme_dark_desc",
+      "value": "深色沉浸式界面"
+    },
+    {
+      "name": "settings_theme_tavern",
+      "value": "酒馆棕"
+    },
+    {
+      "name": "settings_theme_tavern_desc",
+      "value": "暖金与深木色的 ArkTavern 酒馆风格"
+    },
+    {
+      "name": "settings_global_user_name_section",
+      "value": "全局用户称呼"
+    },
+    {
+      "name": "settings_global_user_name_label",
+      "value": "你的称呼"
+    },
+    {
+      "name": "settings_global_user_name_placeholder",
+      "value": "留空时使用 User"
+    },
+    {
+      "name": "settings_global_user_name_hint",
+      "value": "用于所有未单独设置称呼的角色。可在角色编辑页为单个角色指定不同称呼。"
+    },
+    {
+      "name": "settings_global_user_name_saved",
+      "value": "已保存"
+    },
+    {
+      "name": "settings_global_user_name_save_failed",
+      "value": "保存失败"
+    },
+    {
+      "name": "chat_user_name_override_placeholder",
+      "value": "留空时使用角色或全局"
+    },
+    {
+      "name": "chat_user_name_override_hint",
+      "value": "只影响当前对话,不修改角色或全局设置。清空后恢复使用角色或全局值。"
+    },
+    {
+      "name": "chat_user_name_override_menu_title",
+      "value": "本对话称呼"
+    },
+    {
+      "name": "model_settings_config_list",
+      "value": "配置列表"
+    },
+    {
+      "name": "model_settings_current_badge",
+      "value": "当前"
+    },
+    {
+      "name": "model_settings_name",
+      "value": "配置名称"
+    },
+    {
+      "name": "model_settings_name_placeholder",
+      "value": "给配置起个名字"
+    },
+    {
+      "name": "model_settings_model",
+      "value": "模型"
+    },
+    {
+      "name": "model_settings_api_key",
+      "value": "API Key"
+    },
+    {
+      "name": "model_settings_api_key_configured",
+      "value": "API Key 已配置,留空保留原 Key"
+    },
+    {
+      "name": "model_settings_api_key_placeholder",
+      "value": "输入 API Key(新建必填)"
+    },
+    {
+      "name": "model_settings_temperature",
+      "value": "Temperature"
+    },
+    {
+      "name": "model_settings_top_p",
+      "value": "Top P"
+    },
+    {
+      "name": "model_settings_temperature_desc",
+      "value": "采样随机性:越高回复越多样、越有创意,越低越稳定、越确定。"
+    },
+    {
+      "name": "model_settings_top_p_desc",
+      "value": "核采样:只从概率累计到该值的候选词中采样,越低越保守集中,越高越多样。"
+    },
+    {
+      "name": "model_settings_max_tokens",
+      "value": "Max Tokens"
+    },
+    {
+      "name": "model_settings_stream",
+      "value": "流式请求"
+    },
+    {
+      "name": "model_settings_enabled",
+      "value": "启用"
+    },
+    {
+      "name": "model_settings_save",
+      "value": "保存"
+    },
+    {
+      "name": "model_settings_saving",
+      "value": "保存中…"
+    },
+    {
+      "name": "model_settings_test",
+      "value": "测试连接"
+    },
+    {
+      "name": "model_settings_set_current",
+      "value": "设为当前"
+    },
+    {
+      "name": "model_settings_delete",
+      "value": "删除"
+    },
+    {
+      "name": "model_settings_delete_confirm",
+      "value": "确定删除该配置吗?API Key 也将一并清除。"
+    },
+    {
+      "name": "model_settings_current_config_title",
+      "value": "当前配置"
+    },
+    {
+      "name": "model_settings_config_enabled",
+      "value": "已启用"
+    },
+    {
+      "name": "model_settings_config_disabled",
+      "value": "已停用"
+    },
+    {
+      "name": "model_settings_api_key_status_configured",
+      "value": "已配置"
+    },
+    {
+      "name": "model_settings_api_key_status_not_configured",
+      "value": "未配置"
+    },
+    {
+      "name": "model_settings_provider",
+      "value": "API 服务商"
+    },
+    {
+      "name": "model_settings_provider_sheet_title",
+      "value": "选择服务商"
+    },
+    {
+      "name": "model_settings_model_sheet_title",
+      "value": "选择模型"
+    },
+    {
+      "name": "model_settings_connection",
+      "value": "连接"
+    },
+    {
+      "name": "model_settings_parameters",
+      "value": "参数"
+    },
+    {
+      "name": "model_settings_base_url_summary",
+      "value": "Base URL"
+    },
+    {
+      "name": "model_settings_base_url_auto",
+      "value": "自动配置"
+    },
+    {
+      "name": "model_settings_testing",
+      "value": "测试中…"
+    },
+    {
+      "name": "model_settings_new_title",
+      "value": "新建模型配置"
+    },
+    {
+      "name": "model_settings_edit_title",
+      "value": "编辑模型配置"
+    },
+    {
+      "name": "model_settings_param_hint",
+      "value": "这些参数仅影响使用此配置创建的请求。"
+    },
+    {
+      "name": "model_settings_temperature_range",
+      "value": "范围: 0 ~ 2"
+    },
+    {
+      "name": "model_settings_top_p_range",
+      "value": "范围: 0 ~ 1"
+    },
+    {
+      "name": "model_settings_max_tokens_desc",
+      "value": "单次回复最大 token 数"
+    },
+    {
+      "name": "model_settings_stream_desc",
+      "value": "以 SSE 方式逐字接收回复"
+    },
+    {
+      "name": "model_settings_enabled_desc",
+      "value": "启用后可在聊天中使用"
+    },
+    {
+      "name": "model_settings_empty_title",
+      "value": "尚无模型配置"
+    },
+    {
+      "name": "model_settings_empty_desc",
+      "value": "点击下方按钮创建第一个模型配置"
+    },
+    {
+      "name": "model_settings_add_config",
+      "value": "新建配置"
+    },
+    {
+      "name": "model_settings_show_key",
+      "value": "显示"
+    },
+    {
+      "name": "model_settings_hide_key",
+      "value": "隐藏"
+    },
+    {
+      "name": "model_settings_select_provider_hint",
+      "value": "请选择"
+    },
+    {
+      "name": "nav_character_list_title",
+      "value": "角色列表"
+    },
+    {
+      "name": "character_no_characters",
+      "value": "暂无角色"
+    },
+    {
+      "name": "character_no_characters_desc",
+      "value": "点击右下角创建第一个角色"
+    },
+    {
+      "name": "character_new",
+      "value": "新建"
+    },
+    {
+      "name": "character_edit",
+      "value": "编辑"
+    },
+    {
+      "name": "character_set_current",
+      "value": "设为当前"
+    },
+    {
+      "name": "character_current_badge",
+      "value": "当前"
+    },
+    {
+      "name": "character_delete",
+      "value": "删除"
+    },
+    {
+      "name": "character_delete_confirm",
+      "value": "确定删除角色\"%s\"吗?此操作不可撤销。"
+    },
+    {
+      "name": "character_form_name",
+      "value": "名称"
+    },
+    {
+      "name": "character_form_name_placeholder",
+      "value": "请输入角色名称"
+    },
+    {
+      "name": "character_form_description",
+      "value": "描述"
+    },
+    {
+      "name": "character_form_description_placeholder",
+      "value": "角色的外貌、背景等"
+    },
+    {
+      "name": "character_form_personality",
+      "value": "性格"
+    },
+    {
+      "name": "character_form_personality_placeholder",
+      "value": "角色的性格特点"
+    },
+    {
+      "name": "character_form_scenario",
+      "value": "场景"
+    },
+    {
+      "name": "character_form_scenario_placeholder",
+      "value": "所处的世界观和场景"
+    },
+    {
+      "name": "character_form_first_message",
+      "value": "开场白"
+    },
+    {
+      "name": "character_form_first_message_placeholder",
+      "value": "角色首次对话时的开场白"
+    },
+    {
+      "name": "character_form_system_prompt",
+      "value": "System Prompt"
+    },
+    {
+      "name": "character_form_system_prompt_placeholder",
+      "value": "自定义系统提示词,留空则自动组合"
+    },
+    {
+      "name": "character_form_save",
+      "value": "保存"
+    },
+    {
+      "name": "character_form_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "character_form_title_new",
+      "value": "新建角色"
+    },
+    {
+      "name": "character_form_title_edit",
+      "value": "编辑角色"
+    },
+    {
+      "name": "character_import",
+      "value": "导入"
+    },
+    {
+      "name": "character_export",
+      "value": "导出"
+    },
+    {
+      "name": "character_import_preview",
+      "value": "预览角色"
+    },
+    {
+      "name": "character_import_confirm",
+      "value": "确认导入"
+    },
+    {
+      "name": "character_import_ai_optimize",
+      "value": "使用 AI 优化内容"
+    },
+    {
+      "name": "character_import_ai_optimize_desc",
+      "value": "根据角色卡内容,整理为规范的结构(不改变角色设定)"
+    },
+    {
+      "name": "character_import_ai_optimizing",
+      "value": "AI 优化中…"
+    },
+    {
+      "name": "character_import_ai_optimize_again",
+      "value": "重新优化"
+    },
+    {
+      "name": "character_import_ai_optimize_view",
+      "value": "查看优化内容"
+    },
+    {
+      "name": "character_import_ai_optimized_title",
+      "value": "优化后内容"
+    },
+    {
+      "name": "character_import_close",
+      "value": "关闭"
+    },
+    {
+      "name": "character_import_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "add_character_title",
+      "value": "添加角色"
+    },
+    {
+      "name": "add_character_tab_new",
+      "value": "新建角色"
+    },
+    {
+      "name": "add_character_tab_ai",
+      "value": "AI 制作"
+    },
+    {
+      "name": "add_character_tab_import",
+      "value": "文件导入"
+    },
+    {
+      "name": "add_character_new_title",
+      "value": "新建角色"
+    },
+    {
+      "name": "add_character_new_desc",
+      "value": "从空白开始创建一个全新的角色卡"
+    },
+    {
+      "name": "add_character_start_new",
+      "value": "开始新建"
+    },
+    {
+      "name": "add_character_ai_title",
+      "value": "AI 制作角色卡"
+    },
+    {
+      "name": "add_character_ai_desc",
+      "value": "输入角色创意,由你已配置的 AI 模型生成标准 Tavern Card V2"
+    },
+    {
+      "name": "add_character_start_ai",
+      "value": "开始 AI 制作"
+    },
+    {
+      "name": "add_character_import_icon",
+      "value": "📁"
+    },
+    {
+      "name": "add_character_import_title",
+      "value": "选择角色卡文件"
+    },
+    {
+      "name": "add_character_import_desc",
+      "value": "点击此处从文件导入角色卡"
+    },
+    {
+      "name": "add_character_import_formats",
+      "value": "支持 PNG / JSON 格式(SillyTavern Character Card V2 / V3)"
+    },
+    {
+      "name": "character_export_success",
+      "value": "导出成功"
+    },
+    {
+      "name": "character_export_failed",
+      "value": "导出失败"
+    },
+    {
+      "name": "lorebook_no_lorebooks",
+      "value": "暂无世界书"
+    },
+    {
+      "name": "lorebook_no_lorebooks_desc",
+      "value": "点击右下角创建第一个世界书"
+    },
+    {
+      "name": "lorebook_new",
+      "value": "新建"
+    },
+    {
+      "name": "lorebook_edit",
+      "value": "编辑"
+    },
+    {
+      "name": "lorebook_set_current",
+      "value": "设为当前"
+    },
+    {
+      "name": "lorebook_current_badge",
+      "value": "当前"
+    },
+    {
+      "name": "lorebook_delete",
+      "value": "删除"
+    },
+    {
+      "name": "lorebook_form_name",
+      "value": "名称"
+    },
+    {
+      "name": "lorebook_form_name_placeholder",
+      "value": "请输入世界书名称"
+    },
+    {
+      "name": "lorebook_form_description",
+      "value": "描述"
+    },
+    {
+      "name": "lorebook_form_description_placeholder",
+      "value": "世界书的简要描述"
+    },
+    {
+      "name": "lorebook_form_save",
+      "value": "保存"
+    },
+    {
+      "name": "lorebook_form_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "lorebook_form_title_new",
+      "value": "新建世界书"
+    },
+    {
+      "name": "lorebook_form_title_edit",
+      "value": "编辑世界书"
+    },
+    {
+      "name": "lorebook_disabled",
+      "value": "已禁用"
+    },
+    {
+      "name": "lorebook_enable",
+      "value": "启用"
+    },
+    {
+      "name": "lorebook_disable",
+      "value": "禁用"
+    },
+    {
+      "name": "lorebook_no_entries",
+      "value": "暂无条目"
+    },
+    {
+      "name": "lorebook_new_entry",
+      "value": "新建条目"
+    },
+    {
+      "name": "lorebook_entry_form_title_new",
+      "value": "新建条目"
+    },
+    {
+      "name": "lorebook_entry_form_title_edit",
+      "value": "编辑条目"
+    },
+    {
+      "name": "lorebook_entry_name",
+      "value": "名称"
+    },
+    {
+      "name": "lorebook_entry_name_placeholder",
+      "value": "条目名称"
+    },
+    {
+      "name": "lorebook_entry_keys",
+      "value": "关键词"
+    },
+    {
+      "name": "lorebook_entry_keys_placeholder",
+      "value": "逗号或换行分隔"
+    },
+    {
+      "name": "lorebook_entry_secondary_keys",
+      "value": "次关键词"
+    },
+    {
+      "name": "lorebook_entry_secondary_keys_placeholder",
+      "value": "逗号或换行分隔(Selective 模式)"
+    },
+    {
+      "name": "lorebook_entry_content",
+      "value": "内容"
+    },
+    {
+      "name": "lorebook_entry_content_placeholder",
+      "value": "注入到聊天中的世界书内容"
+    },
+    {
+      "name": "lorebook_entry_constant",
+      "value": "恒定(始终激活)"
+    },
+    {
+      "name": "lorebook_entry_enabled",
+      "value": "启用"
+    },
+    {
+      "name": "lorebook_entry_selective",
+      "value": "Selective(主+次关键词)"
+    },
+    {
+      "name": "lorebook_entry_priority",
+      "value": "优先级"
+    },
+    {
+      "name": "lorebook_entry_position",
+      "value": "插入位置"
+    },
+    {
+      "name": "lorebook_entry_position_before",
+      "value": "角色前"
+    },
+    {
+      "name": "lorebook_entry_position_after",
+      "value": "角色后"
+    },
+    {
+      "name": "lorebook_entry_delete_confirm",
+      "value": "确定删除条目\"%s\"吗?"
+    },
+    {
+      "name": "chat_edit_message_title",
+      "value": "编辑消息"
+    },
+    {
+      "name": "chat_edit_message_placeholder",
+      "value": "输入消息内容"
+    },
+    {
+      "name": "chat_edit_message_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "chat_edit_message_save_and_generate",
+      "value": "保存并生成"
+    },
+    {
+      "name": "chat_edit_message_submitting",
+      "value": "处理中"
+    },
+    {
+      "name": "chat_branch_current_badge",
+      "value": "当前"
+    },
+    {
+      "name": "chat_branch_create_busy",
+      "value": "生成中或操作中,无法创建分支"
+    },
+    {
+      "name": "branch_map_title",
+      "value": "分支地图"
+    },
+    {
+      "name": "branch_map_switch_button",
+      "value": "切换到此分支"
+    },
+    {
+      "name": "branch_map_back",
+      "value": "返回"
+    },
+    {
+      "name": "branch_map_empty",
+      "value": "暂无分支"
+    },
+    {
+      "name": "tab_characters",
+      "value": "角色卡"
+    },
+    {
+      "name": "tab_characters_load_failed",
+      "value": "加载角色列表失败"
+    },
+    {
+      "name": "character_home_empty_title",
+      "value": "还没有角色"
+    },
+    {
+      "name": "character_home_empty_desc",
+      "value": "导入一张角色卡，开始你的第一段对话"
+    },
+    {
+      "name": "character_search_placeholder",
+      "value": "搜索角色卡"
+    },
+    {
+      "name": "character_search_no_result",
+      "value": "没有找到匹配的角色"
+    },
+    {
+      "name": "character_meta_updated",
+      "value": "更新"
+    },
+    {
+      "name": "character_action_new_chat",
+      "value": "新建对话"
+    },
+    {
+      "name": "character_action_edit",
+      "value": "编辑"
+    },
+    {
+      "name": "character_action_delete",
+      "value": "删除"
+    },
+    {
+      "name": "character_action_export",
+      "value": "导出"
+    },
+    {
+      "name": "character_export_choose_format",
+      "value": "选择导出格式"
+    },
+    {
+      "name": "character_export_png",
+      "value": "PNG 角色卡"
+    },
+    {
+      "name": "character_export_json",
+      "value": "JSON 角色卡"
+    },
+    {
+      "name": "character_export_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "character_delete_confirm_title",
+      "value": "确认删除"
+    },
+    {
+      "name": "character_delete_confirm_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "character_delete_confirm_ok",
+      "value": "删除"
+    },
+    {
+      "name": "character_edit_title_new",
+      "value": "新建角色"
+    },
+    {
+      "name": "character_edit_title_edit",
+      "value": "编辑角色"
+    },
+    {
+      "name": "character_edit_tab_character",
+      "value": "角色"
+    },
+    {
+      "name": "character_edit_tab_conversation",
+      "value": "对话"
+    },
+    {
+      "name": "character_edit_save",
+      "value": "保存"
+    },
+    {
+      "name": "character_edit_back",
+      "value": "返回"
+    },
+    {
+      "name": "character_edit_image_placeholder",
+      "value": "暂无角色图片"
+    },
+    {
+      "name": "character_edit_image_edit_hint",
+      "value": "功能开发中"
+    },
+    {
+      "name": "character_edit_field_required_hint",
+      "value": "*"
+    },
+    {
+      "name": "character_edit_field_name",
+      "value": "名称"
+    },
+    {
+      "name": "character_edit_field_name_placeholder",
+      "value": "请输入角色名称"
+    },
+    {
+      "name": "character_edit_field_user_name",
+      "value": "角色对你的称呼"
+    },
+    {
+      "name": "character_edit_field_user_name_placeholder",
+      "value": "留空时使用全局称呼"
+    },
+    {
+      "name": "character_edit_field_description",
+      "value": "描述"
+    },
+    {
+      "name": "character_edit_field_description_placeholder",
+      "value": "角色的外貌、背景等"
+    },
+    {
+      "name": "character_edit_field_description_hint",
+      "value": "用于在角色卡上展示的简要说明"
+    },
+    {
+      "name": "character_edit_field_personality",
+      "value": "性格"
+    },
+    {
+      "name": "character_edit_field_personality_placeholder",
+      "value": "角色的性格特点"
+    },
+    {
+      "name": "character_edit_field_system_prompt",
+      "value": "System Prompt"
+    },
+    {
+      "name": "character_edit_field_system_prompt_placeholder",
+      "value": "自定义系统提示词,留空则自动组合"
+    },
+    {
+      "name": "character_edit_field_system_prompt_hint",
+      "value": "用于指导 AI 扮演该角色的提示词"
+    },
+    {
+      "name": "character_edit_field_scenario",
+      "value": "场景"
+    },
+    {
+      "name": "character_edit_field_scenario_placeholder",
+      "value": "所处的世界观和场景"
+    },
+    {
+      "name": "character_edit_field_scenario_hint",
+      "value": "角色所处的世界或情境"
+    },
+    {
+      "name": "character_edit_field_first_message",
+      "value": "开场白"
+    },
+    {
+      "name": "character_edit_field_first_message_placeholder",
+      "value": "角色首次对话时的开场白"
+    },
+    {
+      "name": "character_edit_field_first_message_hint",
+      "value": "新建对话时作为首条 Assistant 消息"
+    },
+    {
+      "name": "character_edit_unsaved_title",
+      "value": "放弃修改?"
+    },
+    {
+      "name": "character_edit_unsaved_message",
+      "value": "你有未保存的修改,确定要离开吗?"
+    },
+    {
+      "name": "character_edit_unsaved_stay",
+      "value": "继续编辑"
+    },
+    {
+      "name": "character_edit_unsaved_discard",
+      "value": "放弃修改"
+    },
+    {
+      "name": "character_edit_field_mes_example",
+      "value": "对话示例"
+    },
+    {
+      "name": "character_edit_field_mes_example_placeholder",
+      "value": "输入对话示例(可使用 <START> 分隔多段)"
+    },
+    {
+      "name": "character_edit_field_mes_example_hint",
+      "value": "作为角色说话风格示例进入 Prompt,用 <START> 分隔多段对话"
+    },
+    {
+      "name": "character_edit_field_creator_notes",
+      "value": "创作者备注"
+    },
+    {
+      "name": "character_edit_field_creator_notes_placeholder",
+      "value": "留给其他用户的说明(不进入提示词)"
+    },
+    {
+      "name": "character_edit_field_post_history",
+      "value": "Post-History Instructions"
+    },
+    {
+      "name": "character_edit_field_post_history_placeholder",
+      "value": "放在聊天历史之后的指令"
+    },
+    {
+      "name": "character_edit_field_post_history_hint",
+      "value": "仅在提示词功能启用时注入,不作为可见聊天消息保存"
+    },
+    {
+      "name": "character_edit_field_creator",
+      "value": "创作者"
+    },
+    {
+      "name": "character_edit_field_creator_placeholder",
+      "value": "创作者名(元数据)"
+    },
+    {
+      "name": "character_edit_field_character_version",
+      "value": "角色卡版本"
+    },
+    {
+      "name": "character_edit_field_character_version_placeholder",
+      "value": "如 1.0、2.0"
+    },
+    {
+      "name": "character_edit_field_tags",
+      "value": "标签"
+    },
+    {
+      "name": "character_edit_field_tags_hint",
+      "value": "元数据,不进入提示词"
+    },
+    {
+      "name": "character_edit_field_tags_placeholder",
+      "value": "输入标签后点击添加"
+    },
+    {
+      "name": "character_edit_tag_add",
+      "value": "添加"
+    },
+    {
+      "name": "character_edit_alternate_greetings",
+      "value": "备用开场白"
+    },
+    {
+      "name": "character_edit_alternate_greetings_hint",
+      "value": "作为开场白的额外 Swipe 候选,可上下拖动排序"
+    },
+    {
+      "name": "character_edit_alternate_greetings_add",
+      "value": "添加备用开场白"
+    },
+    {
+      "name": "character_edit_alternate_greetings_empty",
+      "value": "暂无备用开场白"
+    },
+    {
+      "name": "character_edit_alternate_greetings_placeholder",
+      "value": "输入备用开场白内容"
+    },
+    {
+      "name": "character_edit_character_book",
+      "value": "角色专属世界书"
+    },
+    {
+      "name": "character_edit_character_book_empty",
+      "value": "未关联角色专属世界书"
+    },
+    {
+      "name": "character_edit_character_book_hint",
+      "value": "从角色卡导入时会自动创建;也可在 Lorebook 编辑页中关联"
+    },
+    {
+      "name": "tab_sessions",
+      "value": "对话记录"
+    },
+    {
+      "name": "tab_sessions_empty",
+      "value": "暂无会话"
+    },
+    {
+      "name": "tab_sessions_empty_desc",
+      "value": "还没有聊天记录，可以开始新的对话，或导入已有聊天记录。"
+    },
+    {
+      "name": "sessions_empty_start_chat",
+      "value": "开始新对话"
+    },
+    {
+      "name": "sessions_empty_import",
+      "value": "导入聊天记录"
+    },
+    {
+      "name": "tab_sessions_load_failed",
+      "value": "加载会话列表失败"
+    },
+    {
+      "name": "tab_sessions_new_chat",
+      "value": "开始新对话"
+    },
+    {
+      "name": "session_action_rename",
+      "value": "重命名"
+    },
+    {
+      "name": "session_action_delete",
+      "value": "删除"
+    },
+    {
+      "name": "session_action_export",
+      "value": "导出"
+    },
+    {
+      "name": "card_action_move_up",
+      "value": "上移"
+    },
+    {
+      "name": "card_action_move_down",
+      "value": "下移"
+    },
+    {
+      "name": "session_delete_confirm_title",
+      "value": "确认删除"
+    },
+    {
+      "name": "session_delete_confirm_message",
+      "value": "确定删除此会话吗?会话中的所有消息将被删除,此操作不可撤销。"
+    },
+    {
+      "name": "session_delete_confirm_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "session_delete_confirm_ok",
+      "value": "删除"
+    },
+    {
+      "name": "session_rename_title",
+      "value": "重命名会话"
+    },
+    {
+      "name": "session_rename_placeholder",
+      "value": "请输入新的会话名称"
+    },
+    {
+      "name": "session_rename_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "session_rename_confirm",
+      "value": "保存"
+    },
+    {
+      "name": "tab_market",
+      "value": "市场"
+    },
+    {
+      "name": "market_title",
+      "value": "角色市场"
+    },
+    {
+      "name": "market_search_placeholder",
+      "value": "搜索角色 / 作者 / 标签"
+    },
+    {
+      "name": "market_sort_recommended",
+      "value": "推荐"
+    },
+    {
+      "name": "market_sort_latest",
+      "value": "最新"
+    },
+    {
+      "name": "market_sort_top",
+      "value": "热门"
+    },
+    {
+      "name": "market_hide_nsfw",
+      "value": "隐藏成人"
+    },
+    {
+      "name": "market_show_nsfw",
+      "value": "显示成人"
+    },
+    {
+      "name": "market_hide_imported",
+      "value": "隐藏已导入"
+    },
+    {
+      "name": "market_show_imported",
+      "value": "显示已导入"
+    },
+    {
+      "name": "market_chinese_only",
+      "value": "仅中文"
+    },
+    {
+      "name": "market_translate_toggle",
+      "value": "翻译为中文"
+    },
+    {
+      "name": "market_loading",
+      "value": "正在加载"
+    },
+    {
+      "name": "market_retry",
+      "value": "重试"
+    },
+    {
+      "name": "market_no_results_search_desc",
+      "value": "未找到匹配的角色,试试其他关键词"
+    },
+    {
+      "name": "market_no_results_hide_imported_desc",
+      "value": "已隐藏所有已导入角色,可关闭\"隐藏已导入\"查看全部"
+    },
+    {
+      "name": "market_no_results_default_desc",
+      "value": "尝试下拉刷新或稍后再试"
+    },
+    {
+      "name": "market_load_failed",
+      "value": "加载失败"
+    },
+    {
+      "name": "market_init_failed",
+      "value": "初始化失败"
+    },
+    {
+      "name": "market_not_initialized",
+      "value": "未初始化"
+    },
+    {
+      "name": "market_empty",
+      "value": "暂无角色卡"
+    },
+    {
+      "name": "market_already_imported",
+      "value": "已导入"
+    },
+    {
+      "name": "market_creator_prefix",
+      "value": "作者: "
+    },
+    {
+      "name": "market_contains_lorebook",
+      "value": "含世界书"
+    },
+    {
+      "name": "market_content_warning",
+      "value": "内容警告"
+    },
+    {
+      "name": "market_nsfw_confirm_message",
+      "value": "您即将显示成人(NSFW)内容。这些内容可能不适合所有用户,请确认您已年满 18 周岁并自愿查看。"
+    },
+    {
+      "name": "market_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "market_confirm_show",
+      "value": "确认显示"
+    },
+    {
+      "name": "market_detail_back",
+      "value": "返回"
+    },
+    {
+      "name": "market_detail_rating",
+      "value": "评分"
+    },
+    {
+      "name": "market_detail_download",
+      "value": "下载"
+    },
+    {
+      "name": "market_detail_updated",
+      "value": "更新"
+    },
+    {
+      "name": "market_detail_tags_label",
+      "value": "标签"
+    },
+    {
+      "name": "market_detail_description_label",
+      "value": "描述"
+    },
+    {
+      "name": "market_detail_creator_notes_label",
+      "value": "创作者备注"
+    },
+    {
+      "name": "market_detail_first_message_label",
+      "value": "开场白预览"
+    },
+    {
+      "name": "market_detail_alt_greetings_label",
+      "value": "备用开场白"
+    },
+    {
+      "name": "market_detail_message_example_label",
+      "value": "对话示例"
+    },
+    {
+      "name": "market_detail_character_book_label",
+      "value": "角色世界书条目"
+    },
+    {
+      "name": "market_detail_card_version_label",
+      "value": "卡版本"
+    },
+    {
+      "name": "market_detail_source_label",
+      "value": "来源"
+    },
+    {
+      "name": "market_detail_stat_unit_entries",
+      "value": " 条"
+    },
+    {
+      "name": "market_detail_stat_included",
+      "value": "包含"
+    },
+    {
+      "name": "market_detail_stat_none",
+      "value": "无"
+    },
+    {
+      "name": "market_detail_import_button",
+      "value": "导入角色"
+    },
+    {
+      "name": "market_detail_importing",
+      "value": "导入中..."
+    },
+    {
+      "name": "market_detail_imported",
+      "value": "已导入"
+    },
+    {
+      "name": "market_detail_import_short",
+      "value": "导入"
+    },
+    {
+      "name": "market_detail_nsfw_warning",
+      "value": "此角色包含成人(NSFW)内容。请确认您已年满 18 周岁并自愿查看。"
+    },
+    {
+      "name": "market_detail_i_understand",
+      "value": "我已知晓"
+    },
+    {
+      "name": "market_detail_duplicate_title",
+      "value": "角色已存在"
+    },
+    {
+      "name": "market_detail_duplicate_default_name",
+      "value": "本地角色"
+    },
+    {
+      "name": "market_detail_duplicate_local_only",
+      "value": "本地已存在相同来源的角色"
+    },
+    {
+      "name": "market_detail_duplicate_message_prefix",
+      "value": "本地已存在角色\""
+    },
+    {
+      "name": "market_detail_duplicate_message_suffix",
+      "value": "\"。可以选择查看本地角色,或仍导入为副本。"
+    },
+    {
+      "name": "market_detail_view_local",
+      "value": "查看本地角色"
+    },
+    {
+      "name": "market_detail_import_as_duplicate",
+      "value": "仍导入为副本"
+    },
+    {
+      "name": "market_detail_import_success_title",
+      "value": "导入成功"
+    },
+    {
+      "name": "market_detail_import_success_default",
+      "value": "角色已导入到本地。"
+    },
+    {
+      "name": "market_detail_import_success_prefix",
+      "value": "角色\""
+    },
+    {
+      "name": "market_detail_import_success_suffix",
+      "value": "\"已导入到本地。"
+    },
+    {
+      "name": "market_detail_view_character",
+      "value": "查看角色"
+    },
+    {
+      "name": "market_detail_start_new_chat",
+      "value": "新建对话"
+    },
+    {
+      "name": "market_detail_continue_browsing",
+      "value": "继续浏览"
+    },
+    {
+      "name": "market_detail_market_service_not_ready",
+      "value": "市场导入服务未初始化"
+    },
+    {
+      "name": "market_detail_missing_character",
+      "value": "缺少角色信息"
+    },
+    {
+      "name": "market_detail_init_failed_prefix",
+      "value": "初始化失败: "
+    },
+    {
+      "name": "market_detail_load_failed_prefix",
+      "value": "加载详情失败: "
+    },
+    {
+      "name": "market_detail_import_failed_prefix",
+      "value": "导入失败: "
+    },
+    {
+      "name": "market_detail_duplicate_reason_prefix",
+      "value": "重复原因: "
+    },
+    {
+      "name": "market_detail_network_error_prefix",
+      "value": "网络错误: "
+    },
+    {
+      "name": "market_detail_parse_error_prefix",
+      "value": "角色卡解析失败: "
+    },
+    {
+      "name": "market_detail_unknown_error_prefix",
+      "value": "导入失败: "
+    },
+    {
+      "name": "market_translate_privacy_title",
+      "value": "翻译为中文"
+    },
+    {
+      "name": "market_translate_privacy_message",
+      "value": "开启后,市场预览文本(名称、简介、标签、创作者备注)将发送到当前模型服务进行翻译。不会发送完整角色卡或对话内容。翻译结果仅用于市场展示,不影响导入后的角色卡数据。"
+    },
+    {
+      "name": "market_translate_privacy_confirm",
+      "value": "我已知晓并开启"
+    },
+    {
+      "name": "market_translate_privacy_cancel",
+      "value": "暂不开启"
+    },
+    {
+      "name": "market_translate_loading",
+      "value": "翻译中"
+    },
+    {
+      "name": "market_translate_failed_keep_original",
+      "value": "翻译失败,显示原文"
+    },
+    {
+      "name": "market_view_original",
+      "value": "查看原文"
+    },
+    {
+      "name": "market_view_chinese",
+      "value": "中文"
+    },
+    {
+      "name": "market_view_english",
+      "value": "原文"
+    },
+    {
+      "name": "market_category_all",
+      "value": "全部"
+    },
+    {
+      "name": "market_category_roleplay",
+      "value": "角色扮演"
+    },
+    {
+      "name": "market_category_fantasy",
+      "value": "奇幻"
+    },
+    {
+      "name": "market_category_romance",
+      "value": "恋爱"
+    },
+    {
+      "name": "market_category_action",
+      "value": "动作"
+    },
+    {
+      "name": "market_category_horror",
+      "value": "恐怖"
+    },
+    {
+      "name": "market_category_scifi",
+      "value": "科幻"
+    },
+    {
+      "name": "market_category_comedy",
+      "value": "喜剧"
+    },
+    {
+      "name": "market_category_drama",
+      "value": "剧情"
+    },
+    {
+      "name": "market_category_mystery",
+      "value": "悬疑"
+    },
+    {
+      "name": "market_category_anime",
+      "value": "动漫"
+    },
+    {
+      "name": "market_category_vtuber",
+      "value": "VTuber"
+    },
+    {
+      "name": "market_category_game",
+      "value": "游戏"
+    },
+    {
+      "name": "market_category_helper",
+      "value": "助手"
+    },
+    {
+      "name": "market_category_chinese",
+      "value": "中文"
+    },
+    {
+      "name": "market_category_female",
+      "value": "女性"
+    },
+    {
+      "name": "market_category_male",
+      "value": "男性"
+    },
+    {
+      "name": "tab_settings",
+      "value": "设置"
+    },
+    {
+      "name": "tab_settings_desc",
+      "value": "配置 AI 与应用"
+    },
+    {
+      "name": "tab_settings_section_ai",
+      "value": "AI 与对话"
+    },
+    {
+      "name": "tab_settings_section_app",
+      "value": "应用"
+    },
+    {
+      "name": "tab_settings_model",
+      "value": "模型设置"
+    },
+    {
+      "name": "tab_settings_model_desc",
+      "value": "配置 AI 提供商和模型参数"
+    },
+    {
+      "name": "tab_settings_lorebook",
+      "value": "世界书"
+    },
+    {
+      "name": "tab_settings_lorebook_desc",
+      "value": "管理世界书与条目"
+    },
+    {
+      "name": "tab_settings_preset",
+      "value": "提示词预设"
+    },
+    {
+      "name": "tab_settings_preset_desc",
+      "value": "管理 Prompt 预设"
+    },
+    {
+      "name": "tab_settings_app_settings",
+      "value": "应用设置"
+    },
+    {
+      "name": "tab_settings_app_settings_desc",
+      "value": "主题、语言等应用级配置"
+    },
+    {
+      "name": "chat_background_title",
+      "value": "聊天背景"
+    },
+    {
+      "name": "chat_background_no_image",
+      "value": "尚未导入背景图,点击下方按钮选择图片"
+    },
+    {
+      "name": "chat_background_enable",
+      "value": "启用背景"
+    },
+    {
+      "name": "chat_background_enable_desc",
+      "value": "关闭后聊天页将不显示背景图"
+    },
+    {
+      "name": "chat_background_blur",
+      "value": "模糊程度"
+    },
+    {
+      "name": "chat_background_dim",
+      "value": "暗化程度"
+    },
+    {
+      "name": "chat_background_import",
+      "value": "导入图片"
+    },
+    {
+      "name": "chat_background_delete",
+      "value": "删除背景"
+    },
+    {
+      "name": "group_home_title",
+      "value": "多人聊天"
+    },
+    {
+      "name": "group_home_subtitle",
+      "value": "让多个角色在同一个对话中依次回应"
+    },
+    {
+      "name": "group_create",
+      "value": "创建"
+    },
+    {
+      "name": "group_home_empty_title",
+      "value": "还没有多人聊天"
+    },
+    {
+      "name": "group_home_empty_desc",
+      "value": "选择多个角色，让他们在同一个聊天中依次回应你。"
+    },
+    {
+      "name": "group_more_title",
+      "value": "更多操作"
+    },
+    {
+      "name": "group_rename",
+      "value": "重命名"
+    },
+    {
+      "name": "group_manage_members",
+      "value": "管理成员"
+    },
+    {
+      "name": "group_delete_preview",
+      "value": "删除预览"
+    },
+    {
+      "name": "group_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "group_rename_placeholder",
+      "value": "请输入新的群聊名称"
+    },
+    {
+      "name": "group_save",
+      "value": "保存"
+    },
+    {
+      "name": "group_saving",
+      "value": "保存中..."
+    },
+    {
+      "name": "group_preview_badge",
+      "value": "预览"
+    },
+    {
+      "name": "group_stop_round",
+      "value": "停止本轮"
+    },
+    {
+      "name": "group_retry",
+      "value": "重试"
+    },
+    {
+      "name": "group_end_round",
+      "value": "结束本轮"
+    },
+    {
+      "name": "group_stop",
+      "value": "停止"
+    },
+    {
+      "name": "group_send",
+      "value": "发送"
+    },
+    {
+      "name": "group_retry_current",
+      "value": "重试当前角色"
+    },
+    {
+      "name": "group_retrying",
+      "value": "重试中…"
+    },
+    {
+      "name": "group_ending_round",
+      "value": "结束中…"
+    },
+    {
+      "name": "group_create_title",
+      "value": "创建多人聊天"
+    },
+    {
+      "name": "group_create_step_1",
+      "value": "步骤 1 / 2 · 选择角色"
+    },
+    {
+      "name": "group_create_step_2",
+      "value": "步骤 2 / 2 · 群聊配置"
+    },
+    {
+      "name": "group_create_search_placeholder",
+      "value": "搜索角色"
+    },
+    {
+      "name": "group_create_next",
+      "value": "下一步"
+    },
+    {
+      "name": "group_create_prev",
+      "value": "上一步"
+    },
+    {
+      "name": "group_create_min_hint",
+      "value": "最少选择 2 位角色"
+    },
+    {
+      "name": "group_create_max_hint",
+      "value": "最多选择 8 位角色"
+    },
+    {
+      "name": "group_create_chat_name",
+      "value": "群聊名称"
+    },
+    {
+      "name": "group_create_chat_name_placeholder",
+      "value": "留空时使用角色名组合"
+    },
+    {
+      "name": "group_create_selected_members",
+      "value": "已选成员"
+    },
+    {
+      "name": "group_create_speak_order",
+      "value": "发言顺序"
+    },
+    {
+      "name": "group_create_reply_mode",
+      "value": "回复方式"
+    },
+    {
+      "name": "group_create_reply_mode_sequential",
+      "value": "按成员顺序回复"
+    },
+    {
+      "name": "group_create_move_up",
+      "value": "上移"
+    },
+    {
+      "name": "group_create_move_down",
+      "value": "下移"
+    },
+    {
+      "name": "group_create_confirm",
+      "value": "创建并进入聊天"
+    },
+    {
+      "name": "group_ai_builder_entry",
+      "value": "AI 帮我组建"
+    },
+    {
+      "name": "group_ai_builder_title",
+      "value": "AI 建群"
+    },
+    {
+      "name": "group_ai_builder_description_hint",
+      "value": "描述你想要的群聊主题或场景"
+    },
+    {
+      "name": "group_ai_builder_description_placeholder",
+      "value": "例如:创建一个调查超自然事件的小队,希望角色性格有冲突但能互相配合"
+    },
+    {
+      "name": "group_ai_builder_candidates",
+      "value": "候选角色"
+    },
+    {
+      "name": "group_ai_builder_candidates_hint",
+      "value": "选择 2~12 个候选角色,AI 会从中筛选成员"
+    },
+    {
+      "name": "group_ai_builder_generate",
+      "value": "生成草案"
+    },
+    {
+      "name": "group_ai_builder_generating",
+      "value": "正在生成草案…"
+    },
+    {
+      "name": "group_ai_builder_stop",
+      "value": "停止生成"
+    },
+    {
+      "name": "group_ai_builder_draft_title",
+      "value": "群聊草案"
+    },
+    {
+      "name": "group_ai_builder_draft_chat_name",
+      "value": "群聊名称"
+    },
+    {
+      "name": "group_ai_builder_draft_members",
+      "value": "成员与发言顺序"
+    },
+    {
+      "name": "group_ai_builder_draft_rationale",
+      "value": "推荐理由"
+    },
+    {
+      "name": "group_ai_builder_draft_opening",
+      "value": "开场消息草案(可选)"
+    },
+    {
+      "name": "group_ai_builder_draft_opening_hint",
+      "value": "创建群聊后可手动发送,不会自动发送"
+    },
+    {
+      "name": "group_ai_builder_confirm",
+      "value": "确认创建"
+    },
+    {
+      "name": "group_ai_builder_regenerate",
+      "value": "重新生成"
+    },
+    {
+      "name": "group_ai_builder_add_member",
+      "value": "添加成员"
+    },
+    {
+      "name": "group_ai_builder_no_candidates",
+      "value": "请先选择至少 2 个候选角色"
+    },
+    {
+      "name": "group_chat_member_view",
+      "value": "查看角色"
+    },
+    {
+      "name": "group_chat_member_only",
+      "value": "只让此角色回复"
+    },
+    {
+      "name": "group_chat_member_disable",
+      "value": "在本群聊中停用"
+    },
+    {
+      "name": "group_chat_menu_manage",
+      "value": "管理成员"
+    },
+    {
+      "name": "group_chat_menu_settings",
+      "value": "群聊设置"
+    },
+    {
+      "name": "group_chat_menu_rename",
+      "value": "重新命名"
+    },
+    {
+      "name": "group_chat_menu_clear",
+      "value": "清空当前预览"
+    },
+    {
+      "name": "group_chat_menu_preview",
+      "value": "预览状态"
+    },
+    {
+      "name": "group_chat_dev_next",
+      "value": "下一位角色"
+    },
+    {
+      "name": "group_chat_dev_complete",
+      "value": "完成当前角色"
+    },
+    {
+      "name": "group_chat_dev_fail",
+      "value": "模拟失败"
+    },
+    {
+      "name": "group_chat_dev_finish",
+      "value": "完成整轮"
+    },
+    {
+      "name": "group_chat_dev_section",
+      "value": "开发操作(模拟生成)"
+    },
+    {
+      "name": "group_chat_preview_empty",
+      "value": "空聊天"
+    },
+    {
+      "name": "group_chat_preview_normal",
+      "value": "普通聊天"
+    },
+    {
+      "name": "group_chat_preview_generating",
+      "value": "正在生成"
+    },
+    {
+      "name": "group_chat_preview_cancelled",
+      "value": "已停止"
+    },
+    {
+      "name": "group_chat_preview_failed",
+      "value": "生成失败"
+    },
+    {
+      "name": "group_chat_preview_long",
+      "value": "长消息"
+    },
+    {
+      "name": "group_chat_preview_members8",
+      "value": "8 人成员栏"
+    },
+    {
+      "name": "group_manage_title",
+      "value": "群聊成员"
+    },
+    {
+      "name": "group_manage_add",
+      "value": "添加角色"
+    },
+    {
+      "name": "group_manage_enabled",
+      "value": "已启用"
+    },
+    {
+      "name": "group_manage_disabled",
+      "value": "已停用"
+    },
+    {
+      "name": "group_manage_enable",
+      "value": "启用"
+    },
+    {
+      "name": "group_manage_disable",
+      "value": "停用"
+    },
+    {
+      "name": "group_manage_remove",
+      "value": "移除"
+    },
+    {
+      "name": "group_manage_add_title",
+      "value": "添加预览角色"
+    },
+    {
+      "name": "group_settings_title",
+      "value": "群聊设置"
+    },
+    {
+      "name": "group_settings_name",
+      "value": "群聊名称"
+    },
+    {
+      "name": "group_settings_reply_mode",
+      "value": "回复方式"
+    },
+    {
+      "name": "group_settings_reply_mode_sequential",
+      "value": "按成员顺序回复"
+    },
+    {
+      "name": "group_settings_failure_policy",
+      "value": "失败处理方式"
+    },
+    {
+      "name": "group_settings_failure_stop",
+      "value": "停止整轮"
+    },
+    {
+      "name": "group_settings_failure_skip",
+      "value": "跳过并继续"
+    },
+    {
+      "name": "group_settings_manage_members",
+      "value": "管理成员"
+    },
+    {
+      "name": "group_settings_clear_messages",
+      "value": "清空聊天记录"
+    },
+    {
+      "name": "group_settings_delete",
+      "value": "删除群聊"
+    },
+    {
+      "name": "group_settings_clear_confirm",
+      "value": "确定清空当前群聊的所有消息吗？此操作不可撤销。"
+    },
+    {
+      "name": "group_settings_delete_confirm",
+      "value": "确定删除此群聊吗？此操作不可撤销。"
+    },
+    {
+      "name": "group_entry_title",
+      "value": "多人聊天"
+    },
+    {
+      "name": "group_entry_desc",
+      "value": "让多个角色在同一个对话中依次回应（预览）"
+    },
+    {
+      "name": "group_confirm",
+      "value": "确定"
+    },
+    {
+      "name": "group_member_min_hint",
+      "value": "最少保留 2 个成员且至少 2 个启用"
+    },
+    {
+      "name": "world_entry_title",
+      "value": "世界模式"
+    },
+    {
+      "name": "world_entry_desc",
+      "value": "在独立世界中管理地点、连接与角色"
+    },
+    {
+      "name": "world_home_title",
+      "value": "世界"
+    },
+    {
+      "name": "world_home_subtitle",
+      "value": "世界模式(只读预览)"
+    },
+    {
+      "name": "world_home_empty_title",
+      "value": "还没有世界"
+    },
+    {
+      "name": "world_home_empty_desc",
+      "value": "世界创建功能将在下一阶段开放"
+    },
+    {
+      "name": "world_home_load_failed",
+      "value": "世界数据加载失败,请重试"
+    },
+    {
+      "name": "world_home_reload",
+      "value": "重新加载"
+    },
+    {
+      "name": "world_home_back",
+      "value": "返回"
+    },
+    {
+      "name": "world_status_active",
+      "value": "活跃"
+    },
+    {
+      "name": "world_status_archived",
+      "value": "已归档"
+    },
+    {
+      "name": "world_location_count_label",
+      "value": "地点"
+    },
+    {
+      "name": "world_character_count_label",
+      "value": "角色"
+    },
+    {
+      "name": "world_edge_count_label",
+      "value": "连接"
+    },
+    {
+      "name": "world_event_count_label",
+      "value": "事件"
+    },
+    {
+      "name": "world_detail_title",
+      "value": "世界详情"
+    },
+    {
+      "name": "world_detail_not_found",
+      "value": "世界不存在或已被删除"
+    },
+    {
+      "name": "world_detail_overview_section",
+      "value": "数据概览"
+    },
+    {
+      "name": "world_detail_character_section",
+      "value": "角色实例"
+    },
+    {
+      "name": "world_detail_event_section",
+      "value": "最近事件"
+    },
+    {
+      "name": "world_detail_graph_section",
+      "value": "地点关系图"
+    },
+    {
+      "name": "world_detail_no_locations",
+      "value": "该世界还没有地点"
+    },
+    {
+      "name": "world_detail_no_characters",
+      "value": "该世界还没有角色实例"
+    },
+    {
+      "name": "world_detail_no_events",
+      "value": "暂无世界事件"
+    },
+    {
+      "name": "world_detail_unplaced_characters",
+      "value": "未放置角色"
+    },
+    {
+      "name": "world_detail_anomalous_edges",
+      "value": "发现异常连接"
+    },
+    {
+      "name": "world_character_active",
+      "value": "活跃"
+    },
+    {
+      "name": "world_character_inactive",
+      "value": "已停用"
+    },
+    {
+      "name": "world_character_card_missing",
+      "value": "角色卡缺失"
+    },
+    {
+      "name": "world_character_unplaced",
+      "value": "未放置"
+    },
+    {
+      "name": "world_location_missing",
+      "value": "地点数据缺失"
+    },
+    {
+      "name": "world_edge_target_missing",
+      "value": "连接目标缺失"
+    },
+    {
+      "name": "world_edge_bidirectional",
+      "value": "双向"
+    },
+    {
+      "name": "world_edge_unidirectional",
+      "value": "单向"
+    },
+    {
+      "name": "world_edge_disabled",
+      "value": "已停用"
+    },
+    {
+      "name": "world_edge_no_direction",
+      "value": "—"
+    },
+    {
+      "name": "world_graph_empty",
+      "value": "无可用地点节点"
+    },
+    {
+      "name": "world_graph_select_hint",
+      "value": "点击节点查看地点详情"
+    },
+    {
+      "name": "world_location_outgoing_edges",
+      "value": "出发连接"
+    },
+    {
+      "name": "world_location_incoming_edges",
+      "value": "到达连接"
+    },
+    {
+      "name": "world_location_current_characters",
+      "value": "当前角色"
+    },
+    {
+      "name": "world_location_no_characters",
+      "value": "该地点暂无角色"
+    },
+    {
+      "name": "world_location_status_active",
+      "value": "活跃"
+    },
+    {
+      "name": "world_location_status_archived",
+      "value": "已归档"
+    },
+    {
+      "name": "world_event_unknown",
+      "value": "未知世界事件"
+    },
+    {
+      "name": "world_open_detail",
+      "value": "打开世界详情"
+    },
+    {
+      "name": "world_view_graph",
+      "value": "查看地点关系图"
+    },
+    {
+      "name": "world_select_location",
+      "value": "选中地点"
+    },
+    {
+      "name": "world_back_to_list",
+      "value": "返回世界列表"
+    },
+    {
+      "name": "world_reload_data",
+      "value": "重新加载世界数据"
+    },
+    {
+      "name": "world_create",
+      "value": "创建世界"
+    },
+    {
+      "name": "world_edit",
+      "value": "编辑世界"
+    },
+    {
+      "name": "world_manage",
+      "value": "管理世界"
+    },
+    {
+      "name": "world_name_label",
+      "value": "世界名称"
+    },
+    {
+      "name": "world_name_placeholder",
+      "value": "请输入世界名称"
+    },
+    {
+      "name": "world_desc_label",
+      "value": "世界描述"
+    },
+    {
+      "name": "world_desc_placeholder",
+      "value": "请输入世界描述(可选)"
+    },
+    {
+      "name": "world_save",
+      "value": "保存"
+    },
+    {
+      "name": "world_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "world_archive",
+      "value": "归档世界"
+    },
+    {
+      "name": "world_activate",
+      "value": "重新激活"
+    },
+    {
+      "name": "world_delete",
+      "value": "永久删除世界"
+    },
+    {
+      "name": "world_archive_confirm",
+      "value": "归档后不能修改地点和角色,但仍可查看。"
+    },
+    {
+      "name": "world_delete_confirm",
+      "value": "将永久删除该世界、地点、连接、角色实例和事件,无法恢复。"
+    },
+    {
+      "name": "world_confirm_delete",
+      "value": "确认删除"
+    },
+    {
+      "name": "world_edit_title_create",
+      "value": "创建世界"
+    },
+    {
+      "name": "world_edit_title_edit",
+      "value": "编辑世界"
+    },
+    {
+      "name": "world_location_add",
+      "value": "添加地点"
+    },
+    {
+      "name": "world_location_edit",
+      "value": "编辑地点"
+    },
+    {
+      "name": "world_location_name_label",
+      "value": "地点名称"
+    },
+    {
+      "name": "world_location_name_placeholder",
+      "value": "请输入地点名称"
+    },
+    {
+      "name": "world_location_desc_label",
+      "value": "地点描述"
+    },
+    {
+      "name": "world_location_desc_placeholder",
+      "value": "请输入地点描述(可选)"
+    },
+    {
+      "name": "world_location_archive",
+      "value": "归档地点"
+    },
+    {
+      "name": "world_location_activate",
+      "value": "重新激活地点"
+    },
+    {
+      "name": "world_location_delete",
+      "value": "删除地点"
+    },
+    {
+      "name": "world_location_delete_confirm",
+      "value": "删除地点会同时删除与该地点相关的连接。"
+    },
+    {
+      "name": "world_location_edit_title_create",
+      "value": "创建地点"
+    },
+    {
+      "name": "world_location_edit_title_edit",
+      "value": "编辑地点"
+    },
+    {
+      "name": "world_character_manage",
+      "value": "管理角色"
+    },
+    {
+      "name": "world_character_manage_title",
+      "value": "世界角色管理"
+    },
+    {
+      "name": "world_character_added_section",
+      "value": "已加入世界"
+    },
+    {
+      "name": "world_character_available_section",
+      "value": "可加入角色"
+    },
+    {
+      "name": "world_character_add_to_world",
+      "value": "加入世界"
+    },
+    {
+      "name": "world_character_remove",
+      "value": "从世界移除"
+    },
+    {
+      "name": "world_character_remove_confirm",
+      "value": "这会把角色从当前世界移除,并删除该角色在这个世界中的全部记忆;不会删除角色卡。"
+    },
+    {
+      "name": "world_character_set_location",
+      "value": "设置初始地点"
+    },
+    {
+      "name": "world_character_activate",
+      "value": "启用"
+    },
+    {
+      "name": "world_character_deactivate",
+      "value": "停用"
+    },
+    {
+      "name": "world_character_no_location",
+      "value": "暂不放置"
+    },
+    {
+      "name": "world_character_select_location",
+      "value": "选择初始地点"
+    },
+    {
+      "name": "world_character_no_available",
+      "value": "所有角色已加入该世界"
+    },
+    {
+      "name": "world_character_none_added",
+      "value": "该世界还没有角色"
+    },
+    {
+      "name": "world_open_world_list",
+      "value": "打开世界列表"
+    },
+    {
+      "name": "world_open_world_mode",
+      "value": "打开世界模式"
+    },
+    {
+      "name": "world_create_world",
+      "value": "创建世界"
+    },
+    {
+      "name": "world_edit_world",
+      "value": "编辑世界"
+    },
+    {
+      "name": "world_archive_world",
+      "value": "归档世界"
+    },
+    {
+      "name": "world_activate_world",
+      "value": "重新激活世界"
+    },
+    {
+      "name": "world_delete_world",
+      "value": "永久删除世界"
+    },
+    {
+      "name": "world_add_location",
+      "value": "添加地点"
+    },
+    {
+      "name": "world_edit_location",
+      "value": "编辑地点"
+    },
+    {
+      "name": "world_archive_location",
+      "value": "归档地点"
+    },
+    {
+      "name": "world_activate_location",
+      "value": "重新激活地点"
+    },
+    {
+      "name": "world_delete_location",
+      "value": "删除地点"
+    },
+    {
+      "name": "world_manage_characters",
+      "value": "管理世界角色"
+    },
+    {
+      "name": "world_add_character_to_world",
+      "value": "把角色加入世界"
+    },
+    {
+      "name": "world_remove_character_from_world",
+      "value": "从世界移除角色"
+    },
+    {
+      "name": "world_set_character_location",
+      "value": "设置角色初始地点"
+    },
+    {
+      "name": "world_activate_character",
+      "value": "启用角色"
+    },
+    {
+      "name": "world_deactivate_character",
+      "value": "停用角色"
+    },
+    {
+      "name": "world_edge_manage_title",
+      "value": "地点连接管理"
+    },
+    {
+      "name": "world_edge_manage",
+      "value": "管理连接"
+    },
+    {
+      "name": "world_edge_manage_entry",
+      "value": "管理地点连接"
+    },
+    {
+      "name": "world_edge_create",
+      "value": "创建连接"
+    },
+    {
+      "name": "world_edge_edit",
+      "value": "编辑连接"
+    },
+    {
+      "name": "world_edge_edit_title_create",
+      "value": "创建连接"
+    },
+    {
+      "name": "world_edge_edit_title_edit",
+      "value": "编辑连接"
+    },
+    {
+      "name": "world_edge_from_location_label",
+      "value": "起点地点"
+    },
+    {
+      "name": "world_edge_to_location_label",
+      "value": "终点地点"
+    },
+    {
+      "name": "world_edge_from_location_placeholder",
+      "value": "请选择起点地点"
+    },
+    {
+      "name": "world_edge_to_location_placeholder",
+      "value": "请选择终点地点"
+    },
+    {
+      "name": "world_edge_direction_label",
+      "value": "方向标签"
+    },
+    {
+      "name": "world_edge_direction_placeholder",
+      "value": "如:向北、穿过森林"
+    },
+    {
+      "name": "world_edge_travel_label",
+      "value": "旅行描述"
+    },
+    {
+      "name": "world_edge_travel_placeholder",
+      "value": "请输入旅行描述(可选)"
+    },
+    {
+      "name": "world_edge_enable",
+      "value": "启用"
+    },
+    {
+      "name": "world_edge_disable",
+      "value": "停用"
+    },
+    {
+      "name": "world_edge_delete",
+      "value": "删除连接"
+    },
+    {
+      "name": "world_edge_delete_confirm",
+      "value": "删除后,角色将不能再通过这条连接移动。"
+    },
+    {
+      "name": "world_edge_no_edges",
+      "value": "该世界还没有连接"
+    },
+    {
+      "name": "world_edge_anomalous",
+      "value": "异常连接"
+    },
+    {
+      "name": "world_edge_from_missing",
+      "value": "起点地点缺失"
+    },
+    {
+      "name": "world_edge_to_missing",
+      "value": "终点地点缺失"
+    },
+    {
+      "name": "world_edge_select_from",
+      "value": "选择起点"
+    },
+    {
+      "name": "world_edge_select_to",
+      "value": "选择终点"
+    },
+    {
+      "name": "world_character_move_title",
+      "value": "移动角色"
+    },
+    {
+      "name": "world_character_move",
+      "value": "移动角色"
+    },
+    {
+      "name": "world_character_current_location",
+      "value": "当前位置"
+    },
+    {
+      "name": "world_character_normal_move",
+      "value": "正常移动"
+    },
+    {
+      "name": "world_character_force_move",
+      "value": "主持者强制移动"
+    },
+    {
+      "name": "world_character_force_move_confirm",
+      "value": "确认强制移动"
+    },
+    {
+      "name": "world_character_move_confirm",
+      "value": "将角色从“{src}”移动到“{dst}”。"
+    },
+    {
+      "name": "world_character_move_no_path",
+      "value": "当前没有可用的正常移动路线"
+    },
+    {
+      "name": "world_character_move_via_edge",
+      "value": "通过连接"
+    },
+    {
+      "name": "world_character_move_target",
+      "value": "选择目标地点"
+    },
+    {
+      "name": "world_character_move_inactive_hint",
+      "value": "已停用角色不能正常移动,但可由主持者强制移动"
+    },
+    {
+      "name": "world_character_move_force_hint",
+      "value": "强制移动可绕过连接限制,但仍受世界和地点状态约束"
+    },
+    {
+      "name": "world_manage_edges",
+      "value": "管理地点连接"
+    },
+    {
+      "name": "world_create_edge",
+      "value": "创建地点连接"
+    },
+    {
+      "name": "world_edit_edge",
+      "value": "编辑地点连接"
+    },
+    {
+      "name": "world_enable_edge",
+      "value": "启用地点连接"
+    },
+    {
+      "name": "world_disable_edge",
+      "value": "停用地点连接"
+    },
+    {
+      "name": "world_delete_edge",
+      "value": "永久删除地点连接"
+    },
+    {
+      "name": "world_move_character",
+      "value": "移动角色"
+    },
+    {
+      "name": "world_select_move_target",
+      "value": "选择正常移动目标"
+    },
+    {
+      "name": "world_force_move_character",
+      "value": "主持者强制移动"
+    },
+    {
+      "name": "world_confirm_normal_move",
+      "value": "确认普通移动"
+    },
+    {
+      "name": "world_confirm_force_move",
+      "value": "确认强制移动"
+    },
+    {
+      "name": "world_scene_manage_entry",
+      "value": "场景历史与高级管理"
+    },
+    {
+      "name": "world_scene_manage_title",
+      "value": "场景历史与高级管理"
+    },
+    {
+      "name": "world_scene_manage_subtitle",
+      "value": "查看场景历史与高级手动编辑(地点对话请通过地点节点进入)"
+    },
+    {
+      "name": "world_scene_active_label",
+      "value": "进行中"
+    },
+    {
+      "name": "world_scene_no_active_label",
+      "value": "暂无进行中场景"
+    },
+    {
+      "name": "world_scene_view_active",
+      "value": "查看场景"
+    },
+    {
+      "name": "world_scene_start",
+      "value": "开始场景"
+    },
+    {
+      "name": "world_scene_detail_title",
+      "value": "场景详情"
+    },
+    {
+      "name": "world_scene_add_user_message",
+      "value": "用户消息"
+    },
+    {
+      "name": "world_scene_add_character_message",
+      "value": "角色消息"
+    },
+    {
+      "name": "world_scene_add_narrator_message",
+      "value": "旁白消息"
+    },
+    {
+      "name": "world_scene_end",
+      "value": "结束对话"
+    },
+    {
+      "name": "world_scene_active_characters",
+      "value": "当前地点角色"
+    },
+    {
+      "name": "world_scene_no_characters",
+      "value": "该地点当前没有角色"
+    },
+    {
+      "name": "world_scene_messages",
+      "value": "场景消息"
+    },
+    {
+      "name": "world_scene_no_messages",
+      "value": "暂无消息"
+    },
+    {
+      "name": "world_scene_user_message_form_title",
+      "value": "添加用户消息"
+    },
+    {
+      "name": "world_scene_character_message_form_title",
+      "value": "添加角色消息"
+    },
+    {
+      "name": "world_scene_narrator_message_form_title",
+      "value": "添加旁白消息"
+    },
+    {
+      "name": "world_scene_recipients",
+      "value": "接收者"
+    },
+    {
+      "name": "world_scene_reply_targets",
+      "value": "回复目标(可选)"
+    },
+    {
+      "name": "world_scene_witnesses",
+      "value": "目击者(可选)"
+    },
+    {
+      "name": "world_scene_no_active_instances",
+      "value": "当前地点没有可用的活跃角色"
+    },
+    {
+      "name": "world_scene_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "world_scene_save",
+      "value": "保存"
+    },
+    {
+      "name": "world_location_sheet_title",
+      "value": "地点人物"
+    },
+    {
+      "name": "world_location_sheet_open",
+      "value": "打开地点人物"
+    },
+    {
+      "name": "world_location_sheet_enter_scene",
+      "value": "进入对话"
+    },
+    {
+      "name": "world_location_sheet_enter_scene_a11y",
+      "value": "进入地点对话"
+    },
+    {
+      "name": "world_location_sheet_view_history",
+      "value": "查看场景历史"
+    },
+    {
+      "name": "world_location_sheet_active_scene",
+      "value": "进行中的对话"
+    },
+    {
+      "name": "world_location_sheet_no_active_scene",
+      "value": "当前没有进行中的对话"
+    },
+    {
+      "name": "world_location_sheet_start_scene",
+      "value": "开始新场景"
+    },
+    {
+      "name": "world_location_sheet_start_confirm_title",
+      "value": "开始新场景"
+    },
+    {
+      "name": "world_location_sheet_start_confirm_desc",
+      "value": "该地点当前没有进行中的对话,是否开始新场景?"
+    },
+    {
+      "name": "world_location_sheet_archived",
+      "value": "已归档"
+    },
+    {
+      "name": "world_location_sheet_active",
+      "value": "启用中"
+    },
+    {
+      "name": "world_location_sheet_ended_count",
+      "value": "已结束场景数"
+    },
+    {
+      "name": "world_location_sheet_loading",
+      "value": "加载地点数据"
+    },
+    {
+      "name": "world_scene_chat_title",
+      "value": "场景对话"
+    },
+    {
+      "name": "world_scene_more",
+      "value": "更多"
+    },
+    {
+      "name": "world_scene_more_title",
+      "value": "场景操作"
+    },
+    {
+      "name": "world_scene_more_a11y",
+      "value": "打开场景更多操作"
+    },
+    {
+      "name": "world_scene_manual_character",
+      "value": "手动角色发言"
+    },
+    {
+      "name": "world_scene_add_narrator",
+      "value": "添加旁白"
+    },
+    {
+      "name": "world_scene_end_a11y",
+      "value": "结束当前场景"
+    },
+    {
+      "name": "world_scene_end_confirm_title",
+      "value": "结束对话"
+    },
+    {
+      "name": "world_scene_end_confirm_desc",
+      "value": "结束后,该场景将保留为历史,但不能继续发送消息。"
+    },
+    {
+      "name": "world_scene_ended_hint",
+      "value": "场景已结束,只能查看历史。"
+    },
+    {
+      "name": "world_scene_loading",
+      "value": "加载场景"
+    },
+    {
+      "name": "world_scene_not_found",
+      "value": "场景不存在"
+    },
+    {
+      "name": "world_scene_not_found_desc",
+      "value": "该场景可能已被删除或归档。"
+    },
+    {
+      "name": "world_scene_load_error",
+      "value": "场景加载失败"
+    },
+    {
+      "name": "world_scene_empty_messages",
+      "value": "该场景暂无消息,发送第一条消息开始对话。"
+    },
+    {
+      "name": "world_scene_public_input_placeholder",
+      "value": "输入公开消息"
+    },
+    {
+      "name": "world_scene_private_input_placeholder",
+      "value": "输入私下消息"
+    },
+    {
+      "name": "world_scene_mode_public",
+      "value": "公开"
+    },
+    {
+      "name": "world_scene_mode_private",
+      "value": "私下"
+    },
+    {
+      "name": "world_scene_toggle_mode",
+      "value": "切换公开/私下"
+    },
+    {
+      "name": "world_scene_select_reply_target",
+      "value": "回复目标"
+    },
+    {
+      "name": "world_scene_select_recipients",
+      "value": "接收者"
+    },
+    {
+      "name": "world_scene_send",
+      "value": "发送"
+    },
+    {
+      "name": "world_scene_send_public_a11y",
+      "value": "发送公开消息"
+    },
+    {
+      "name": "world_scene_send_private_a11y",
+      "value": "发送私下消息"
+    },
+    {
+      "name": "world_scene_reply_target_prefix",
+      "value": "回复:"
+    },
+    {
+      "name": "world_scene_recipient_prefix",
+      "value": "接收:"
+    },
+    {
+      "name": "world_scene_witness_prefix",
+      "value": "目击:"
+    },
+    {
+      "name": "world_scene_sender",
+      "value": "发言角色"
+    },
+    {
+      "name": "world_scene_witness",
+      "value": "目击者(可选)"
+    },
+    {
+      "name": "world_scene_content_placeholder",
+      "value": "输入消息内容"
+    },
+    {
+      "name": "world_memory_page_title",
+      "value": "角色记忆"
+    },
+    {
+      "name": "world_memory_not_found",
+      "value": "角色实例不存在或已被移除"
+    },
+    {
+      "name": "world_memory_load_error",
+      "value": "记忆数据加载失败"
+    },
+    {
+      "name": "world_memory_count_label",
+      "value": "记忆总数:%d"
+    },
+    {
+      "name": "world_memory_filter_all",
+      "value": "全部"
+    },
+    {
+      "name": "world_memory_filter_active",
+      "value": "活跃"
+    },
+    {
+      "name": "world_memory_filter_archived",
+      "value": "已归档"
+    },
+    {
+      "name": "world_memory_add",
+      "value": "添加记忆"
+    },
+    {
+      "name": "world_memory_edit",
+      "value": "编辑"
+    },
+    {
+      "name": "world_memory_archive",
+      "value": "归档"
+    },
+    {
+      "name": "world_memory_restore",
+      "value": "恢复"
+    },
+    {
+      "name": "world_memory_delete",
+      "value": "删除"
+    },
+    {
+      "name": "world_memory_empty_title",
+      "value": "这个角色还没有长期记忆"
+    },
+    {
+      "name": "world_memory_empty_desc",
+      "value": "手动添加事件、事实或反思记忆,角色移动地点后记忆仍会保留"
+    },
+    {
+      "name": "world_memory_create_title",
+      "value": "新建记忆"
+    },
+    {
+      "name": "world_memory_edit_title",
+      "value": "编辑记忆"
+    },
+    {
+      "name": "world_memory_create",
+      "value": "创建"
+    },
+    {
+      "name": "world_memory_save",
+      "value": "保存"
+    },
+    {
+      "name": "world_memory_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "world_memory_form_content",
+      "value": "记忆正文"
+    },
+    {
+      "name": "world_memory_form_content_placeholder",
+      "value": "记录角色经历的事件、认知的事实或反思"
+    },
+    {
+      "name": "world_memory_form_content_count",
+      "value": "%d / %d"
+    },
+    {
+      "name": "world_memory_form_type",
+      "value": "记忆类型"
+    },
+    {
+      "name": "world_memory_type_episodic",
+      "value": "事件记忆"
+    },
+    {
+      "name": "world_memory_type_semantic",
+      "value": "事实认知"
+    },
+    {
+      "name": "world_memory_type_reflection",
+      "value": "反思总结"
+    },
+    {
+      "name": "world_memory_form_importance",
+      "value": "重要度"
+    },
+    {
+      "name": "world_memory_form_location",
+      "value": "发生地点(可选)"
+    },
+    {
+      "name": "world_memory_form_location_none",
+      "value": "未指定"
+    },
+    {
+      "name": "world_memory_form_location_clear",
+      "value": "点击主标签可清空选择"
+    },
+    {
+      "name": "world_memory_form_occurred_at",
+      "value": "发生时间(可选)"
+    },
+    {
+      "name": "world_memory_form_occurred_now",
+      "value": "设为现在"
+    },
+    {
+      "name": "world_memory_form_occurred_clear",
+      "value": "清空"
+    },
+    {
+      "name": "world_memory_occurred_at_label",
+      "value": "发生:%s"
+    },
+    {
+      "name": "world_memory_created_at_label",
+      "value": "创建:%s"
+    },
+    {
+      "name": "world_memory_delete_title",
+      "value": "删除记忆"
+    },
+    {
+      "name": "world_memory_delete_confirm",
+      "value": "删除后无法恢复,确定继续吗?"
+    },
+    {
+      "name": "world_memory_view_entry",
+      "value": "查看记忆"
+    },
+    {
+      "name": "world_memory_character_sheet_title",
+      "value": "人物信息"
+    },
+    {
+      "name": "world_ui_search_placeholder",
+      "value": "搜索世界名称"
+    },
+    {
+      "name": "world_ui_filter_all",
+      "value": "全部"
+    },
+    {
+      "name": "world_ui_filter_active",
+      "value": "进行中"
+    },
+    {
+      "name": "world_ui_filter_archived",
+      "value": "已归档"
+    },
+    {
+      "name": "world_ui_recent_activity",
+      "value": "最近活动"
+    },
+    {
+      "name": "world_ui_locations_label",
+      "value": "地点"
+    },
+    {
+      "name": "world_ui_characters_label",
+      "value": "角色"
+    },
+    {
+      "name": "world_ui_active_scenes_label",
+      "value": "活动场景"
+    },
+    {
+      "name": "world_ui_map_empty_title",
+      "value": "这个世界还是空白的"
+    },
+    {
+      "name": "world_ui_map_empty_desc",
+      "value": "添加角色或创建地点,开始构建你的世界"
+    },
+    {
+      "name": "world_ui_map_empty_add_character",
+      "value": "添加角色"
+    },
+    {
+      "name": "world_ui_map_empty_create_location",
+      "value": "创建地点"
+    },
+    {
+      "name": "world_ui_map_toolbar_layers",
+      "value": "图层"
+    },
+    {
+      "name": "world_ui_map_toolbar_filter",
+      "value": "筛选"
+    },
+    {
+      "name": "world_ui_map_toolbar_locate",
+      "value": "定位"
+    },
+    {
+      "name": "world_ui_map_toolbar_compass",
+      "value": "指南针"
+    },
+    {
+      "name": "world_ui_map_toolbar_zoom_in",
+      "value": "放大"
+    },
+    {
+      "name": "world_ui_map_toolbar_zoom_out",
+      "value": "缩小"
+    },
+    {
+      "name": "world_ui_map_toolbar_reset",
+      "value": "重置视角"
+    },
+    {
+      "name": "world_ui_more_menu_title",
+      "value": "世界管理"
+    },
+    {
+      "name": "world_ui_more_edit_world",
+      "value": "编辑世界"
+    },
+    {
+      "name": "world_ui_more_location_manage",
+      "value": "地点管理"
+    },
+    {
+      "name": "world_ui_more_edge_manage",
+      "value": "连接管理"
+    },
+    {
+      "name": "world_ui_more_character_manage",
+      "value": "角色管理"
+    },
+    {
+      "name": "world_ui_more_scene_history",
+      "value": "场景历史"
+    },
+    {
+      "name": "world_ui_more_delete_world",
+      "value": "删除世界"
+    },
+    {
+      "name": "world_ui_fab_add_character",
+      "value": "添加角色"
+    },
+    {
+      "name": "world_ui_fab_add_character_a11y",
+      "value": "向世界添加角色"
+    },
+    {
+      "name": "world_ui_map_summary",
+      "value": "地图概览"
+    },
+    {
+      "name": "world_ui_no_cover",
+      "value": "无封面"
+    },
+    {
+      "name": "world_char_analysis_title",
+      "value": "角色分析预览"
+    },
+    {
+      "name": "world_char_analysis_ai_not_connected",
+      "value": "AI 分析尚未接入,以下为 UI 预览"
+    },
+    {
+      "name": "world_char_analysis_original_card",
+      "value": "原始角色卡信息"
+    },
+    {
+      "name": "world_char_analysis_world_draft",
+      "value": "世界实例草案"
+    },
+    {
+      "name": "world_char_analysis_suggested_identity",
+      "value": "建议世界身份"
+    },
+    {
+      "name": "world_char_analysis_suggested_location",
+      "value": "建议初始地点"
+    },
+    {
+      "name": "world_char_analysis_icon_style",
+      "value": "图标样式"
+    },
+    {
+      "name": "world_char_analysis_initial_state",
+      "value": "初始状态"
+    },
+    {
+      "name": "world_char_analysis_initial_goal",
+      "value": "初始目标草案"
+    },
+    {
+      "name": "world_char_analysis_no_location",
+      "value": "暂不设置地点"
+    },
+    {
+      "name": "world_char_analysis_create_location",
+      "value": "创建地点"
+    },
+    {
+      "name": "world_char_analysis_join_world",
+      "value": "加入世界"
+    },
+    {
+      "name": "world_char_analysis_no_locations",
+      "value": "这个世界还没有地点"
+    },
+    {
+      "name": "world_char_detail_title",
+      "value": "角色详情"
+    },
+    {
+      "name": "world_char_detail_world_identity",
+      "value": "世界内身份"
+    },
+    {
+      "name": "world_char_detail_current_status",
+      "value": "当前状态"
+    },
+    {
+      "name": "world_char_detail_current_goal",
+      "value": "当前目标"
+    },
+    {
+      "name": "world_char_detail_recent_activity",
+      "value": "近期活动"
+    },
+    {
+      "name": "world_char_detail_memory_summary",
+      "value": "当前记忆摘要"
+    },
+    {
+      "name": "world_char_detail_relationships",
+      "value": "关系摘要"
+    },
+    {
+      "name": "world_char_detail_scenes",
+      "value": "参与过的场景"
+    },
+    {
+      "name": "world_char_detail_original_card",
+      "value": "原始角色卡"
+    },
+    {
+      "name": "world_char_detail_not_established",
+      "value": "尚未建立"
+    },
+    {
+      "name": "world_char_detail_start_conversation",
+      "value": "开始对话"
+    },
+    {
+      "name": "world_char_detail_view_memory",
+      "value": "查看记忆"
+    },
+    {
+      "name": "world_char_detail_move_character",
+      "value": "移动角色"
+    },
+    {
+      "name": "world_char_detail_world_instance_id",
+      "value": "世界实例 ID"
+    },
+    {
+      "name": "world_scene_launcher_title",
+      "value": "开始场景"
+    },
+    {
+      "name": "world_scene_launcher_current_location",
+      "value": "当前地点"
+    },
+    {
+      "name": "world_scene_launcher_current_character",
+      "value": "当前角色"
+    },
+    {
+      "name": "world_scene_launcher_same_location_chars",
+      "value": "同地点角色"
+    },
+    {
+      "name": "world_scene_launcher_active_scene",
+      "value": "已有活动场景"
+    },
+    {
+      "name": "world_scene_launcher_last_ended",
+      "value": "最近一次结束场景"
+    },
+    {
+      "name": "world_scene_launcher_solo_talk",
+      "value": "与该角色单独交谈"
+    },
+    {
+      "name": "world_scene_launcher_group_talk",
+      "value": "与此处所有角色交谈"
+    },
+    {
+      "name": "world_scene_launcher_select_participants",
+      "value": "选择参与角色"
+    },
+    {
+      "name": "world_scene_launcher_continue_last",
+      "value": "继续上次会话"
+    },
+    {
+      "name": "world_scene_launcher_create_new",
+      "value": "创建新会话"
+    },
+    {
+      "name": "world_scene_launcher_coming_soon",
+      "value": "即将支持"
+    },
+    {
+      "name": "world_scene_launcher_view_scenes",
+      "value": "查看现有场景"
+    },
+    {
+      "name": "world_scene_launcher_create_new_scene",
+      "value": "创建新场景"
+    },
+    {
+      "name": "world_char_manage_search_placeholder",
+      "value": "搜索角色名称"
+    },
+    {
+      "name": "world_char_manage_filter_all",
+      "value": "全部"
+    },
+    {
+      "name": "world_char_manage_filter_not_joined",
+      "value": "未加入"
+    },
+    {
+      "name": "world_char_manage_filter_joined",
+      "value": "已加入"
+    },
+    {
+      "name": "world_char_manage_analyze_and_join",
+      "value": "分析并加入"
+    },
+    {
+      "name": "world_char_manage_view_character",
+      "value": "查看角色"
+    },
+    {
+      "name": "world_char_manage_no_character_cards",
+      "value": "当前没有可用角色卡"
+    },
+    {
+      "name": "world_char_manage_create_character_hint",
+      "value": "请先在角色管理中创建角色"
+    },
+    {
+      "name": "world_char_manage_go_to_character_management",
+      "value": "前往角色管理"
+    },
+    {
+      "name": "world_scene_history_title",
+      "value": "历史会话"
+    },
+    {
+      "name": "world_scene_history_search_placeholder",
+      "value": "搜索场景名称"
+    },
+    {
+      "name": "world_scene_history_filter_all",
+      "value": "全部"
+    },
+    {
+      "name": "world_scene_history_filter_active",
+      "value": "活动中"
+    },
+    {
+      "name": "world_scene_history_filter_ended",
+      "value": "已结束"
+    },
+    {
+      "name": "world_scene_history_no_scenes",
+      "value": "暂无会话记录"
+    },
+    {
+      "name": "world_scene_history_card_messages",
+      "value": "消息"
+    },
+    {
+      "name": "world_scene_history_card_participants",
+      "value": "参与角色"
+    },
+    {
+      "name": "world_scene_history_card_no_summary",
+      "value": "尚未生成会话摘要"
+    },
+    {
+      "name": "world_scene_history_card_continue",
+      "value": "继续"
+    },
+    {
+      "name": "world_scene_history_card_view_record",
+      "value": "查看记录"
+    },
+    {
+      "name": "world_scene_history_card_create_from",
+      "value": "基于此会话新建"
+    },
+    {
+      "name": "world_scene_history_new_scene",
+      "value": "新建会话"
+    },
+    {
+      "name": "world_scene_chat_player_label",
+      "value": "[玩家]"
+    },
+    {
+      "name": "world_scene_chat_narrator_label",
+      "value": "[旁白]"
+    },
+    {
+      "name": "world_scene_chat_status_streaming",
+      "value": "正在生成"
+    },
+    {
+      "name": "world_scene_chat_status_completed",
+      "value": "已完成"
+    },
+    {
+      "name": "world_scene_chat_status_cancelled",
+      "value": "已取消"
+    },
+    {
+      "name": "world_scene_chat_status_failed",
+      "value": "发送失败"
+    },
+    {
+      "name": "world_scene_chat_manual_char_hint",
+      "value": "手工角色消息"
+    },
+    {
+      "name": "world_scene_chat_sender_player",
+      "value": "玩家"
+    },
+    {
+      "name": "world_scene_chat_sender_narrator",
+      "value": "旁白"
+    },
+    {
+      "name": "world_scene_chat_no_summary_hint",
+      "value": "当前版本尚未接入会话摘要,新场景不会自动带入旧会话内容"
+    },
+    {
+      "name": "world_scene_chat_ended_readonly",
+      "value": "该场景已结束,为只读历史会话"
+    },
+    {
+      "name": "world_scene_chat_new_from_ended",
+      "value": "基于此会话新建场景"
+    },
+    {
+      "name": "world_scene_launcher_no_active",
+      "value": "无活动场景"
+    },
+    {
+      "name": "world_scene_launcher_continue_active",
+      "value": "继续当前场景"
+    },
+    {
+      "name": "world_scene_launcher_select_hint",
+      "value": "当前版本仅支持地点全部角色参与,自定义参与者将在升级后支持"
+    },
+    {
+      "name": "world_scene_launcher_multi_active_warning",
+      "value": "当前地点存在异常的多个活动场景"
+    },
+    {
+      "name": "world_scene_launcher_scene_name_label",
+      "value": "场景名称"
+    },
+    {
+      "name": "world_scene_launcher_default_scene_name",
+      "value": "新会话"
+    },
+    {
+      "name": "world_scene_launcher_confirm_create",
+      "value": "确认创建"
+    },
+    {
+      "name": "world_scene_launcher_selected_count",
+      "value": "已选择"
+    },
+    {
+      "name": "world_scene_launcher_select_all",
+      "value": "全选"
+    },
+    {
+      "name": "world_scene_launcher_clear_all",
+      "value": "清空"
+    },
+    {
+      "name": "world_scene_launcher_min_one",
+      "value": "至少选择1个角色"
+    },
+    {
+      "name": "world_scene_launcher_no_chars",
+      "value": "当前地点没有活跃角色"
+    },
+    {
+      "name": "world_scene_history_continue_no_copy",
+      "value": "新场景不会自动带入旧会话内容"
+    },
+    {
+      "name": "world_archive_page_title",
+      "value": "角色档案"
+    },
+    {
+      "name": "world_archive_tab_memory",
+      "value": "记忆"
+    },
+    {
+      "name": "world_archive_tab_activity",
+      "value": "活动"
+    },
+    {
+      "name": "world_archive_tab_relationship",
+      "value": "关系"
+    },
+    {
+      "name": "world_archive_tab_diagnostic",
+      "value": "诊断"
+    },
+    {
+      "name": "world_archive_filter_manual",
+      "value": "手动"
+    },
+    {
+      "name": "world_archive_filter_scene",
+      "value": "场景"
+    },
+    {
+      "name": "world_archive_filter_not_connected",
+      "value": "尚未接入"
+    },
+    {
+      "name": "world_archive_not_recorded",
+      "value": "未记录"
+    },
+    {
+      "name": "world_archive_view_evidence",
+      "value": "查看来源"
+    },
+    {
+      "name": "world_archive_expand",
+      "value": "展开"
+    },
+    {
+      "name": "world_archive_collapse",
+      "value": "收起"
+    },
+    {
+      "name": "world_archive_copy",
+      "value": "复制"
+    },
+    {
+      "name": "world_archive_activity_scenes",
+      "value": "场景记录"
+    },
+    {
+      "name": "world_archive_activity_messages",
+      "value": "发言记录"
+    },
+    {
+      "name": "world_archive_activity_moves",
+      "value": "地点轨迹"
+    },
+    {
+      "name": "world_archive_no_move_history",
+      "value": "当前仅记录当前位置,完整移动轨迹尚未接入"
+    },
+    {
+      "name": "world_archive_relationship_not_available",
+      "value": "世界角色关系尚未接入"
+    },
+    {
+      "name": "world_archive_relationship_direction_out",
+      "value": "当前角色 →"
+    },
+    {
+      "name": "world_archive_relationship_direction_in",
+      "value": "→ 当前角色"
+    },
+    {
+      "name": "world_archive_player_identity_not_available",
+      "value": "世界玩家身份尚未接入"
+    },
+    {
+      "name": "world_archive_original_card",
+      "value": "原始角色卡"
+    },
+    {
+      "name": "world_archive_world_instance",
+      "value": "世界实例"
+    },
+    {
+      "name": "world_archive_instance_id",
+      "value": "实例 ID"
+    },
+    {
+      "name": "world_archive_view_original_card",
+      "value": "查看原始角色卡"
+    },
+    {
+      "name": "world_archive_diagnostic_title",
+      "value": "规则检查结果"
+    },
+    {
+      "name": "world_archive_diagnostic_total",
+      "value": "记忆总数"
+    },
+    {
+      "name": "world_archive_diagnostic_with_source",
+      "value": "有来源"
+    },
+    {
+      "name": "world_archive_diagnostic_without_source",
+      "value": "无来源"
+    },
+    {
+      "name": "world_archive_diagnostic_archived",
+      "value": "已归档"
+    },
+    {
+      "name": "world_archive_diagnostic_dup_source",
+      "value": "重复来源引用"
+    },
+    {
+      "name": "world_archive_diagnostic_owner_mismatch",
+      "value": "归属不匹配"
+    },
+    {
+      "name": "world_archive_diagnostic_world_mismatch",
+      "value": "世界归属不匹配"
+    },
+    {
+      "name": "world_archive_diagnostic_missing_scene",
+      "value": "缺失场景引用"
+    },
+    {
+      "name": "world_archive_diagnostic_missing_message",
+      "value": "缺失消息引用"
+    },
+    {
+      "name": "world_archive_diagnostic_missing_location",
+      "value": "缺失地点引用"
+    },
+    {
+      "name": "world_archive_diagnostic_missing_character",
+      "value": "缺失角色引用"
+    },
+    {
+      "name": "world_archive_diagnostic_no_issues",
+      "value": "规则检查未发现异常"
+    },
+    {
+      "name": "world_evidence_page_title",
+      "value": "来源证据"
+    },
+    {
+      "name": "world_evidence_memory_summary",
+      "value": "记忆摘要"
+    },
+    {
+      "name": "world_evidence_source_info",
+      "value": "来源信息"
+    },
+    {
+      "name": "world_evidence_original_messages",
+      "value": "原始证据"
+    },
+    {
+      "name": "world_evidence_no_source",
+      "value": "这条记忆没有可追溯的原始消息记录"
+    },
+    {
+      "name": "world_evidence_original_label",
+      "value": "原始证据"
+    },
+    {
+      "name": "world_curator_page_title",
+      "value": "世界档案管理员"
+    },
+    {
+      "name": "world_curator_rule_mode_banner",
+      "value": "当前为规则检查模式"
+    },
+    {
+      "name": "world_curator_ai_not_available",
+      "value": "AI 档案管理员尚未接入"
+    },
+    {
+      "name": "world_curator_tab_overview",
+      "value": "概览"
+    },
+    {
+      "name": "world_curator_tab_issues",
+      "value": "一致性问题"
+    },
+    {
+      "name": "world_curator_tab_suggestions",
+      "value": "修正建议"
+    },
+    {
+      "name": "world_curator_tab_audit",
+      "value": "审计记录"
+    },
+    {
+      "name": "world_curator_summary_characters",
+      "value": "角色"
+    },
+    {
+      "name": "world_curator_summary_locations",
+      "value": "地点"
+    },
+    {
+      "name": "world_curator_summary_scenes",
+      "value": "场景"
+    },
+    {
+      "name": "world_curator_summary_memories",
+      "value": "记忆"
+    },
+    {
+      "name": "world_curator_summary_pending",
+      "value": "待检查"
+    },
+    {
+      "name": "world_curator_overview_total",
+      "value": "总数"
+    },
+    {
+      "name": "world_curator_overview_valid",
+      "value": "有效"
+    },
+    {
+      "name": "world_curator_overview_missing_ref",
+      "value": "缺失引用"
+    },
+    {
+      "name": "world_curator_overview_pending",
+      "value": "待检查"
+    },
+    {
+      "name": "world_curator_no_suggestions",
+      "value": "尚无 AI 修正建议"
+    },
+    {
+      "name": "world_curator_suggestions_future_desc",
+      "value": "未来档案管理员将基于原始消息、地点、场景和角色归属,生成可审查的修正建议。"
+    },
+    {
+      "name": "world_curator_no_audit",
+      "value": "尚未接入审计记录"
+    },
+    {
+      "name": "world_curator_audit_future_desc",
+      "value": "未来审计记录将包含:检查时间、检查方式、问题数量、处理数量、操作者。"
+    },
+    {
+      "name": "world_curator_issue_view_detail",
+      "value": "查看详情"
+    },
+    {
+      "name": "world_curator_issue_ignore",
+      "value": "忽略"
+    },
+    {
+      "name": "world_curator_entry",
+      "value": "世界档案管理员"
+    },
+    {
+      "name": "world_risk_info",
+      "value": "信息"
+    },
+    {
+      "name": "world_risk_notice",
+      "value": "提醒"
+    },
+    {
+      "name": "world_risk_warning",
+      "value": "警告"
+    },
+    {
+      "name": "world_risk_critical",
+      "value": "严重"
+    },
+    {
+      "name": "world_inspector_entry",
+      "value": "世界检查器"
+    },
+    {
+      "name": "world_inspector_pipeline",
+      "value": "管线"
+    },
+    {
+      "name": "world_inspector_context",
+      "value": "上下文"
+    },
+    {
+      "name": "world_inspector_dossier",
+      "value": "档案"
+    },
+    {
+      "name": "world_ai_create",
+      "value": "AI 创建世界"
+    },
+    {
+      "name": "world_ai_create_title",
+      "value": "AI 创建世界"
+    },
+    {
+      "name": "world_ai_select_chars_hint",
+      "value": "选择角色卡(AI 将基于角色设定构建世界)"
+    },
+    {
+      "name": "world_ai_selected_count",
+      "value": " 个角色已选"
+    },
+    {
+      "name": "world_no_description",
+      "value": "无描述"
+    },
+    {
+      "name": "world_ai_next_theme",
+      "value": "下一步: 输入主题"
+    },
+    {
+      "name": "world_ai_theme_hint",
+      "value": "描述你想创建的世界(可选)"
+    },
+    {
+      "name": "world_ai_theme_placeholder",
+      "value": "例如: 仙侠世界、现代都市、魔法学院..."
+    },
+    {
+      "name": "world_ai_back_select",
+      "value": "返回选择角色"
+    },
+    {
+      "name": "world_ai_generate",
+      "value": "AI 生成世界"
+    },
+    {
+      "name": "world_ai_generating",
+      "value": "AI 正在生成世界..."
+    },
+    {
+      "name": "world_ai_generating_hint",
+      "value": "分析角色设定并构建世界观,可能需要 10-30 秒"
+    },
+    {
+      "name": "world_ai_regenerate",
+      "value": "重新生成"
+    },
+    {
+      "name": "world_ai_confirm_create",
+      "value": "确认创建"
+    },
+    {
+      "name": "world_ai_world_info",
+      "value": "世界信息"
+    },
+    {
+      "name": "world_ai_locations",
+      "value": "地点"
+    },
+    {
+      "name": "world_ai_lorebook",
+      "value": "世界观条目"
+    },
+    {
+      "name": "world_ai_char_notes",
+      "value": "角色定位建议"
+    },
+    {
+      "name": "world_ai_player_name_label",
+      "value": "玩家名称"
+    },
+    {
+      "name": "world_ai_player_name_placeholder",
+      "value": "输入你在世界中的名称"
+    },
+    {
+      "name": "world_create_success",
+      "value": "世界创建成功"
+    },
+    {
+      "name": "settings_send_button_section",
+      "value": "发送按钮"
+    },
+    {
+      "name": "settings_send_button_position",
+      "value": "按钮位置"
+    },
+    {
+      "name": "settings_send_button_position_left",
+      "value": "左侧"
+    },
+    {
+      "name": "settings_send_button_position_right",
+      "value": "右侧"
+    },
+    {
+      "name": "settings_smart_grip",
+      "value": "智感握姿"
+    },
+    {
+      "name": "settings_smart_grip_desc",
+      "value": "根据握持手自动调整发送按钮位置"
+    },
+    {
+      "name": "permission_detect_gesture_reason",
+      "value": "需要获取握持状态以优化单手操作体验"
+    }
+  ]
+}

@@ -1,0 +1,300 @@
+{
+  "color": [
+    {
+      "name": "start_window_background",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "page_background",
+      "value": "#F5F5F5"
+    },
+    {
+      "name": "page_primary_text",
+      "value": "#1A1A1A"
+    },
+    {
+      "name": "page_secondary_text",
+      "value": "#666666"
+    },
+    {
+      "name": "model_settings_success",
+      "value": "#2E7D32"
+    },
+    {
+      "name": "chat_user_bubble",
+      "value": "#CC5B7CFA"
+    },
+    {
+      "name": "chat_user_text",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "chat_user_border",
+      "value": "#33FFFFFF"
+    },
+    {
+      "name": "chat_assistant_bubble",
+      "value": "#B3FFFFFF"
+    },
+    {
+      "name": "chat_assistant_border",
+      "value": "#33000000"
+    },
+    {
+      "name": "chat_assistant_shadow",
+      "value": "#0F000000"
+    },
+    {
+      "name": "chat_top_gradient_start",
+      "value": "#73000000"
+    },
+    {
+      "name": "chat_top_gradient_mid",
+      "value": "#2E000000"
+    },
+    {
+      "name": "chat_top_gradient_end",
+      "value": "#00000000"
+    },
+    {
+      "name": "chat_status_stopped_bg",
+      "value": "#F0F1F4"
+    },
+    {
+      "name": "chat_status_failed_bg",
+      "value": "#FFEBEE"
+    },
+    {
+      "name": "app_bg",
+      "value": "#F5F6F8"
+    },
+    {
+      "name": "app_surface_1",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "app_surface_2",
+      "value": "#F0F1F4"
+    },
+    {
+      "name": "app_accent_surface",
+      "value": "#E8EEFF"
+    },
+    {
+      "name": "app_text_primary",
+      "value": "#1A1A1A"
+    },
+    {
+      "name": "app_text_secondary",
+      "value": "#595959"
+    },
+    {
+      "name": "app_text_tertiary",
+      "value": "#8C8C8C"
+    },
+    {
+      "name": "app_accent",
+      "value": "#5B7CFA"
+    },
+    {
+      "name": "app_on_accent",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "app_danger",
+      "value": "#D32F2F"
+    },
+    {
+      "name": "app_divider",
+      "value": "#E5E5E5"
+    },
+    {
+      "name": "app_scrim",
+      "value": "#80000000"
+    },
+    {
+      "name": "chat_text_primary",
+      "value": "#1A1A1A"
+    },
+    {
+      "name": "chat_text_emphasis",
+      "value": "#0D0D0D"
+    },
+    {
+      "name": "chat_text_secondary",
+      "value": "#666666"
+    },
+    {
+      "name": "chat_text_dialogue",
+      "value": "#1565C0"
+    },
+    {
+      "name": "chat_text_narrator",
+      "value": "#7F8C8D"
+    },
+    {
+      "name": "chat_text_action",
+      "value": "#607D8B"
+    },
+    {
+      "name": "chat_text_code",
+      "value": "#C2185B"
+    },
+    {
+      "name": "chat_text_link",
+      "value": "#1976D2"
+    },
+    {
+      "name": "chat_text_quote",
+      "value": "#555555"
+    },
+    {
+      "name": "chat_text_system",
+      "value": "#999999"
+    },
+    {
+      "name": "worldbook_page_background",
+      "value": "#F5F5F5"
+    },
+    {
+      "name": "worldbook_card_background",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "worldbook_card_border",
+      "value": "#E5E5E5"
+    },
+    {
+      "name": "worldbook_text_primary",
+      "value": "#1A1A1A"
+    },
+    {
+      "name": "worldbook_text_secondary",
+      "value": "#595959"
+    },
+    {
+      "name": "worldbook_text_muted",
+      "value": "#8C8C8C"
+    },
+    {
+      "name": "worldbook_action_primary",
+      "value": "#5B7CFA"
+    },
+    {
+      "name": "worldbook_action_warning",
+      "value": "#E67E22"
+    },
+    {
+      "name": "worldbook_action_danger",
+      "value": "#D32F2F"
+    },
+    {
+      "name": "worldbook_selected_background",
+      "value": "#E8EEFF"
+    },
+    {
+      "name": "worldbook_entry_background",
+      "value": "#F7F7F8"
+    },
+    {
+      "name": "worldbook_disabled_badge",
+      "value": "#9E9E9E"
+    },
+    {
+      "name": "world_bg",
+      "value": "#1A1510"
+    },
+    {
+      "name": "world_surface_1",
+      "value": "#2A2118"
+    },
+    {
+      "name": "world_surface_2",
+      "value": "#3A2F22"
+    },
+    {
+      "name": "world_surface_elevated",
+      "value": "#332A1E"
+    },
+    {
+      "name": "world_border",
+      "value": "#4A3D2E"
+    },
+    {
+      "name": "world_text_primary",
+      "value": "#F5E6CA"
+    },
+    {
+      "name": "world_text_secondary",
+      "value": "#B8A88A"
+    },
+    {
+      "name": "world_text_tertiary",
+      "value": "#8A7B62"
+    },
+    {
+      "name": "world_gold",
+      "value": "#D4A843"
+    },
+    {
+      "name": "world_on_gold",
+      "value": "#1A1510"
+    },
+    {
+      "name": "world_gold_surface",
+      "value": "#3D3220"
+    },
+    {
+      "name": "world_gold_border",
+      "value": "#D4A843"
+    },
+    {
+      "name": "world_success",
+      "value": "#6B9E47"
+    },
+    {
+      "name": "world_warning",
+      "value": "#D49B43"
+    },
+    {
+      "name": "world_error",
+      "value": "#C45A4A"
+    },
+    {
+      "name": "world_info",
+      "value": "#5B8AB5"
+    },
+    {
+      "name": "world_grid_line",
+      "value": "#2E2519"
+    },
+    {
+      "name": "world_map_bg",
+      "value": "#15110C"
+    },
+    {
+      "name": "world_edge",
+      "value": "#6B5B42"
+    },
+    {
+      "name": "world_edge_disabled",
+      "value": "#4A3D2E"
+    },
+    {
+      "name": "world_fab_bg",
+      "value": "#D4A843"
+    },
+    {
+      "name": "world_toolbar_bg",
+      "value": "#2A2118"
+    },
+    {
+      "name": "world_scrim",
+      "value": "#99000000"
+    },
+    {
+      "name": "world_on_danger",
+      "value": "#FFE8E0"
+    }
+  ]
+}

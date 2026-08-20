@@ -1,0 +1,156 @@
+{
+  "float": [
+    {
+      "name": "nav_title_font_size",
+      "value": "20fp"
+    },
+    {
+      "name": "app_spacing_4",
+      "value": "4vp"
+    },
+    {
+      "name": "app_spacing_8",
+      "value": "8vp"
+    },
+    {
+      "name": "app_spacing_12",
+      "value": "12vp"
+    },
+    {
+      "name": "app_spacing_16",
+      "value": "16vp"
+    },
+    {
+      "name": "app_spacing_20",
+      "value": "20vp"
+    },
+    {
+      "name": "app_spacing_24",
+      "value": "24vp"
+    },
+    {
+      "name": "app_spacing_32",
+      "value": "32vp"
+    },
+    {
+      "name": "app_spacing_48",
+      "value": "48vp"
+    },
+    {
+      "name": "app_radius_sm",
+      "value": "8vp"
+    },
+    {
+      "name": "app_radius_md",
+      "value": "12vp"
+    },
+    {
+      "name": "app_radius_lg",
+      "value": "16vp"
+    },
+    {
+      "name": "chat_top_gradient_height",
+      "value": "112vp"
+    },
+    {
+      "name": "chat_bubble_padding_h",
+      "value": "16vp"
+    },
+    {
+      "name": "chat_bubble_padding_v",
+      "value": "13vp"
+    },
+    {
+      "name": "chat_bubble_border_width",
+      "value": "1vp"
+    },
+    {
+      "name": "app_font_title",
+      "value": "26fp"
+    },
+    {
+      "name": "app_font_subtitle",
+      "value": "16fp"
+    },
+    {
+      "name": "app_font_body",
+      "value": "15fp"
+    },
+    {
+      "name": "app_font_caption",
+      "value": "12fp"
+    },
+    {
+      "name": "world_radius_card",
+      "value": "16vp"
+    },
+    {
+      "name": "world_radius_chip",
+      "value": "8vp"
+    },
+    {
+      "name": "world_radius_button",
+      "value": "12vp"
+    },
+    {
+      "name": "world_page_padding",
+      "value": "16vp"
+    },
+    {
+      "name": "world_card_spacing",
+      "value": "12vp"
+    },
+    {
+      "name": "world_top_nav_height",
+      "value": "52vp"
+    },
+    {
+      "name": "world_bottom_bar_height",
+      "value": "64vp"
+    },
+    {
+      "name": "world_font_display",
+      "value": "28fp"
+    },
+    {
+      "name": "world_font_title",
+      "value": "22fp"
+    },
+    {
+      "name": "world_font_subtitle",
+      "value": "18fp"
+    },
+    {
+      "name": "world_font_section",
+      "value": "14fp"
+    },
+    {
+      "name": "world_font_body",
+      "value": "15fp"
+    },
+    {
+      "name": "world_font_caption",
+      "value": "12fp"
+    },
+    {
+      "name": "world_font_micro",
+      "value": "10fp"
+    },
+    {
+      "name": "world_fab_size",
+      "value": "56vp"
+    },
+    {
+      "name": "world_toolbar_icon",
+      "value": "20vp"
+    },
+    {
+      "name": "world_node_width",
+      "value": "140vp"
+    },
+    {
+      "name": "world_node_height",
+      "value": "80vp"
+    }
+  ]
+}

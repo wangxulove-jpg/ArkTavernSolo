@@ -1,0 +1,3037 @@
+=== Build Output ===
+> D:/DevEco_studio/DevEco Studio\tools\node\node.exe D:/DevEco_studio/DevEco Studio\tools\hvigor\bin\hvigorw.js --mode module -p module=entry@default assembleHap -p buildMode=debug --no-daemon
+
+> hvigor UP-TO-DATE :entry:default@PreBuild...  
+> hvigor Finished :entry:default@CreateModuleInfo... after 1 ms 
+> hvigor UP-TO-DATE :entry:default@GenerateMetadata...  
+> hvigor Finished :entry:default@ConfigureCmake... after 1 ms 
+> hvigor UP-TO-DATE :entry:default@MergeProfile...  
+> hvigor UP-TO-DATE :entry:default@CreateBuildProfile...  
+> hvigor Finished :entry:default@PreCheckSyscap... after 1 ms 
+> hvigor UP-TO-DATE :entry:default@GeneratePkgContextInfo...  
+> hvigor Finished :entry:default@GeneratePkgSdkInfo... after 4 ms 
+> hvigor Finished :entry:default@ProcessIntegratedHsp... after 1 ms 
+> hvigor Finished :entry:default@BuildNativeWithCmake... after 1 ms 
+> hvigor UP-TO-DATE :entry:default@MakePackInfo...  
+> hvigor Finished :entry:default@SyscapTransform... after 13 ms 
+> hvigor UP-TO-DATE :entry:default@ProcessProfile...  
+> hvigor UP-TO-DATE :entry:de> hvigor WARN: WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/ProviderConfigStore.ets:342:33
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/CharacterStore.ets:106:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/CharacterStore.ets:107:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/CharacterStore.ets:128:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/CharacterStore.ets:129:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/CharacterStore.ets:141:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/CharacterStore.ets:144:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/CharacterStore.ets:146:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/CharacterStore.ets:156:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/CharacterStore.ets:158:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTaverfault@ProcessRouterMap...  
+> hvigor UP-TO-DATE :entry:default@ProcessShareConfig...  
+> hvigor Finished :entry:default@ProcessStartupConfig... after 3 ms 
+> hvigor Finished :entry:default@BuildNativeWithNinja... after 1 ms 
+> hvigor UP-TO-DATE :entry:default@ProcessResource...  
+> hvigor UP-TO-DATE :entry:default@GenerateLoaderJson...  
+> hvigor UP-TO-DATE :entry:default@ProcessLibs...  
+> hvigor UP-TO-DATE :entry:default@CompileResource...  
+> hvigor UP-TO-DATE :entry:default@DoNativeStrip...  
+> hvigor Finished :entry:default@BuildJS... after 4 ms 
+> hvigor UP-TO-DATE :entry:default@CacheNativeLibs...  
+nSolo/entry/src/main/ets/storage/CharacterStore.ets:160:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/CharacterSelectionStore.ets:78:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/CharacterSelectionStore.ets:80:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/CharacterSelectionStore.ets:82:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/utils/Uuid.ets:68:42
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/utils/Uuid.ets:69:46
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/utils/Uuid.ets:70:10
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/LorebookStore.ets:120:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/LorebookStore.ets:121:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/LorebookStore.ets:142:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/LorebookStore.ets:143:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/LorebookStore.ets:155:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/LorebookStore.ets:158:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/LorebookStore.ets:160:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/LorebookStore.ets:170:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/LorebookStore.ets:172:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/LorebookStore.ets:174:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/LorebookSelectionStore.ets:53:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/LorebookSelectionStore.ets:55:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/LorebookSelectionStore.ets:61:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:142:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:165:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:191:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:221:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:235:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:238:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:239:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:241:20
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:245:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:268:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:277:52
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:280:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:281:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:283:27
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:287:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:297:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:304:54
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:307:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:308:34
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:309:38
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:312:33
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:313:35
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:318:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:328:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:336:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:367:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:398:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:429:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:432:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:433:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:435:20
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:439:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:449:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:481:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:511:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:544:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:551:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:555:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:578:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:603:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:608:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:637:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:668:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:672:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:709:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:748:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:785:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:822:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:859:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:892:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:919:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:934:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:964:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:990:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:1017:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:1043:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:1058:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:1073:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:1088:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:1103:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:1118:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:1133:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:1158:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DatabaseMigration.ets:1183:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/database/DbHelper.ets:332:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:107:22
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:107:35
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:111:24
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:111:37
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:115:31
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:115:44
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:116:31
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:116:44
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:117:28
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:117:41
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:118:32
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:118:45
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:119:32
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:119:45
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:120:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:120:42
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:121:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:121:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:122:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:122:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:172:23
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:189:23
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:205:23
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:237:23
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:337:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:339:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:344:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:356:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:359:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:364:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:474:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:476:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:479:27
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:483:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:485:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:516:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:518:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:521:27
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:525:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:527:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/CharacterRepository.ets:541:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:121:22
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:121:35
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:125:24
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:125:37
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:126:28
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:126:41
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:127:37
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:127:50
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:128:27
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:128:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:129:41
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:129:52
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:130:42
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:130:53
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:131:43
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:131:54
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:133:19
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:133:32
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:134:28
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:134:39
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:138:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:138:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:142:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:142:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:168:22
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:168:35
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:172:24
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:172:37
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:176:31
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:176:44
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:177:41
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:177:52
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:178:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:178:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:182:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepositoryMapper.ets:182:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:108:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:110:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:128:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:140:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:142:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:146:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:160:54
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:162:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:164:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:165:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:175:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:324:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:328:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:329:28
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:331:18
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:336:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:357:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:359:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:361:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:372:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:374:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:392:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:461:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:464:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:469:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:481:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:484:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:489:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:500:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:502:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:505:26
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:509:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/LorebookRepository.ets:511:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/utils/ImageConverter.ets:88:51
+ 'packing' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/CharacterMigrationService.ets:66:38
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/CharacterMigrationService.ets:116:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/LorebookMigrationService.ets:58:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:81:22
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:81:35
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:82:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:84:24
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:85:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:87:25
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:87:38
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:88:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:88:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:89:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:89:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:90:33
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:90:44
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:91:33
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:92:44
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:93:32
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:94:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:95:39
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:100:31
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:102:8
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:102:46
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:105:39
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:183:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:185:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:190:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:233:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:236:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:241:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:411:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:415:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:416:28
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:418:18
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:423:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:434:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:436:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:438:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:468:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:470:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:475:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:528:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:531:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:536:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:580:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:583:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:588:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:632:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:635:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:640:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:654:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:656:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:659:27
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:663:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:665:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:696:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:698:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:701:27
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:705:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:707:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatRepository.ets:721:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:230:22
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:230:35
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:231:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:231:53
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:232:27
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:232:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:233:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:233:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:235:32
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:237:28
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:238:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:241:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:241:42
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:244:34
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:245:45
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:247:35
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:249:31
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:250:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:253:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:255:25
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:256:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:261:33
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:263:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:264:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:268:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:270:36
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:271:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:274:30
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:276:26
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:277:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:280:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:282:36
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:283:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:287:33
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:289:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:290:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:294:35
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:296:31
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:297:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:304:37
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:306:33
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:307:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:314:33
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:316:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:317:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:325:37
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:327:33
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:328:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:382:22
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:386:23
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:487:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:489:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:494:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:522:51
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:524:16
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:529:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:574:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:577:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:582:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:625:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:628:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:639:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:653:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:655:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:656:28
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:657:25
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:658:31
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:666:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:824:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:826:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:827:28
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:829:18
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:834:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:845:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:847:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:849:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:952:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:954:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:957:26
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:959:16
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:963:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:1002:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:1005:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:1010:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:1040:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:1043:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageRepository.ets:1048:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:53:38
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:53:51
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:58:26
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:58:39
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:63:31
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:63:42
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:68:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:68:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:73:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:73:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:122:22
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:122:35
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:127:38
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:127:51
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:132:34
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:132:45
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:137:27
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:137:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:139:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:139:42
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:142:35
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:144:31
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:145:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:148:34
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:148:45
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:151:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:151:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:156:32
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:158:28
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepositoryMapper.ets:159:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:88:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:90:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:95:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:163:36
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:198:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:200:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:205:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:230:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:233:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:238:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:252:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:255:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:260:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:277:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:279:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:280:28
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:281:25
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:282:18
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:287:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:352:36
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:372:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:375:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:380:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:398:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:405:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:406:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:407:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:414:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:486:54
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:489:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:490:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:491:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/MessageSwipeRepository.ets:496:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatParticipantRepository.ets:80:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatParticipantRepository.ets:83:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatParticipantRepository.ets:88:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatParticipantRepository.ets:105:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatParticipantRepository.ets:108:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatParticipantRepository.ets:113:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatParticipantRepository.ets:133:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatParticipantRepository.ets:136:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatParticipantRepository.ets:141:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatParticipantRepository.ets:242:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatParticipantRepository.ets:245:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatParticipantRepository.ets:250:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatParticipantRepository.ets:267:15
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatParticipantRepository.ets:267:28
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatParticipantRepository.ets:268:20
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatParticipantRepository.ets:268:33
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatParticipantRepository.ets:269:21
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatParticipantRepository.ets:269:32
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatParticipantRepository.ets:270:18
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatParticipantRepository.ets:270:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatParticipantRepository.ets:271:18
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatParticipantRepository.ets:271:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatParticipantRepository.ets:272:18
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatParticipantRepository.ets:272:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:49:22
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:49:35
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:53:26
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:53:39
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:58:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:60:25
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:61:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:63:27
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:65:23
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:66:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:67:24
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:67:37
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:68:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:68:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:70:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:70:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:74:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:74:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:78:33
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:78:44
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:133:28
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:133:41
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:137:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:137:42
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:141:28
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:141:39
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:145:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:145:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:185:28
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:185:41
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:190:5
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:190:18
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:194:34
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:194:45
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:198:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepositoryMapper.ets:198:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:88:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:90:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:95:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:115:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:117:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:122:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:141:54
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:144:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:145:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:147:28
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:151:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:176:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:179:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:183:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:227:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:230:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:234:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:271:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:275:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:305:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:307:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:310:27
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:314:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:316:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:332:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:334:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:337:27
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:341:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:343:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:372:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:374:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:379:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:398:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:401:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:405:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:435:55
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:437:5
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:440:58
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:446:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:447:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:449:37
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:453:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:456:53
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:462:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:463:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:465:38
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:469:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:631:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:634:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:638:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:781:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:784:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:785:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:787:26
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:791:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:798:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:805:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:811:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:816:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:964:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:967:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:968:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:970:20
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:974:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:990:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:994:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:1009:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:1011:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:1014:27
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:1018:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ConversationBranchRepository.ets:1020:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:59:22
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:59:35
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:63:26
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:63:39
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:67:28
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:67:41
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:71:34
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:71:47
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:75:32
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:75:45
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:79:33
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:79:44
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:83:31
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:83:42
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:87:27
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:87:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:88:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:88:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:92:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:92:40
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:96:30
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:96:41
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:98:34
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:98:45
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:103:32
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:105:28
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:106:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:109:33
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:111:23
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:114:28
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:115:41
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:117:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:118:43
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:120:33
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:121:51
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:123:31
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:124:51
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:126:33
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:127:51
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:129:34
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepositoryMapper.ets:130:56
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:76:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:78:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:83:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:106:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:109:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:113:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:139:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:142:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:146:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:179:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:182:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:186:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:214:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:217:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:221:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:244:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:246:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:251:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:270:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:290:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:313:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:335:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:355:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:373:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:394:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:415:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:442:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:473:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:514:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:517:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/ChatMemoryRepository.ets:521:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepositoryMapper.ets:45:24
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepositoryMapper.ets:46:22
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepositoryMapper.ets:51:26
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepositoryMapper.ets:52:24
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepositoryMapper.ets:57:26
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepositoryMapper.ets:58:31
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepositoryMapper.ets:60:24
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepositoryMapper.ets:61:32
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepositoryMapper.ets:63:26
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepositoryMapper.ets:65:8
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepositoryMapper.ets:66:27
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepositoryMapper.ets:73:26
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepositoryMapper.ets:75:8
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepositoryMapper.ets:76:27
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepositoryMapper.ets:83:31
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepositoryMapper.ets:85:8
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepositoryMapper.ets:86:27
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepositoryMapper.ets:93:24
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepositoryMapper.ets:95:8
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepositoryMapper.ets:96:27
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepositoryMapper.ets:103:24
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepositoryMapper.ets:104:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepositoryMapper.ets:109:24
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepositoryMapper.ets:110:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepository.ets:82:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepository.ets:84:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepository.ets:89:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepository.ets:99:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepository.ets:102:14
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepository.ets:107:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepository.ets:168:49
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepository.ets:172:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepository.ets:173:28
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepository.ets:175:18
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/repositories/PromptPresetRepository.ets:180:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/PromptPresetSelectionStore.ets:66:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/PromptPresetSelectionStore.ets:68:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/PromptPresetSelectionStore.ets:71:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/PromptPresetSelectionStore.ets:76:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/storage/PromptPresetSelectionStore.ets:77:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/network/providers/OpenAIProvider.ets:124:42
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/ChatBackgroundService.ets:103:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/ChatBackgroundService.ets:126:39
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/ChatBackgroundService.ets:129:41
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/ChatBackgroundService.ets:137:41
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/ChatBackgroundService.ets:143:17
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/ChatBackgroundService.ets:147:15
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/ChatBackgroundService.ets:150:13
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/ChatBackgroundService.ets:165:36
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/ChatBackgroundService.ets:167:35
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/ChatBackgroundService.ets:168:34
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/ChatBackgroundService.ets:197:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/ChatBackgroundService.ets:207:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/ChatBackgroundService.ets:216:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/ChatBackgroundService.ets:238:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/ChatBackgroundService.ets:239:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/ChatBackgroundService.ets:240:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/ChatBackgroundService.ets:243:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/ChatBackgroundService.ets:254:34
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/ChatBackgroundService.ets:269:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/market/MarketCacheStore.ets:60:18
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/market/MarketCacheStore.ets:64:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/market/MarketCacheStore.ets:68:18
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/market/MarketCacheStore.ets:72:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/market/MarketCacheStore.ets:81:18
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/market/MarketCacheStore.ets:88:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/market/MarketCacheStore.ets:94:18
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/market/MarketCacheStore.ets:101:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/market/MarketCacheStore.ets:105:29
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/market/MarketCacheStore.ets:116:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/market/MarketCacheStore.ets:171:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/market/MarketCacheStore.ets:231:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/market/MarketCacheStore.ets:232:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/market/MarketCacheStore.ets:241:18
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/market/MarketCacheStore.ets:248:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/market/MarketCacheStore.ets:350:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/market/ChubProvider.ets:238:42
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/ChatArchiveImportService.ets:297:20
+ 'decodeWithStream' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/AppServices.ets:436:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/AppServices.ets:443:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/AppServices.ets:450:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/AppServices.ets:457:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/AppServices.ets:465:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/AppServices.ets:473:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/AppServices.ets:481:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/AppServices.ets:489:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/AppServices.ets:509:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/AppServices.ets:517:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/AppServices.ets:526:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/AppServices.ets:534:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/AppServices.ets:543:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/AppServices.ets:552:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/AppServices.ets:560:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/AppServices.ets:568:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/AppServices.ets:576:35
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/AppServices.ets:596:35
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/AppServices.ets:619:35
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/AppServices.ets:628:35
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/AppServices.ets:637:48
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/AppServices.ets:649:54
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/AppServices.ets:668:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/services/AppServices.ets:672:12
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/CharacterRootView.ets:186:5
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/CharacterRootView.ets:186:12
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/CharacterRootView.ets:197:5
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/CharacterRootView.ets:197:12
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/CharacterRootView.ets:288:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/CharacterRootView.ets:288:22
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/CharacterRootView.ets:307:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/CharacterRootView.ets:307:22
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/CharacterRootView.ets:320:22
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/CharacterRootView.ets:325:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/CharacterRootView.ets:325:22
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/CharacterRootView.ets:342:31
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/CharacterRootView.ets:344:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/CharacterRootView.ets:346:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/CharacterRootView.ets:425:20
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/CharacterRootView.ets:812:20
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:206:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:206:14
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:225:5
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:225:12
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:254:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:254:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:270:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:270:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:314:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:314:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:502:20
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:596:18
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:1076:24
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:1085:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:1085:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:1104:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:1104:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:1116:22
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:1120:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:1120:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:1179:5
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:1179:12
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:1212:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:1212:22
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:1218:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:1218:22
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:1235:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:1235:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:1250:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:1250:22
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:1256:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/ChatSessionRootView.ets:1256:22
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/MarketPage.ets:738:14
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/SettingsRootView.ets:66:24
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/SettingsRootView.ets:74:24
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/SettingsRootView.ets:82:24
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/SettingsRootView.ets:93:24
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/tabs/SettingsRootView.ets:104:24
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/viewmodels/ChatViewModel.ets:828:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:279:26
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:310:27
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:531:35
+ 'matchMediaSync' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:988:8
+ 'key' can only be used for testing directories 
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:1083:8
+ 'key' can only be used for testing directories 
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:1095:10
+ 'key' can only be used for testing directories 
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:1134:14
+ 'key' can only be used for testing directories 
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:1164:10
+ 'key' can only be used for testing directories 
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:1270:12
+ 'key' can only be used for testing directories 
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:1342:14
+ 'key' can only be used for testing directories 
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:1369:8
+ 'key' can only be used for testing directories 
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:1456:14
+ 'key' can only be used for testing directories 
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:1464:14
+ 'key' can only be used for testing directories 
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:1497:12
+ 'key' can only be used for testing directories 
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:1508:12
+ 'key' can only be used for testing directories 
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:1580:22
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:1595:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:1595:22
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:1603:24
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:1605:24
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:1609:22
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:1614:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:1614:22
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:1625:26
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:1629:22
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:1648:24
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:1652:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:1666:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:1670:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:2442:6
+ 'onScrollEnd' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3098:5
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3098:18
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3169:35
+ 'getContext' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3237:12
+ 'back' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3241:5
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3241:12
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3246:5
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3246:12
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3258:5
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3258:12
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3270:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3270:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3273:5
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3273:12
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3285:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3285:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3288:5
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3288:12
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3354:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3354:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3359:5
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3359:12
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3380:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3380:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3396:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3396:22
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3402:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3402:22
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3421:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3421:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3432:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3432:22
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3438:9
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3438:22
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3465:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3465:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3470:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3470:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3475:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3475:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3572:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3572:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3577:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3577:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3580:5
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3580:18
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3599:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3602:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3602:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3669:22
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3716:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3716:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3727:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3727:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3738:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3738:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3969:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:3969:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/CharacterListPage.ets:63:22
+ 'back' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/CharacterListPage.ets:691:22
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/CharacterListPage.ets:711:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/CharacterListPage.ets:716:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/CharacterListPage.ets:716:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/CharacterEditPage.ets:116:29
+ 'getParams' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/CharacterEditPage.ets:1057:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/CharacterEditPage.ets:1057:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/CharacterEditPage.ets:1132:12
+ 'back' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AddCharacterPage.ets:69:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AddCharacterPage.ets:69:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AddCharacterPage.ets:78:12
+ 'back' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AddCharacterPage.ets:83:5
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AddCharacterPage.ets:83:12
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AddCharacterPage.ets:88:5
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AddCharacterPage.ets:88:12
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AddCharacterPage.ets:114:22
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AddCharacterPage.ets:120:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AddCharacterPage.ets:120:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AddCharacterPage.ets:134:22
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AddCharacterPage.ets:145:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AddCharacterPage.ets:145:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/LorebookPage.ets:115:22
+ 'back' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ModelSettingsPage.ets:92:22
+ 'back' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ModelSettingsPage.ets:165:20
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ModelSettingsPage.ets:321:14
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ModelConfigEditPage.ets:102:20
+ 'back' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ModelConfigEditPage.ets:130:20
+ 'back' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ModelConfigEditPage.ets:539:25
+ 'show' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ModelConfigEditPage.ets:549:28
+ 'back' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AppSettingsPage.ets:78:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AppSettingsPage.ets:81:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AppSettingsPage.ets:81:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AppSettingsPage.ets:146:20
+ 'back' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/PromptPresetListPage.ets:73:20
+ 'back' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/PromptPresetListPage.ets:137:20
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/PromptPresetListPage.ets:263:22
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/PromptPresetListPage.ets:278:27
+ 'show' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/PromptPresetEditPage.ets:53:29
+ 'getParams' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/PromptPresetEditPage.ets:65:20
+ 'back' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/PromptPresetEditPage.ets:409:14
+ 'back' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/BranchMapPage.ets:664:28
+ 'getParams' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/BranchMapPage.ets:696:12
+ 'back' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatBackgroundSettingsPage.ets:62:28
+ 'getParams' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatBackgroundSettingsPage.ets:150:18
+ 'back' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatBackgroundSettingsPage.ets:431:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatBackgroundSettingsPage.ets:431:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatBackgroundSettingsPage.ets:486:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatBackgroundSettingsPage.ets:486:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatBackgroundSettingsPage.ets:503:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatBackgroundSettingsPage.ets:503:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatBackgroundSettingsPage.ets:524:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatBackgroundSettingsPage.ets:527:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatBackgroundSettingsPage.ets:527:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatBackgroundSettingsPage.ets:547:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatBackgroundSettingsPage.ets:550:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatBackgroundSettingsPage.ets:550:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/MemoryManagementPage.ets:67:28
+ 'getParams' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/MemoryManagementPage.ets:144:18
+ 'back' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/MemoryManagementPage.ets:710:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/MemoryManagementPage.ets:710:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ContextBudgetPage.ets:58:28
+ 'getParams' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ContextBudgetPage.ets:70:27
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ContextBudgetPage.ets:177:18
+ 'back' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/MarketDetailPage.ets:89:53
+ 'getParams' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/MarketDetailPage.ets:115:12
+ 'back' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/MarketDetailPage.ets:178:18
+ 'back' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/MarketDetailPage.ets:772:5
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/MarketDetailPage.ets:772:18
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/MarketDetailPage.ets:1045:5
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/p> hvigor Finished :entry:default@CompileArkTS... after 16 s 769 ms 
+ages/MarketDetailPage.ets:1045:12
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/MarketDetailPage.ets:1152:5
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/MarketDetailPage.ets:1152:12
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/MarketDetailPage.ets:1170:5
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/MarketDetailPage.ets:1170:12
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/SingleChatHistoryPage.ets:93:5
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/SingleChatHistoryPage.ets:93:12
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/SingleChatHistoryPage.ets:141:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/SingleChatHistoryPage.ets:141:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/SingleChatHistoryPage.ets:151:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/SingleChatHistoryPage.ets:151:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/SingleChatHistoryPage.ets:182:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/SingleChatHistoryPage.ets:182:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/SingleChatHistoryPage.ets:215:22
+ 'back' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterMakerPage.ets:63:35
+ 'getContext' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterMakerPage.ets:75:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterMakerPage.ets:75:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterMakerPage.ets:88:12
+ 'back' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterMakerPage.ets:98:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterMakerPage.ets:98:14
+ 'pushUrl' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterMakerPage.ets:108:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterMakerPage.ets:108:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterMakerPage.ets:147:5
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterMakerPage.ets:147:18
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:67:35
+ 'getContext' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:78:22
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:84:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:84:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:96:12
+ 'back' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:102:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:102:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:107:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:107:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:128:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:128:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:147:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:147:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:149:14
+ 'back' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:151:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:151:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:176:12
+ 'back' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:191:12
+ 'back' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:221:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:221:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:228:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:228:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:247:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:247:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:252:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:254:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:254:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:264:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:264:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:280:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:280:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:285:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:287:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:287:20
+ 'showToast' has been deprecated.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:296:31
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:298:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/AiCharacterPreviewPage.ets:300:7
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: D:/DevEco_studio/ArkTavernSolo/entry/src/main/ets/pages/ChatPage.ets:822:45
+ The 'regular' property 'this.viewModel!' cannot be assigned to the '@ObjectLink' property 'viewModel'.
+
+> hvigor Finished :entry:default@GeneratePkgModuleJson... after 4 ms 
+> hvigor Finished :entry:default@ProcessCompiledResources... after 1 ms 
+> hvigor Finished :entry:default@PackageHap... after 574 ms 
+> hvigor Finished :entry:default@PackingCheck... after 8 ms 
+> hvigor WARN: Will skip sign 'hos_hap'. No signingConfigs profile is configured in current project.
+             If needed, configure the signingConfigs in D:\DevEco_studio\ArkTavernSolo\build-profile.json5.
+> hvigor Finished :entry:default@SignHap... after 2 ms 
+> hvigor Finished :entry:default@CollectDebugSymbol... after 2 ms 
+> hvigor Finished :entry:assembleHap... after 1 ms 
+> hvigor BUILD SUCCESSFUL in 23 s 261 ms 
+
+
+Process finished with exit code 0
+
