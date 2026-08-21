@@ -828,6 +828,22 @@ export class ChatViewModel {
     await this.chatService.updateCurrentChatUserNameOverride(override);
   }
 
+  /** 获取当前聊天的锁定 Persona ID */
+  getCurrentChatPersonaId(): string {
+    const chat: Chat | null = this.chatService.getCurrentChat();
+    return chat !== null ? chat.personaId : '';
+  }
+
+  /** 获取当前角色的默认 Persona ID */
+  getCharacterDefaultPersonaId(): string {
+    return this.chatService.getCharacterDefaultPersonaId();
+  }
+
+  /** 更新当前聊天的锁定 Persona ID(null 清除锁定) */
+  async updateChatPersonaId(personaId: string | null): Promise<void> {
+    await this.chatService.updateCurrentChatPersonaId(personaId);
+  }
+
   // ===== CHAT-STATUS-1A: 角色状态字段操作 =====
 
   requestStatusFieldGeneration(): void {

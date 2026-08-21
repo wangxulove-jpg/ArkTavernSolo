@@ -17,6 +17,9 @@
     "pages/ContextBudgetPage",
     "pages/MarketDetailPage",
     "pages/AiCharacterMakerPage",
-    "pages/AiCharacterPreviewPage"
+    "pages/AiCharacterPreviewPage",
+    "pages/PersonaListPage",
+    "pages/PersonaEditPage",
+    "pages/SyncSettingsPage"
   ]
 }

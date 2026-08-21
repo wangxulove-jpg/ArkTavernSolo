@@ -418,6 +418,26 @@ export class ChatPersistenceService {
   }
 
   /**
+   * 更新会话的锁定 Persona ID。
+   * @param chatId 会话 id
+   * @param personaId Persona ID(空字符串清除锁定)
+   * @returns 更新后的 Chat
+   * @throws Error 会话不存在
+   */
+  async updateChatPersonaId(chatId: string, personaId: string): Promise<Chat> {
+    const existing: Chat | null = await this.chatRepository.getById(chatId);
+    if (existing === null) {
+      throw new Error('会话不存在或已删除');
+    }
+    if (existing.personaId === personaId) {
+      return existing;
+    }
+    const updated: Chat = updateChat(existing, { personaId: personaId.length > 0 ? personaId : null });
+    await this.chatRepository.update(updated);
+    return updated;
+  }
+
+  /**
    * 更新会话的角色状态配置 JSON(CHAT-STATUS-1A,v34 引入)。
    * - 序列化后的 ChatStatusState 字符串,写入 chat.status_config_json 列
    * - 不修改消息/角色/其它字段

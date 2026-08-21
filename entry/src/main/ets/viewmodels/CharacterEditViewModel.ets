@@ -70,6 +70,8 @@ export interface CharacterEditFormState {
   characterVersionInput: string;
   /** 角色专属世界书 ID(只读展示,关联 lorebooks.id) */
   characterBookIdInput: string;
+  /** 默认身份 ID(空表示未设置,关联 personas.id) */
+  defaultPersonaIdInput: string;
 }
 
 /** 空表单(新建模式) */
@@ -90,7 +92,8 @@ export function emptyFormState(): CharacterEditFormState {
     tagsInput: [],
     creatorInput: '',
     characterVersionInput: '',
-    characterBookIdInput: ''
+    characterBookIdInput: '',
+    defaultPersonaIdInput: ''
   };
 }
 
@@ -112,7 +115,8 @@ export function copyFormState(state: CharacterEditFormState): CharacterEditFormS
     tagsInput: state.tagsInput.slice(),
     creatorInput: state.creatorInput,
     characterVersionInput: state.characterVersionInput,
-    characterBookIdInput: state.characterBookIdInput
+    characterBookIdInput: state.characterBookIdInput,
+    defaultPersonaIdInput: state.defaultPersonaIdInput
   };
 }
 
@@ -134,7 +138,8 @@ function formStateFromCharacter(character: Character): CharacterEditFormState {
     tagsInput: character.tags.slice(),
     creatorInput: character.creator,
     characterVersionInput: character.characterVersion,
-    characterBookIdInput: character.characterBookId
+    characterBookIdInput: character.characterBookId,
+    defaultPersonaIdInput: character.defaultPersonaId
   };
 }
 
@@ -253,7 +258,8 @@ export class CharacterEditViewModel {
         || current.alternateGreetingsInput.length > 0
         || current.tagsInput.length > 0
         || current.creatorInput.length > 0
-        || current.characterVersionInput.length > 0;
+        || current.characterVersionInput.length > 0
+        || current.defaultPersonaIdInput.length > 0;
     }
     // 编辑模式:与原始角色比较(不比较 avatarUriInput / characterBookIdInput)
     const orig: Character = this.originalCharacter;
@@ -270,7 +276,8 @@ export class CharacterEditViewModel {
       || !arraysEqual(current.alternateGreetingsInput, orig.alternateGreetings)
       || !arraysEqual(current.tagsInput, orig.tags)
       || current.creatorInput !== orig.creator
-      || current.characterVersionInput !== orig.characterVersion;
+      || current.characterVersionInput !== orig.characterVersion
+      || current.defaultPersonaIdInput !== orig.defaultPersonaId;
   }
 
   /**
@@ -337,7 +344,8 @@ export class CharacterEditViewModel {
         alternateGreetings: current.alternateGreetingsInput.slice(),
         tags: current.tagsInput.slice(),
         creator: current.creatorInput,
-        characterVersion: current.characterVersionInput
+        characterVersion: current.characterVersionInput,
+        defaultPersonaId: current.defaultPersonaIdInput
       });
       this.originalCharacter = updated;
       return updated;
@@ -363,7 +371,8 @@ export class CharacterEditViewModel {
         alternateGreetings: current.alternateGreetingsInput.slice(),
         tags: current.tagsInput.slice(),
         creator: current.creatorInput,
-        characterVersion: current.characterVersionInput
+        characterVersion: current.characterVersionInput,
+        defaultPersonaId: current.defaultPersonaIdInput
       });
       this.isEditing = true;
       this.editingCharacterId = finalChar.id;

@@ -6,7 +6,7 @@
  */
 
 export const DATABASE_NAME: string = 'arktavern_solo.db';
-export const DATABASE_VERSION: number = 34;
+export const DATABASE_VERSION: number = 35;
 
 export const TABLE_CHARACTERS: string = 'characters';
 export const TABLE_CHATS: string = 'chats';
@@ -772,3 +772,37 @@ export const COLUMN_IMAGE_HEIGHT_WMB: string = 'image_height';
 export const COLUMN_ROTATION_WMB: string = 'rotation';
 /** world_map_backgrounds.fit_scale 列名(图片像素→世界单位缩放因子) */
 export const COLUMN_FIT_SCALE_WMB: string = 'fit_scale';
+
+// ===== v35: Persona 用户身份(Phase 2A) =====
+export const TABLE_PERSONAS: string = 'personas';
+/** personas.id 列名(PK, 'ps-' + UUID) */
+export const COLUMN_PERSONA_ID: string = 'id';
+/** personas.name 列名(必填,替换 {{user}}) */
+export const COLUMN_PERSONA_NAME: string = 'name';
+/** personas.description 列名(用户自我描述) */
+export const COLUMN_PERSONA_DESCRIPTION: string = 'description';
+/** personas.avatar_uri 列名(头像 URI) */
+export const COLUMN_PERSONA_AVATAR_URI: string = 'avatar_uri';
+/** personas.position 列名(PersonaPosition 枚举值) */
+export const COLUMN_PERSONA_POSITION: string = 'position';
+/** personas.depth 列名(AtDepth 时插入深度,默认 4) */
+export const COLUMN_PERSONA_DEPTH: string = 'depth';
+/** personas.created_at 列名 */
+export const COLUMN_PERSONA_CREATED_AT: string = 'created_at';
+/** personas.updated_at 列名 */
+export const COLUMN_PERSONA_UPDATED_AT: string = 'updated_at';
+
+/** personas 表索引: updated_at */
+export const INDEX_PERSONAS_UPDATED_AT: string = 'idx_personas_updated_at';
+
+/** chats 表新增列: chat_persona_id(聊天锁定的 Persona ID) */
+export const COLUMN_CHAT_PERSONA_ID: string = 'chat_persona_id';
+/** characters 表新增列: character_default_persona_id(角色默认 Persona ID) */
+export const COLUMN_CHARACTER_DEFAULT_PERSONA_ID: string = 'character_default_persona_id';
+
+/** v35 迁移: ALTER chats 添加 chat_persona_id 列 */
+export const ALTER_CHATS_ADD_PERSONA_ID: string =
+  `ALTER TABLE ${TABLE_CHATS} ADD COLUMN ${COLUMN_CHAT_PERSONA_ID} TEXT NOT NULL DEFAULT ''`;
+/** v35 迁移: ALTER characters 添加 character_default_persona_id 列 */
+export const ALTER_CHARACTERS_ADD_DEFAULT_PERSONA_ID: string =
+  `ALTER TABLE ${TABLE_CHARACTERS} ADD COLUMN ${COLUMN_CHARACTER_DEFAULT_PERSONA_ID} TEXT NOT NULL DEFAULT ''`;

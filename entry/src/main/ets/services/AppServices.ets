@@ -77,6 +77,11 @@ import { ChatArchiveService } from './ChatArchiveService';
 import { ChatArchiveImportService } from './ChatArchiveImportService';
 import { ChatArchiveViewModel } from '../viewmodels/ChatArchiveViewModel';
 import { ChatParticipantRepository } from '../repositories/ChatParticipantRepository';
+import { PersonaRepository } from '../repositories/PersonaRepository';
+import { PersonaSelectionStore } from '../storage/PersonaSelectionStore';
+import { PersonaService } from './PersonaService';
+import { SyncConfigStore } from '../storage/SyncConfigStore';
+import { WebDavSyncService } from './sync/WebDavSyncService';
 
 import { Logger } from '../utils/Logger';
 
@@ -178,6 +183,22 @@ export class AppServices {
   private chatArchiveImportService: ChatArchiveImportService | null = null;
   /** ChatParticipantRepository 多人聊天参与者仓储(不对页面公开) */
   private readonly chatParticipantRepository: ChatParticipantRepository;
+  /** PersonaRepository 用户身份仓储(不对页面公开) */
+  private readonly personaRepository: PersonaRepository;
+  /** PersonaSelectionStore 用户身份全局默认选择(不对页面公开) */
+  private readonly personaSelectionStore: PersonaSelectionStore;
+  /** PersonaService 用户身份业务服务 */
+  readonly personaService: PersonaService;
+  /** SyncConfigStore 云同步配置存储 */
+  private readonly syncConfigStore: SyncConfigStore;
+  /** WebDavSyncService 云同步服务 */
+  private webDavSyncService: WebDavSyncService | null = null;
+  /** AssetStoreKeyStore 安全存储(共享实例) */
+  private readonly assetKeyStore: AssetStoreKeyStore;
+  /** ProviderKeyStore(不对页面公开) */
+  private readonly providerKeyStore: ProviderKeyStore;
+  /** ProviderConfigStore(不对页面公开) */
+  private readonly providerConfigStore: ProviderConfigStore;
 
   /**
    * 私有构造,组装全部依赖。
@@ -188,8 +209,11 @@ export class AppServices {
     this.themeManager = ThemeManager.getInstance(this.appPreferences);
     this.chatTextStyleSettings = new ChatTextStyleSettings(this.appPreferences);
     const configStore: ProviderConfigStore = new ProviderConfigStore(this.appPreferences);
+    this.providerConfigStore = configStore;
     const assetKeyStore: AssetStoreKeyStore = new AssetStoreKeyStore();
+    this.assetKeyStore = assetKeyStore;
     const providerKeyStore: ProviderKeyStore = new ProviderKeyStore(assetKeyStore);
+    this.providerKeyStore = providerKeyStore;
     const factory: DefaultProviderFactory = new DefaultProviderFactory(providerKeyStore);
     this.modelService = new ModelService(configStore, providerKeyStore, factory);
     this.characterStore = new CharacterStore();
@@ -294,6 +318,11 @@ export class AppServices {
       this.conversationBranchPersistenceService
     );
     this.chatParticipantRepository = new ChatParticipantRepository(this.dbHelper);
+    // Persona 领域组装
+    this.personaRepository = new PersonaRepository(this.dbHelper);
+    this.personaSelectionStore = new PersonaSelectionStore(this.appPreferences);
+    this.personaService = new PersonaService(this.personaRepository, this.personaSelectionStore);
+    this.syncConfigStore = new SyncConfigStore(this.appPreferences);
     const marketHttpClient: HttpClient = new HarmonyHttpClient();
     const marketCacheStore: MarketCacheStore = new MarketCacheStore(this.appPreferences);
     const marketImportedMapStore: MarketImportedMapStore = new MarketImportedMapStore(this.appPreferences);
@@ -336,6 +365,7 @@ export class AppServices {
       })
       .then((): Promise<void> => services.lorebookService.initialize())
       .then((): Promise<void> => services.promptPresetService.initialize())
+      .then((): Promise<void> => services.personaService.initialize())
       .then((): void => {
         // 创建 ChatBackgroundService(需要已初始化的 appPreferences + appContext)
         if (services.appContext !== null) {
@@ -379,6 +409,17 @@ export class AppServices {
           services.conversationBranchRepository,
           services.characterRepository
         );
+        // 创建 WebDavSyncService(云同步,需要 context)
+        if (services.appContext !== null) {
+          services.webDavSyncService = new WebDavSyncService(
+            services.dbHelper,
+            services.appPreferences,
+            services.providerKeyStore,
+            services.providerConfigStore,
+            services.syncConfigStore,
+            services.appContext
+          );
+        }
         Logger.warn(LOG_TAG, 'AppServices initialized');
       })
       .catch((e: Object): void => {
@@ -670,5 +711,25 @@ export class AppServices {
 
   static getMessageRepository(): MessageRepository {
     return AppServices.getInstance().messageRepository;
+  }
+
+  /**
+   * 获取 PersonaService 实例。
+   * 用于 PersonaViewModel 等需要直接访问用户身份服务的场景。
+   */
+  static getPersonaService(): PersonaService {
+    return AppServices.getInstance().personaService;
+  }
+
+  static getSyncConfigStore(): SyncConfigStore {
+    return AppServices.getInstance().syncConfigStore;
+  }
+
+  static getWebDavSyncService(): WebDavSyncService {
+    const service: WebDavSyncService | null = AppServices.getInstance().webDavSyncService;
+    if (service === null) {
+      throw new Error('WebDavSyncService not initialized');
+    }
+    return service;
   }
 }

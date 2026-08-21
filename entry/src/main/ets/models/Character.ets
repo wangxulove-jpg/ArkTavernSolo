@@ -56,6 +56,8 @@ export interface Character {
    * 不进入角色卡 V2/V3 标准字段,仅存在于 extensions.arktavern.user_name_override。
    */
   readonly userName: string;
+  /** 角色默认 Persona ID(空=未锁定,Phase 2A 引入) */
+  readonly defaultPersonaId: string;
   /** 自定义排序权重(越小越靠前,v7 引入) */
   readonly sortOrder: number;
   /** 创建时间戳(毫秒) */
@@ -91,6 +93,7 @@ export function createCharacter(
   extensions: Record<string, Object> = {},
   characterBookId: string = '',
   userName: string = '',
+  defaultPersonaId: string = '',
   sortOrder: number = 0
 ): Character {
   const now: number = Date.now();
@@ -113,6 +116,7 @@ export function createCharacter(
     extensions: extensions,
     characterBookId: characterBookId.trim(),
     userName: userName.trim(),
+    defaultPersonaId: defaultPersonaId.trim(),
     sortOrder: sortOrder,
     createdAt: now,
     updatedAt: now
@@ -203,6 +207,7 @@ export interface CharacterUpdates {
   extensions?: Record<string, Object>;
   characterBookId?: string;
   userName?: string;
+  defaultPersonaId?: string;
   sortOrder?: number;
 }
 
@@ -237,6 +242,7 @@ export function updateCharacter(
     characterBookId: updates.characterBookId !== undefined
       ? updates.characterBookId.trim() : character.characterBookId,
     userName: updates.userName !== undefined ? updates.userName.trim() : character.userName,
+    defaultPersonaId: updates.defaultPersonaId !== undefined ? updates.defaultPersonaId.trim() : character.defaultPersonaId,
     sortOrder: updates.sortOrder !== undefined ? updates.sortOrder : character.sortOrder,
     createdAt: character.createdAt,
     updatedAt: Date.now()
@@ -251,7 +257,7 @@ export function updateCharacter(
 export function buildDefaultCharacterSystemContent(character: Character): string {
   const parts: string[] = [];
   if (character.name.trim().length > 0) {
-    parts.push('你是' + character.name);
+    parts.push(character.name);
   }
   if (character.description.trim().length > 0) {
     parts.push(character.description);

@@ -22,6 +22,8 @@ import { CharacterImageView } from '../components/CharacterImageView';
 import { promptAction, router } from '@kit.ArkUI';
 import { picker } from '@kit.CoreFileKit';
 import { ThemePalette } from '../theme/ThemePalette';
+import { Persona } from '../models/Persona';
+import { PersonaService } from '../services/PersonaService';
 
 const TAB_CHARACTER: number = 0;
 const TAB_CONVERSATION: number = 1;
@@ -41,6 +43,8 @@ struct CharacterEditPage {
   @State editingGreetingIndex: number = -1;
   /** 备用开场白编辑态:正在编辑的内容草稿 */
   @State editingGreetingDraft: string = '';
+  /** 可选身份列表(供默认身份下拉选择) */
+  @State personaOptions: Persona[] = [];
   /** 顶部状态栏避让高度(由 EntryAbility 写入 AppStorage) */
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   /** 底部导航栏/手势条避让高度 */
@@ -134,10 +138,22 @@ struct CharacterEditPage {
     try {
       await this.viewModel.initialize(parsed.characterId);
       this.formState = this.viewModel.getFormState();
+      // 加载身份列表供下拉选择
+      await this.loadPersonaOptions();
       this.isLoading = false;
     } catch (e) {
       this.errorMessage = (e as Error).message ?? '加载失败';
       this.isLoading = false;
+    }
+  }
+
+  /** 加载身份列表供默认身份选择 */
+  private async loadPersonaOptions(): Promise<void> {
+    try {
+      const service: PersonaService = AppServices.getPersonaService();
+      this.personaOptions = await service.list();
+    } catch (_e) {
+      this.personaOptions = [];
     }
   }
 
@@ -245,6 +261,9 @@ struct CharacterEditPage {
             this.formState = updated;
           }
         )
+
+        // 默认身份选择
+        this.personaSelector()
 
         this.multilineField(
           $r('app.string.character_edit_field_description'),
@@ -644,6 +663,92 @@ struct CharacterEditPage {
     .margin({ top: 8 })
   }
 
+  /** 默认身份选择器 */
+  @Builder
+  personaSelector() {
+    Column() {
+      Text('默认身份')
+        .fontSize($r('app.float.app_font_body'))
+        .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+        .width('100%')
+        .margin({ top: 12, bottom: 6 })
+
+      Text('此角色创建新对话时默认使用的用户身份')
+        .fontSize($r('app.float.app_font_caption'))
+        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+        .width('100%')
+        .margin({ bottom: 8 })
+
+      // 下拉选择
+      Row() {
+        Text(this.getSelectedPersonaName())
+          .fontSize($r('app.float.app_font_body'))
+          .fontColor(this.formState.defaultPersonaIdInput.length > 0
+            ? ThemePalette.textPrimaryColor(this.effectiveTheme)
+            : ThemePalette.textTertiaryColor(this.effectiveTheme))
+          .layoutWeight(1)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+        SymbolGlyph($r('sys.symbol.chevron_right'))
+          .fontSize(16)
+          .fontColor([ThemePalette.textTertiaryColor(this.effectiveTheme)])
+      }
+      .width('100%')
+      .padding({ left: 12, right: 12, top: 12, bottom: 12 })
+      .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+      .borderRadius($r('app.float.app_radius_md'))
+      .onClick(() => {
+        this.showPersonaSelector();
+      })
+    }
+    .width('100%')
+  }
+
+  /** 获取当前选中的身份名称 */
+  private getSelectedPersonaName(): string {
+    if (this.formState.defaultPersonaIdInput.length === 0) {
+      return '跟随全局默认';
+    }
+    for (let i = 0; i < this.personaOptions.length; i++) {
+      if (this.personaOptions[i].id === this.formState.defaultPersonaIdInput) {
+        return this.personaOptions[i].name;
+      }
+    }
+    return '未知身份';
+  }
+
+  /** 显示身份选择弹窗 */
+  private showPersonaSelector(): void {
+    const sheets: SheetInfo[] = [{
+      title: '跟随全局默认',
+      action: (): void => {
+        const updated = copyFormState(this.formState);
+        updated.defaultPersonaIdInput = '';
+        this.formState = updated;
+      }
+    }];
+    for (let i = 0; i < this.personaOptions.length; i++) {
+      const personaId: string = this.personaOptions[i].id;
+      const personaName: string = this.personaOptions[i].name;
+      sheets.push({
+        title: personaName,
+        action: (): void => {
+          const updated = copyFormState(this.formState);
+          updated.defaultPersonaIdInput = personaId;
+          this.formState = updated;
+        }
+      });
+    }
+    ActionSheet.show({
+      title: '选择默认身份',
+      message: '此角色创建新对话时默认使用的用户身份',
+      autoCancel: true,
+      alignment: DialogAlignment.Bottom,
+      sheets: sheets
+    });
+  }
+
   /** 角色专属世界书区域:只读展示关联 ID */
   @Builder
   characterBookSection() {
@@ -746,6 +851,64 @@ struct CharacterEditPage {
             this.formState = updated;
           }
         )
+
+        // System Prompt 提示和模板
+        if (this.formState.systemPromptInput.trim().length === 0) {
+          Text('留空时使用默认组合（角色名+描述+性格+场景）。叙述者或多人场景卡建议自定义。')
+            .fontSize($r('app.float.app_font_caption'))
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            .width('100%')
+            .margin({ top: 4, bottom: 4 })
+        }
+
+        Row() {
+          Button('叙述者模式')
+            .fontSize(12)
+            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+            .backgroundColor(Color.Transparent)
+            .border({
+              width: 1,
+              color: ThemePalette.accentColor(this.effectiveTheme)
+            })
+            .borderRadius($r('app.float.app_radius_sm'))
+            .height(28)
+            .padding({ left: 8, right: 8 })
+            .key('char_edit.btn_narrator_template')
+            .onClick(() => {
+              const updated = copyFormState(this.formState);
+              updated.systemPromptInput =
+                'You are the narrator of this story. Write from a third-person perspective, ' +
+                'describing the scene, characters\' actions, and the world around them. ' +
+                'Never speak or act on behalf of {{user}}. ' +
+                'Continue the story naturally based on {{user}}\'s input.';
+              this.formState = updated;
+            })
+
+          Button('多人场景')
+            .fontSize(12)
+            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+            .backgroundColor(Color.Transparent)
+            .border({
+              width: 1,
+              color: ThemePalette.accentColor(this.effectiveTheme)
+            })
+            .borderRadius($r('app.float.app_radius_sm'))
+            .height(28)
+            .padding({ left: 8, right: 8 })
+            .margin({ left: 8 })
+            .key('char_edit.btn_multi_scene_template')
+            .onClick(() => {
+              const updated = copyFormState(this.formState);
+              updated.systemPromptInput =
+                'This is a multi-character scene. Write from a third-person perspective, ' +
+                'describing each character\'s actions and dialogue. ' +
+                'Keep each character\'s personality and speech patterns distinct. ' +
+                'Never speak or act on behalf of {{user}}.';
+              this.formState = updated;
+            })
+        }
+        .width('100%')
+        .margin({ top: 4, bottom: 8 })
 
         this.multilineField(
           $r('app.string.character_edit_field_post_history'),

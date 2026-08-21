@@ -56,6 +56,8 @@ export struct ChatMoreMenuSheet {
   onGoContextBudget: () => void = () => {};
   /** v9: 打开本对话称呼覆盖编辑(回调决定具体 UI 形式) */
   onEditUserNameOverride: () => void = () => {};
+  /** 切换用户身份(打开 Persona 选择) */
+  onSwitchPersona: () => void = () => {};
   /** 重新生成 */
   onRegenerate: () => void = () => {};
   /** 清空对话 */
@@ -69,6 +71,8 @@ export struct ChatMoreMenuSheet {
   @Prop userNameOverride: string = '';
   /** v9: 当前生效的用户称呼(用于在菜单展示) */
   @Prop resolvedUserName: string = '';
+  /** 当前生效的身份名称(空表示未启用) */
+  @Prop resolvedPersonaName: string = '';
   /** T-CHAT.1: 当前对话 ID(用于导出,空表示未就绪) */
   @Prop currentConversationId: string = '';
   /** T-CHAT.1: 当前角色 ID(空表示无角色,隐藏"导出该角色全部聊天") */
@@ -172,6 +176,19 @@ export struct ChatMoreMenuSheet {
             return;
           }
           this.onEditUserNameOverride();
+        }
+      )
+
+      // 切换身份
+      this.infoRow(
+        '用户身份',
+        this.resolvedPersonaName.length > 0 ? this.resolvedPersonaName : '未设置',
+        !this.busy,
+        (): void => {
+          if (this.busy) {
+            return;
+          }
+          this.onSwitchPersona();
         }
       )
 

@@ -25,9 +25,13 @@ import { ChatMessageSource } from './ChatMessageSource';
  * 顺序即构建时的排列顺序。
  */
 export enum PromptSegmentPosition {
-  BeforeCharacter = 'BeforeCharacter',
   PromptPreset = 'PromptPreset',
+  BeforeCharacter = 'BeforeCharacter',
+  /** Persona 描述,角色定义之前(Phase 2A) */
+  PersonaBefore = 'PersonaBefore',
   Character = 'Character',
+  /** Persona 描述,角色定义之后(Phase 2A) */
+  PersonaAfter = 'PersonaAfter',
   AfterCharacter = 'AfterCharacter',
   /** 对话示例(mes_example),位于聊天历史之前 */
   DialogueExamples = 'DialogueExamples',
@@ -89,16 +93,18 @@ export function createPromptSegment(
 const POSITION_ORDER: Record<string, number> = {
   'PromptPreset': 0,
   'BeforeCharacter': 1,
-  'Character': 2,
-  'AfterCharacter': 3,
-  'DialogueExamples': 4,
-  'MemoryCore': 5,
-  'MemoryChapter': 6,
-  'MemoryRolling': 7,
-  'MemoryLegacy': 8,
-  'MemorySummary': 9,
-  'Conversation': 10,
-  'PostHistory': 11
+  'PersonaBefore': 2,
+  'Character': 3,
+  'PersonaAfter': 4,
+  'AfterCharacter': 5,
+  'DialogueExamples': 6,
+  'MemoryCore': 7,
+  'MemoryChapter': 8,
+  'MemoryRolling': 9,
+  'MemoryLegacy': 10,
+  'MemorySummary': 11,
+  'Conversation': 12,
+  'PostHistory': 13
 };
 
 /**

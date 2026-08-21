@@ -39,6 +39,10 @@ export enum ChatMessageSource {
   MemoryLegacy = 'memoryLegacy',
   /** Character Post-History Instructions(受保护,不进入聊天历史) */
   CharacterPostHistory = 'characterPostHistory',
+  /** Persona 描述,角色定义之前(受保护,Phase 2A) */
+  PersonaBefore = 'personaBefore',
+  /** Persona 描述,角色定义之后(受保护,Phase 2A) */
+  PersonaAfter = 'personaAfter',
   /** W5C2: 跨会话上下文(摘要+记忆,受保护,不进入聊天历史) */
   CrossSessionContext = 'crossSessionContext'
 }

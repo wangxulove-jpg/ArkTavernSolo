@@ -26,7 +26,7 @@
  */
 
 import http from '@ohos.net.http';
-import util from '@ohos.util';
+import { util } from '@kit.ArkTS';
 import {
   NetworkError,
   NetworkErrorType,
@@ -39,7 +39,8 @@ import {
   HttpRequestOptions,
   HttpResponse,
   StreamCallbacks,
-  AbortHandle
+  AbortHandle,
+  ServerAuth
 } from './HttpClient';
 import { Logger } from '../../utils/Logger';
 
@@ -156,6 +157,14 @@ export function buildHttpOptions(options: HttpRequestOptions): http.HttpRequestO
   const methodVal: http.RequestMethod = convertMethod(options.method);
   const headerObj: Record<string, string> = convertHeadersToObject(options.headers);
 
+  if (options.serverAuth !== undefined) {
+    const auth: ServerAuth = options.serverAuth;
+    const credential: string = auth.username + ':' + auth.password;
+    const base64: util.Base64Helper = new util.Base64Helper();
+    const encoded: string = base64.encodeToStringSync(new Uint8Array(Array.from(credential).map((c: string) => c.charCodeAt(0))));
+    headerObj['Authorization'] = 'Basic ' + encoded;
+  }
+
   const opts: http.HttpRequestOptions = {
     method: methodVal,
     header: headerObj,
@@ -163,6 +172,10 @@ export function buildHttpOptions(options: HttpRequestOptions): http.HttpRequestO
     readTimeout: options.readTimeoutMs,
     expectDataType: http.HttpDataType.STRING
   };
+
+  if (isWebDavMethod(options.method)) {
+    opts.customMethod = options.method;
+  }
 
   if (options.body !== undefined && options.body.length > 0) {
     opts.extraData = options.body;
@@ -186,11 +199,23 @@ function convertMethod(method: HttpMethod): http.RequestMethod {
       return http.RequestMethod.PUT;
     case HttpMethod.DELETE:
       return http.RequestMethod.DELETE;
+    case HttpMethod.PROPFIND:
+    case HttpMethod.MKCOL:
+    case HttpMethod.PROPPATCH:
+    case HttpMethod.COPY:
+    case HttpMethod.MOVE:
+      return http.RequestMethod.GET;
     default:
-      // HttpMethod.PATCH 及其他未支持的方法回退为 GET
-      // 当前 Provider 仅使用 POST
       return http.RequestMethod.GET;
   }
+}
+
+function isWebDavMethod(method: HttpMethod): boolean {
+  return method === HttpMethod.PROPFIND ||
+    method === HttpMethod.MKCOL ||
+    method === HttpMethod.PROPPATCH ||
+    method === HttpMethod.COPY ||
+    method === HttpMethod.MOVE;
 }
 
 /**

@@ -26,6 +26,7 @@ import { AppPreferences } from '../storage/AppPreferences';
 import { Logger } from '../utils/Logger';
 import {
   AiCharacterInput,
+  AiCharacterType,
   createEmptyAiCharacterInput,
   validateAiCharacterInput
 } from '../models/AiCharacterInput';
@@ -52,6 +53,7 @@ const KEY_DRAFT_SPEECH: string = 'ai_draft_speech';
 const KEY_DRAFT_BOOK: string = 'ai_draft_book';
 const KEY_DRAFT_GREETINGS: string = 'ai_draft_greetings';
 const KEY_DRAFT_MES_EXAMPLE: string = 'ai_draft_mes_example';
+const KEY_DRAFT_CHARACTER_TYPE: string = 'ai_draft_character_type';
 const KEY_DRAFT_USE_CURRENT: string = 'ai_draft_use_current';
 const KEY_DRAFT_CONFIG_ID: string = 'ai_draft_config_id';
 
@@ -81,6 +83,7 @@ export enum AiMakerState {
 export class AiCharacterMakerViewModel {
   // ===== 创意输入字段(双向绑定) =====
   conceptDescription: string = '';
+  characterType: AiCharacterType = 'character';
   name: string = '';
   backstory: string = '';
   personalityKeywords: string = '';
@@ -126,6 +129,7 @@ export class AiCharacterMakerViewModel {
   async loadDraft(): Promise<void> {
     try {
       this.conceptDescription = await this.prefs.getString(KEY_DRAFT_CONCEPT, '');
+      this.characterType = this.parseCharacterType(await this.prefs.getString(KEY_DRAFT_CHARACTER_TYPE, 'character'));
       this.name = await this.prefs.getString(KEY_DRAFT_NAME, '');
       this.backstory = await this.prefs.getString(KEY_DRAFT_BACKSTORY, '');
       this.personalityKeywords = await this.prefs.getString(KEY_DRAFT_PERSONALITY, '');
@@ -147,6 +151,7 @@ export class AiCharacterMakerViewModel {
   async saveDraft(): Promise<void> {
     try {
       await this.prefs.putString(KEY_DRAFT_CONCEPT, this.conceptDescription);
+      await this.prefs.putString(KEY_DRAFT_CHARACTER_TYPE, this.characterType);
       await this.prefs.putString(KEY_DRAFT_NAME, this.name);
       await this.prefs.putString(KEY_DRAFT_BACKSTORY, this.backstory);
       await this.prefs.putString(KEY_DRAFT_PERSONALITY, this.personalityKeywords);
@@ -167,6 +172,7 @@ export class AiCharacterMakerViewModel {
    */
   async clearDraft(): Promise<void> {
     this.conceptDescription = '';
+    this.characterType = 'character';
     this.name = '';
     this.backstory = '';
     this.personalityKeywords = '';
@@ -298,6 +304,7 @@ export class AiCharacterMakerViewModel {
   async resetAll(): Promise<void> {
     this.cancelGeneration();
     this.conceptDescription = '';
+    this.characterType = 'character';
     this.name = '';
     this.backstory = '';
     this.personalityKeywords = '';
@@ -319,6 +326,7 @@ export class AiCharacterMakerViewModel {
   private buildInput(): AiCharacterInput {
     return {
       conceptDescription: this.conceptDescription,
+      characterType: this.characterType,
       name: this.name,
       backstory: this.backstory,
       personalityKeywords: this.personalityKeywords,
@@ -328,5 +336,11 @@ export class AiCharacterMakerViewModel {
       generateMultipleGreetings: this.generateMultipleGreetings,
       generateMesExample: this.generateMesExample
     };
+  }
+
+  private parseCharacterType(value: string): AiCharacterType {
+    if (value === 'narrator') return 'narrator';
+    if (value === 'multiScene') return 'multiScene';
+    return 'character';
   }
 }

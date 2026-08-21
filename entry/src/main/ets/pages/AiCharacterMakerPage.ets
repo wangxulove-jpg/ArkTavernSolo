@@ -334,8 +334,84 @@ struct AiCharacterMakerPage {
         Column() {
           this.cardHeader('角色基础', false, '帮助 AI 更精确地塑造角色')
 
+          // 角色卡类型
+          this.fieldLabel('角色卡类型', '决定 AI 生成角色卡的方式')
+          Row() {
+            Button('单角色')
+              .fontSize(13)
+              .fontColor(this.viewModel !== null && this.viewModel!.characterType === 'character'
+                ? $r('app.color.app_on_accent')
+                : ThemePalette.accentColor(this.effectiveTheme))
+              .backgroundColor(this.viewModel !== null && this.viewModel!.characterType === 'character'
+                ? ThemePalette.accentColor(this.effectiveTheme)
+                : Color.Transparent)
+              .border({
+                width: 1,
+                color: ThemePalette.accentColor(this.effectiveTheme)
+              })
+              .borderRadius($r('app.float.app_radius_sm'))
+              .height(32)
+              .padding({ left: 12, right: 12 })
+              .onClick(() => {
+                if (this.viewModel !== null) {
+                  this.viewModel!.characterType = 'character';
+                  this.onTextFieldChange();
+                }
+              })
+
+            Button('叙述者')
+              .fontSize(13)
+              .fontColor(this.viewModel !== null && this.viewModel!.characterType === 'narrator'
+                ? $r('app.color.app_on_accent')
+                : ThemePalette.accentColor(this.effectiveTheme))
+              .backgroundColor(this.viewModel !== null && this.viewModel!.characterType === 'narrator'
+                ? ThemePalette.accentColor(this.effectiveTheme)
+                : Color.Transparent)
+              .border({
+                width: 1,
+                color: ThemePalette.accentColor(this.effectiveTheme)
+              })
+              .borderRadius($r('app.float.app_radius_sm'))
+              .height(32)
+              .padding({ left: 12, right: 12 })
+              .margin({ left: 8 })
+              .onClick(() => {
+                if (this.viewModel !== null) {
+                  this.viewModel!.characterType = 'narrator';
+                  this.onTextFieldChange();
+                }
+              })
+
+            Button('多人场景')
+              .fontSize(13)
+              .fontColor(this.viewModel !== null && this.viewModel!.characterType === 'multiScene'
+                ? $r('app.color.app_on_accent')
+                : ThemePalette.accentColor(this.effectiveTheme))
+              .backgroundColor(this.viewModel !== null && this.viewModel!.characterType === 'multiScene'
+                ? ThemePalette.accentColor(this.effectiveTheme)
+                : Color.Transparent)
+              .border({
+                width: 1,
+                color: ThemePalette.accentColor(this.effectiveTheme)
+              })
+              .borderRadius($r('app.float.app_radius_sm'))
+              .height(32)
+              .padding({ left: 12, right: 12 })
+              .margin({ left: 8 })
+              .onClick(() => {
+                if (this.viewModel !== null) {
+                  this.viewModel!.characterType = 'multiScene';
+                  this.onTextFieldChange();
+                }
+              })
+          }
+          .width('100%')
+          .margin({ bottom: 8 })
+
           // 角色名称
-          this.fieldLabel('角色名称', '留空让 AI 生成')
+          this.fieldLabel('角色名称', this.viewModel !== null && this.viewModel!.characterType !== 'character'
+            ? (this.viewModel!.characterType === 'narrator' ? '叙述者身份名(如 Narrator、旁白)' : '场景名称(如 末日酒馆)')
+            : '留空让 AI 生成')
           TextInput({
             placeholder: '例:林雾、Kira、Alice...',
             text: this.viewModel !== null ? this.viewModel!.name : ''

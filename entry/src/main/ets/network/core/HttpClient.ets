@@ -16,7 +16,17 @@ export enum HttpMethod {
   POST = 'POST',
   PUT = 'PUT',
   PATCH = 'PATCH',
-  DELETE = 'DELETE'
+  DELETE = 'DELETE',
+  PROPFIND = 'PROPFIND',
+  MKCOL = 'MKCOL',
+  PROPPATCH = 'PROPPATCH',
+  COPY = 'COPY',
+  MOVE = 'MOVE'
+}
+
+export interface ServerAuth {
+  readonly username: string;
+  readonly password: string;
 }
 
 /**
@@ -30,18 +40,13 @@ export type HttpHeaders = Map<string, string>;
  * HTTP 请求选项。
  */
 export interface HttpRequestOptions {
-  /** HTTP 方法 */
   readonly method: HttpMethod;
-  /** 请求 URL(完整地址) */
   readonly url: string;
-  /** 请求头(可选) */
   readonly headers?: HttpHeaders;
-  /** 字符串请求体(可选,GET/DELETE 通常无) */
   readonly body?: string;
-  /** 连接超时(毫秒,可选) */
   readonly connectTimeoutMs?: number;
-  /** 读取超时(毫秒,可选) */
   readonly readTimeoutMs?: number;
+  readonly serverAuth?: ServerAuth;
 }
 
 /**

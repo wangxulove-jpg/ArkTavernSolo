@@ -31,6 +31,7 @@ import {
   COLUMN_CHAT_USER_NAME_OVERRIDE,
   COLUMN_CONVERSATION_MODE,
   COLUMN_CHAT_STATUS_CONFIG_JSON,
+  COLUMN_CHAT_PERSONA_ID,
   CONVERSATION_MODE_SINGLE,
   CONVERSATION_MODE_GROUP
 } from '../database/DatabaseConstants';
@@ -74,6 +75,7 @@ function chatToBucket(chat: Chat): relationalStore.ValuesBucket {
   bucket[COLUMN_CHAT_USER_NAME_OVERRIDE] = chat.userNameOverride;
   bucket[COLUMN_CONVERSATION_MODE] = conversationModeToString(chat.conversationMode);
   bucket[COLUMN_CHAT_STATUS_CONFIG_JSON] = chat.statusConfigJson;
+  bucket[COLUMN_CHAT_PERSONA_ID] = chat.personaId;
   return bucket;
 }
 
@@ -106,6 +108,11 @@ function chatFromRow(rs: relationalStore.ResultSet): Chat {
   const statusConfigJson: string = statusConfigJsonCol >= 0
     ? safeString(rs, statusConfigJsonCol)
     : '';
+  // persona_id:列不存在或值为空时安全回退为空字符串
+  const personaIdCol: number = rs.getColumnIndex(COLUMN_CHAT_PERSONA_ID);
+  const personaId: string = personaIdCol >= 0
+    ? safeString(rs, personaIdCol)
+    : '';
   return {
     id: id,
     characterId: characterId,
@@ -117,7 +124,8 @@ function chatFromRow(rs: relationalStore.ResultSet): Chat {
     userNameOverride: userNameOverride,
     sortOrder: sortOrder,
     conversationMode: conversationMode,
-    statusConfigJson: statusConfigJson
+    statusConfigJson: statusConfigJson,
+    personaId: personaId
   };
 }
 
@@ -254,6 +262,7 @@ export class ChatRepository {
     bucket[COLUMN_CHAT_USER_NAME_OVERRIDE] = chat.userNameOverride;
     bucket[COLUMN_CONVERSATION_MODE] = conversationModeToString(chat.conversationMode);
     bucket[COLUMN_CHAT_STATUS_CONFIG_JSON] = chat.statusConfigJson;
+    bucket[COLUMN_CHAT_PERSONA_ID] = chat.personaId;
 
     const predicates: relationalStore.RdbPredicates =
       new relationalStore.RdbPredicates(TABLE_CHATS);

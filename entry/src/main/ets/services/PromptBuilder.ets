@@ -44,6 +44,8 @@ import {
   sortSegments
 } from '../models/PromptSegment';
 import { ChatMemory } from '../models/ChatMemory';
+import { Persona } from '../models/Persona';
+import { PersonaPosition } from '../models/PersonaPosition';
 import { LorebookService } from './LorebookService';
 import { MacroReplacer } from './MacroReplacer';
 
@@ -104,6 +106,10 @@ export interface PromptBuildContext {
    * 用于 Prompt Cache 优化:首次匹配后冻结结果,保持前缀稳定。
    */
   frozenLorebookEntryIds?: string[];
+  /** 用户身份(可选,提供时注入到提示词) */
+  persona?: Persona;
+  /** 用户身份注入深度(仅 persona.position = AtDepth 时使用,默认 4) */
+  personaDepth?: number;
 }
 
 /**
@@ -181,6 +187,44 @@ export class PromptBuilder {
       }
     }
 
+    // 3.5 Persona 注入
+    let personaAtDepthContent: string = '';
+    let personaAtDepthValue: number = 0;
+    if (context.persona !== undefined && context.persona !== null) {
+      const persona: Persona = context.persona;
+      if (persona.position !== PersonaPosition.Disabled) {
+        const personaContent: string = this.buildPersonaContent(persona);
+        if (personaContent.length > 0) {
+          if (persona.position === PersonaPosition.BeforeCharacter) {
+            const seg: PromptSegment = createPromptSegment(
+              'persona-before',
+              PromptSegmentPosition.PersonaBefore,
+              ChatRole.System,
+              personaContent,
+              0,
+              ChatMessageSource.PersonaBefore
+            );
+            segments.push(seg);
+          } else if (persona.position === PersonaPosition.AfterCharacter) {
+            const seg: PromptSegment = createPromptSegment(
+              'persona-after',
+              PromptSegmentPosition.PersonaAfter,
+              ChatRole.System,
+              personaContent,
+              0,
+              ChatMessageSource.PersonaAfter
+            );
+            segments.push(seg);
+          } else if (persona.position === PersonaPosition.AtDepth) {
+            // AtDepth 在步骤 5 的 Conversation 段中按深度插入
+            personaAtDepthContent = personaContent;
+            personaAtDepthValue = context.personaDepth !== undefined
+              ? context.personaDepth : persona.depth;
+          }
+        }
+      }
+    }
+
     // 4. DialogueExamples(mes_example)
     if (context.character !== undefined && context.character !== null) {
       const mesExample: string = context.character.mesExample;
@@ -214,9 +258,34 @@ export class PromptBuilder {
     // Character System Prompt 已由 Step 3 动态生成,不再从输入中取
     // 世界书 System 消息已由 Step 2 动态生成
     // firstMessage 识别:输入 messages 中第一条 Assistant 消息视为 firstMessage
+    // Persona AtDepth:按深度在 Conversation 消息中插入 System 消息
     let firstAssistantSeen: boolean = false;
+    let injectedPersonaAtDepth: boolean = false;
+    // 计算消息中 Assistant 消息的索引(从后往前数深度)
+    // depth=0 表示最底部(最新消息),depth=4 表示倒数第5条 Assistant 消息之前
+    const assistantMsgCount: number = this.countAssistantMessages(context.messages);
+    const injectAfterAssistantIndex: number = assistantMsgCount - personaAtDepthValue;
+    let assistantSeenSoFar: number = 0;
     for (let i = 0; i < context.messages.length; i++) {
       const msg: ChatMessage = context.messages[i];
+      // Persona AtDepth 注入点:在指定深度的 Assistant 消息之后
+      if (!injectedPersonaAtDepth && personaAtDepthContent.length > 0
+        && msg.role === ChatRole.Assistant) {
+        assistantSeenSoFar++;
+        if (assistantSeenSoFar >= injectAfterAssistantIndex && injectAfterAssistantIndex > 0) {
+          // 先注入 Persona
+          const depthSeg: PromptSegment = createPromptSegment(
+            'persona-at-depth',
+            PromptSegmentPosition.Conversation,
+            ChatRole.System,
+            personaAtDepthContent,
+            0,
+            ChatMessageSource.PersonaBefore
+          );
+          segments.push(depthSeg);
+          injectedPersonaAtDepth = true;
+        }
+      }
       let source: ChatMessageSource = ChatMessageSource.Conversation;
       if (msg.role === ChatRole.System) {
         source = ChatMessageSource.ExternalSystem;
@@ -503,6 +572,32 @@ export class PromptBuilder {
     // systemPrompt 非空,处理 {{original}}
     const defaultContent: string = buildDefaultCharacterSystemContent(character);
     return this.applyOriginalMacro(character.systemPrompt, defaultContent);
+  }
+
+  /**
+   * 构建 Persona 注入内容。
+   * 格式: persona.name + '\n' + persona.description
+   * 如果 description 为空,仅使用 name。
+   */
+  private buildPersonaContent(persona: Persona): string {
+    if (persona.description.trim().length > 0) {
+      return persona.name + '\n' + persona.description.trim();
+    }
+    return persona.name;
+  }
+
+  /**
+   * 统计消息列表中 Assistant 消息的数量。
+   * 用于计算 AtDepth 注入位置。
+   */
+  private countAssistantMessages(messages: ChatMessage[]): number {
+    let count: number = 0;
+    for (let i = 0; i < messages.length; i++) {
+      if (messages[i].role === ChatRole.Assistant) {
+        count++;
+      }
+    }
+    return count;
   }
 
   /**

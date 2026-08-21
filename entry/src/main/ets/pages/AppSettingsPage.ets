@@ -318,6 +318,92 @@ struct AppSettingsPage {
                 this.saveGlobalUserName();
               })
 
+            // ===== 用户身份分区 =====
+            Text('用户身份')
+              .fontSize($r('app.float.app_font_subtitle'))
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.page_primary_text'))
+              .width('100%')
+              .margin({ top: 24, bottom: 12 })
+
+            Text('管理用户身份(Persona),用于在提示词中注入用户角色设定')
+              .fontSize($r('app.float.app_font_caption'))
+              .fontColor($r('app.color.page_secondary_text'))
+              .width('100%')
+              .margin({ bottom: 8 })
+
+            Row() {
+              Column() {
+                Text('身份管理')
+                  .fontSize($r('app.float.app_font_body'))
+                  .fontColor($r('app.color.page_primary_text'))
+                  .width('100%')
+                Text('创建和管理用户身份')
+                  .fontSize($r('app.float.app_font_caption'))
+                  .fontColor($r('app.color.page_secondary_text'))
+                  .width('100%')
+                  .margin({ top: 2 })
+              }
+              .layoutWeight(1)
+              .alignItems(HorizontalAlign.Start)
+
+              SymbolGlyph($r('sys.symbol.chevron_right'))
+                .fontSize(16)
+                .fontColor([$r('app.color.page_secondary_text')])
+            }
+            .width('100%')
+            .padding({ left: 12, right: 12, top: 12, bottom: 12 })
+            .borderRadius($r('app.float.app_radius_md'))
+            .backgroundColor($r('app.color.app_surface_1'))
+            .border({ width: 1, color: $r('app.color.app_divider') })
+            .alignItems(VerticalAlign.Center)
+            .onClick(() => {
+              router.pushUrl({ url: 'pages/PersonaListPage' });
+            })
+
+            // ===== 云同步分区 =====
+            Text('云同步')
+              .fontSize($r('app.float.app_font_subtitle'))
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.page_primary_text'))
+              .width('100%')
+              .margin({ top: 24, bottom: 12 })
+
+            Text('通过坚果云 WebDAV 同步您的数据')
+              .fontSize($r('app.float.app_font_caption'))
+              .fontColor($r('app.color.page_secondary_text'))
+              .width('100%')
+              .margin({ bottom: 8 })
+
+            Row() {
+              Column() {
+                Text($r('app.string.sync_nav_title'))
+                  .fontSize($r('app.float.app_font_body'))
+                  .fontColor($r('app.color.page_primary_text'))
+                  .width('100%')
+                Text($r('app.string.sync_nav_desc'))
+                  .fontSize($r('app.float.app_font_caption'))
+                  .fontColor($r('app.color.page_secondary_text'))
+                  .width('100%')
+                  .margin({ top: 2 })
+              }
+              .layoutWeight(1)
+              .alignItems(HorizontalAlign.Start)
+
+              SymbolGlyph($r('sys.symbol.chevron_right'))
+                .fontSize(16)
+                .fontColor([$r('app.color.page_secondary_text')])
+            }
+            .width('100%')
+            .padding({ left: 12, right: 12, top: 12, bottom: 12 })
+            .borderRadius($r('app.float.app_radius_md'))
+            .backgroundColor($r('app.color.app_surface_1'))
+            .border({ width: 1, color: $r('app.color.app_divider') })
+            .alignItems(VerticalAlign.Center)
+            .onClick(() => {
+              router.pushUrl({ url: 'pages/SyncSettingsPage' });
+            })
+
             // ===== 发送按钮分区 =====
             Text($r('app.string.settings_send_button_section'))
               .fontSize($r('app.float.app_font_subtitle'))

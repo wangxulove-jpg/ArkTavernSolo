@@ -46,6 +46,7 @@ import { Logger } from '../../utils/Logger';
 import { generateUuid } from '../../utils/Uuid';
 import {
   AiCharacterInput,
+  AiCharacterType,
   createEmptyAiCharacterInput
 } from '../../models/AiCharacterInput';
 import {
@@ -969,6 +970,8 @@ function buildOptimizeMessages(card: ParsedCharacterCard): ChatMessage[] {
  * 构造系统 prompt。
  */
 function buildSystemPrompt(input: AiCharacterInput): string {
+  const typeGuidance: string = buildTypeGuidance(input.characterType);
+
   return '你是 Tavern Card V2 角色卡生成助手。'
     + '用户会给你一个角色创意,你需要生成符合 Tavern Card V2 规范的完整角色卡 JSON。'
     + '\n\n输出要求:'
@@ -977,6 +980,7 @@ function buildSystemPrompt(input: AiCharacterInput): string {
     + '\n- JSON 必须可被 JSON.parse 直接解析'
     + '\n- 内容语言:跟随创意描述所用语言'
     + '\n- 详细程度:标准(每个字段 4-8 句话)'
+    + typeGuidance
     + '\n\nJSON 结构要求(所有字段必填,数组字段即使为空也必须是空数组,extensions 即使为空也必须是空对象):'
     + '\n{'
     + '\n  "spec": "chara_card_v2",'
@@ -1025,13 +1029,48 @@ function buildSystemPrompt(input: AiCharacterInput): string {
 }
 
 /**
+ * 根据角色卡类型生成额外指导文本。
+ */
+function buildTypeGuidance(characterType: AiCharacterType): string {
+  if (characterType === 'narrator') {
+    return '\n\n角色卡类型:叙述者(Narrator)'
+      + '\n这是一张叙述者角色卡,不是具体的角色人物。关键要求:'
+      + '\n- name 应为叙述者身份名称(如 "Narrator"、"旁白"、"讲故事的人" 等),不是角色名'
+      + '\n- system_prompt 必须明确指定:以第三人称视角叙述,描写场景、角色行动和世界,永远不要代替 {{user}} 说话或行动'
+      + '\n- description 应描述叙述者的叙事风格(如全知视角、有限视角、文学风格等),而非角色外貌'
+      + '\n- personality 应描述叙事偏好(如倾向于悬疑、温馨、黑暗等氛围),而非角色性格'
+      + '\n- scenario 描述故事的世界观和初始情境,不预设 {{user}} 的身份'
+      + '\n- first_mes 应以叙述者视角展开场景描写,为 {{user}} 留出自由互动的空间'
+      + '\n- 开场白不要包含"你"或 {{user}} 的行为描述,只描述环境和 NPC';
+  }
+  if (characterType === 'multiScene') {
+    return '\n\n角色卡类型:多人场景(Multi-Character Scene)'
+      + '\n这是一张多人场景角色卡,包含多个角色。关键要求:'
+      + '\n- name 应为场景名称(如 "末日酒馆"、"星际学院" 等),不是单个角色名'
+      + '\n- system_prompt 必须明确指定:以第三人称视角叙述,描写每个角色的行动和对话,保持各角色性格和说话方式差异,永远不要代替 {{user}} 说话或行动'
+      + '\n- description 应描述场景中各角色的身份、外貌和行为习惯,每个角色需要独立段落'
+      + '\n- personality 应描述场景的整体氛围和各角色之间的互动关系'
+      + '\n- scenario 描述场景设定和 {{user}} 进入场景的方式'
+      + '\n- first_mes 应展示场景全貌和各角色的初始状态,多个角色应有各自的对话和行为'
+      + '\n- character_book 中应为每个角色创建独立条目,便于按关键词触发对应角色信息'
+      + '\n- tags 应包含 "multi-character" 标签';
+  }
+  return '';
+}
+
+/**
  * 构造用户 prompt(基于创意输入)。
  */
 function buildUserPrompt(input: AiCharacterInput): string {
   const parts: string[] = [];
   parts.push('请根据以下创意生成 Tavern Card V2 角色卡。');
 
-  // 创意描述(必填)
+  if (input.characterType === 'narrator') {
+    parts.push('\n【角色卡类型】叙述者 — 这不是具体角色,而是一个第三人称叙述者角色卡');
+  } else if (input.characterType === 'multiScene') {
+    parts.push('\n【角色卡类型】多人场景 — 这不是单个角色,而是一个包含多个角色的场景卡');
+  }
+
   parts.push('\n【角色创意描述】');
   parts.push(input.conceptDescription.trim());
 

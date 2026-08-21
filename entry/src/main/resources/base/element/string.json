@@ -850,11 +850,11 @@
     },
     {
       "name": "character_edit_field_name",
-      "value": "名称"
+      "value": "角色名"
     },
     {
       "name": "character_edit_field_name_placeholder",
-      "value": "请输入角色名称"
+      "value": "请输入角色名"
     },
     {
       "name": "character_edit_field_user_name",
@@ -3951,6 +3951,98 @@
     {
       "name": "permission_detect_gesture_reason",
       "value": "需要获取握持状态以优化单手操作体验"
+    },
+    {
+      "name": "sync_settings_title",
+      "value": "云同步设置"
+    },
+    {
+      "name": "sync_webdav_config_section",
+      "value": "坚果云 WebDAV 配置"
+    },
+    {
+      "name": "sync_server_url_label",
+      "value": "服务器地址"
+    },
+    {
+      "name": "sync_username_label",
+      "value": "用户名(邮箱)"
+    },
+    {
+      "name": "sync_username_placeholder",
+      "value": "输入坚果云邮箱"
+    },
+    {
+      "name": "sync_password_label",
+      "value": "应用专用密码"
+    },
+    {
+      "name": "sync_password_placeholder",
+      "value": "在坚果云安全设置中生成"
+    },
+    {
+      "name": "sync_remote_path_label",
+      "value": "远程文件夹"
+    },
+    {
+      "name": "sync_test_connection",
+      "value": "测试连接"
+    },
+    {
+      "name": "sync_connection_success",
+      "value": "连接成功"
+    },
+    {
+      "name": "sync_connection_failed",
+      "value": "连接失败,请检查配置"
+    },
+    {
+      "name": "sync_options_section",
+      "value": "同步选项"
+    },
+    {
+      "name": "sync_wifi_only",
+      "value": "仅 WiFi 下自动同步"
+    },
+    {
+      "name": "sync_auto_on_launch",
+      "value": "启动时自动同步"
+    },
+    {
+      "name": "sync_last_sync_time",
+      "value": "上次同步: %s"
+    },
+    {
+      "name": "sync_manual_section",
+      "value": "手动操作"
+    },
+    {
+      "name": "sync_upload",
+      "value": "上传到云端"
+    },
+    {
+      "name": "sync_download",
+      "value": "从云端下载"
+    },
+    {
+      "name": "sync_bidirectional",
+      "value": "双向同步"
+    },
+    {
+      "name": "sync_notes_title",
+      "value": "注意事项"
+    },
+    {
+      "name": "sync_notes_content",
+      "value": "• 坚果云密码需在账户设置-安全选项-第三方应用管理中生成应用专用密码\n• API密钥将使用坚果云密码加密后同步\n• 首次同步建议使用 上传到云端 将本地数据上传\n• 下载会覆盖较旧的数据(以更新时间为准)"
+    },
+    {
+      "name": "sync_nav_title",
+      "value": "云同步"
+    },
+    {
+      "name": "sync_nav_desc",
+      "value": "通过坚果云 WebDAV 同步数据"
     }
   ]
 }

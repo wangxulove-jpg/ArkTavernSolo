@@ -99,6 +99,8 @@ import {
   createSnapshotWithPresets
 } from './PromptPresetRuntimeResolver';
 import { PromptPreset } from '../models/PromptPreset';
+import { Persona } from '../models/Persona';
+import { AppServices } from './AppServices';
 import { generateUuid } from '../utils/Uuid';
 import { Logger } from '../utils/Logger';
 
@@ -790,7 +792,12 @@ export class ChatService {
     if (this.character !== null && this.character.userName.trim().length > 0) {
       return this.character.userName.trim();
     }
-    // 3. 全局用户称呼
+    // 3. Persona.name(有效身份名称)
+    const persona: Persona | null = await this.resolveEffectivePersona();
+    if (persona !== null && persona.name.trim().length > 0) {
+      return persona.name.trim();
+    }
+    // 4. 全局用户称呼
     if (this.appPreferences !== null) {
       try {
         const globalName: string = await this.appPreferences.getString(GLOBAL_USER_NAME_KEY, '');
@@ -802,7 +809,7 @@ export class ChatService {
           + (e instanceof Error ? e.message : String(e)));
       }
     }
-    // 4. 默认 'User'
+    // 5. 默认 'User'
     return DEFAULT_USER_NAME;
   }
 
@@ -831,6 +838,47 @@ export class ChatService {
     );
     this.currentChat = updated;
     return updated;
+  }
+
+  /**
+   * 更新当前聊天的锁定 Persona ID。
+   * @param personaId Persona ID(null 或空字符串清除锁定)
+   * @returns 更新后的 Chat 对象(无当前会话时返回 null)
+   */
+  async updateCurrentChatPersonaId(personaId: string | null): Promise<Chat | null> {
+    if (this.persistenceService === null) {
+      throw new Error('persistenceService unavailable');
+    }
+    if (this.currentChatId === undefined) {
+      throw new Error('当前无活跃会话');
+    }
+    const effectiveId: string = personaId === null ? '' : personaId;
+    const updated: Chat = await this.persistenceService.updateChatPersonaId(
+      this.currentChatId, effectiveId
+    );
+    this.currentChat = updated;
+    return updated;
+  }
+
+  /** 获取当前角色的默认 Persona ID */
+  getCharacterDefaultPersonaId(): string {
+    return this.character !== null ? this.character.defaultPersonaId : '';
+  }
+
+  /**
+   * 解析当前聊天的有效 Persona。
+   * 优先级:聊天锁定 > 角色默认 > 全局默认 > null
+   */
+  async resolveEffectivePersona(): Promise<Persona | null> {
+    const chatPersonaId: string = this.currentChat !== null ? this.currentChat.personaId : '';
+    const characterDefaultPersonaId: string = this.character !== null ? this.character.defaultPersonaId : '';
+    try {
+      const personaService = AppServices.getPersonaService();
+      return await personaService.resolveEffectivePersona(chatPersonaId, characterDefaultPersonaId);
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'resolveEffectivePersona failed: ' + String(e));
+      return null;
+    }
   }
 
   /**
@@ -2697,6 +2745,9 @@ export class ChatService {
       }
     }
 
+    // 解析有效 Persona
+    const effectivePersona: Persona | null = await this.resolveEffectivePersona();
+
     const context: PromptBuildContext = {
       character: this.character !== null ? this.character : undefined,
       lorebook: lorebook,
@@ -2707,7 +2758,9 @@ export class ChatService {
       // v12: 优先使用分层注入;memoryLayers 为 undefined 时 PromptBuilder 回退到 memorySummary(此处不传)
       memoryLayers: memoryLayers,
       // Prompt Cache: 传入冻结的世界书条目 ID(未冻结时为 undefined,由 PromptBuilder 正常匹配)
-      frozenLorebookEntryIds: this.frozenLorebookEntryIds !== null ? this.frozenLorebookEntryIds : undefined
+      frozenLorebookEntryIds: this.frozenLorebookEntryIds !== null ? this.frozenLorebookEntryIds : undefined,
+      // Persona 注入
+      persona: effectivePersona !== null ? effectivePersona : undefined
       // enablePostHistoryInstructions 默认为 true
       // 后续可由 Preset 配置控制
     };

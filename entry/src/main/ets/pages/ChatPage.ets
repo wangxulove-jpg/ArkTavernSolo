@@ -73,6 +73,7 @@ import {
 import { ForkChatMode } from '../models/ForkChatOptions';
 import { ChatSessionListPanel } from '../components/ChatSessionListPanel';
 import { Character } from '../models/Character';
+import { Persona } from '../models/Persona';
 import { Logger } from '../utils/Logger';
 import { MacroReplacer } from '../services/MacroReplacer';
 import { ThemePalette } from '../theme/ThemePalette';
@@ -118,6 +119,12 @@ struct ChatPage {
   @State resolvedUserName: string = '';
   /** v9: 当前对话级覆盖(供 ChatMoreMenuSheet 展示) */
   @State currentUserNameOverride: string = '';
+  /** 是否显示 Persona 选择 ActionSheet */
+  @State showPersonaPicker: boolean = false;
+  /** Persona 列表(供 ActionSheet 选择) */
+  @State personaOptions: Persona[] = [];
+  /** 当前生效的身份名称(供 ChatMoreMenuSheet 展示) */
+  @State resolvedPersonaName: string = '';
   /** 是否显示 Fork 模式选择弹窗 */
   @State showForkModePicker: boolean = false;
   /** Fork 操作目标消息 ID */
@@ -318,11 +325,11 @@ struct ChatPage {
         AppStorage.set<string>('pendingCharacterId', '');
         this.loadCharacterAvatar(pendingCharacterId);
         vm.initialize(pendingCharacterId).then((): Promise<void> => vm.selectSession(pendingChatId))
-          .then((): void => { this.refreshUserNameDisplay(); })
+          .then((): void => { this.refreshUserNameDisplay(); this.refreshPersonaDisplay(); })
           .catch((): void => {});
       } else {
         vm.initialize().then((): Promise<void> => vm.selectSession(pendingChatId))
-          .then((): void => { this.refreshUserNameDisplay(); })
+          .then((): void => { this.refreshUserNameDisplay(); this.refreshPersonaDisplay(); })
           .catch((): void => {});
       }
     } else if (pendingCharacterId.length > 0) {
@@ -330,13 +337,14 @@ struct ChatPage {
       this.loadCharacterAvatar(pendingCharacterId);
       // 角色卡"新建对话"入口:forceNew=true 跳过 openLatestSession,直接创建新会话
       vm.initialize(pendingCharacterId, true)
-        .then((): void => { this.refreshUserNameDisplay(); })
+        .then((): void => { this.refreshUserNameDisplay(); this.refreshPersonaDisplay(); })
         .catch((): void => {});
     } else {
       vm.initialize();
       // 从当前角色加载头像
       this.loadCurrentCharacterAvatar();
       this.refreshUserNameDisplay();
+      this.refreshPersonaDisplay();
     }
     this.registerKeyboardListener();
     this.registerDarkModeListener();
@@ -923,6 +931,7 @@ struct ChatPage {
             busy: this.viewModel!.busy,
             userNameOverride: this.currentUserNameOverride,
             resolvedUserName: this.resolvedUserName,
+            resolvedPersonaName: this.resolvedPersonaName,
             onClose: (): void => {
               this.showMoreMenu = false;
               // 关闭菜单时刷新一次当前生效称呼(可能在其他地方被修改)
@@ -939,6 +948,9 @@ struct ChatPage {
             onGoContextBudget: (): void => { this.navigateToContextBudget(); },
             onEditUserNameOverride: (): void => {
               this.openUserNameOverrideDialog();
+            },
+            onSwitchPersona: (): void => {
+              this.openPersonaPicker();
             },
             onRegenerate: (): void => { this.viewModel!.regenerate(); },
             onClearChat: (): void => {
@@ -976,6 +988,11 @@ struct ChatPage {
         // v9: 本对话称呼覆盖编辑弹窗
         if (this.showUserNameOverrideDialog) {
           this.userNameOverrideDialog()
+        }
+
+        // Persona 选择弹窗
+        if (this.showPersonaPicker) {
+          this.personaPickerSheet()
         }
 
         // Fork 模式选择弹窗
@@ -1079,6 +1096,7 @@ struct ChatPage {
       .onClick(() => {
         // 打开菜单前刷新一次当前生效称呼(可能角色或全局设置已变化)
         this.refreshUserNameDisplay();
+        this.refreshPersonaDisplay();
         this.showMoreMenu = true;
       })
     }
@@ -2806,6 +2824,65 @@ struct ChatPage {
     }
   }
 
+  /**
+   * 打开 Persona 选择 ActionSheet。
+   * 加载所有 Persona 并展示选择列表。
+   */
+  private async openPersonaPicker(): Promise<void> {
+    try {
+      const service = AppServices.getPersonaService();
+      this.personaOptions = await service.list();
+      // 获取当前生效的身份名称
+      await this.refreshPersonaDisplay();
+      this.showPersonaPicker = true;
+    } catch (e) {
+      Logger.error(LOG_TAG, 'openPersonaPicker failed: ' + String(e));
+    }
+  }
+
+  /**
+   * 选择 Persona 锁定到当前聊天。
+   * personaId 为空字符串时清除锁定。
+   */
+  private async selectPersonaForChat(personaId: string): Promise<void> {
+    if (this.viewModel === null) {
+      this.showPersonaPicker = false;
+      return;
+    }
+    try {
+      await this.viewModel!.updateChatPersonaId(personaId.length > 0 ? personaId : null);
+      await this.refreshPersonaDisplay();
+      // 身份变化后重新计算气泡展示文本
+      if (this.messages.length > 0) {
+        this.syncRenderStates(this.messages);
+      }
+    } catch (e) {
+      Logger.error(LOG_TAG, 'selectPersonaForChat failed: ' + String(e));
+    }
+    this.showPersonaPicker = false;
+  }
+
+  /**
+   * 刷新当前生效身份名称。
+   */
+  private async refreshPersonaDisplay(): Promise<void> {
+    if (this.viewModel === null) {
+      return;
+    }
+    try {
+      const service = AppServices.getPersonaService();
+      const chatPersonaId: string = this.viewModel!.getCurrentChatPersonaId();
+      const characterDefaultPersonaId: string = this.viewModel!.getCharacterDefaultPersonaId();
+      const persona: Persona | null = await service.resolveEffectivePersona(
+        chatPersonaId,
+        characterDefaultPersonaId
+      );
+      this.resolvedPersonaName = persona !== null ? persona.name : '';
+    } catch (e) {
+      this.resolvedPersonaName = '';
+    }
+  }
+
   @Builder
   userNameOverrideDialog() {
     Stack() {
@@ -2878,6 +2955,125 @@ struct ChatPage {
     .backgroundColor('rgba(0,0,0,0.5)')
     .onClick(() => {
       this.showUserNameOverrideDialog = false;
+    })
+  }
+
+  @Builder
+  personaPickerSheet() {
+    Stack() {
+      Column() {
+        Column() {
+          Text('切换用户身份')
+            .fontSize(17)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .margin({ bottom: 12 })
+
+          Scroll() {
+            Column() {
+              // "清除锁定"选项
+              Row() {
+                Column() {
+                  Text('跟随默认')
+                    .fontSize(15)
+                    .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+                  Text('使用角色或全局默认身份')
+                    .fontSize(12)
+                    .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+                    .margin({ top: 2 })
+                }
+                .layoutWeight(1)
+                .alignItems(HorizontalAlign.Start)
+
+                if (this.viewModel !== null && this.viewModel!.getCurrentChatPersonaId().length === 0) {
+                  Text('✓')
+                    .fontSize(16)
+                    .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+                }
+              }
+              .width('100%')
+              .padding({ top: 10, bottom: 10 })
+              .alignItems(VerticalAlign.Center)
+              .onClick(() => {
+                this.selectPersonaForChat('');
+              })
+
+              Divider().color(ThemePalette.dividerColor(this.effectiveTheme))
+
+              // Persona 列表
+              ForEach(this.personaOptions, (persona: Persona) => {
+                Row() {
+                  Column() {
+                    Text(persona.name)
+                      .fontSize(15)
+                      .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+                    if (persona.description.length > 0) {
+                      Text(persona.description)
+                        .fontSize(12)
+                        .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+                        .maxLines(1)
+                        .textOverflow({ overflow: TextOverflow.Ellipsis })
+                        .margin({ top: 2 })
+                    }
+                  }
+                  .layoutWeight(1)
+                  .alignItems(HorizontalAlign.Start)
+
+                  if (this.viewModel !== null && this.viewModel!.getCurrentChatPersonaId() === persona.id) {
+                    Text('✓')
+                      .fontSize(16)
+                      .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+                  }
+                }
+                .width('100%')
+                .padding({ top: 10, bottom: 10 })
+                .alignItems(VerticalAlign.Center)
+                .onClick(() => {
+                  this.selectPersonaForChat(persona.id);
+                })
+              }, (persona: Persona) => persona.id)
+
+              if (this.personaOptions.length === 0) {
+                Text('暂无身份，请先在设置中创建')
+                  .fontSize(13)
+                  .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+                  .margin({ top: 12 })
+              }
+            }
+            .width('100%')
+          }
+          .height(280)
+          .scrollBar(BarState.Auto)
+
+          Row() {
+            Button('取消')
+              .fontSize(15)
+              .backgroundColor(Color.Transparent)
+              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+              .height(40)
+              .layoutWeight(1)
+              .onClick(() => {
+                this.showPersonaPicker = false;
+              })
+          }
+          .width('100%')
+          .margin({ top: 8 })
+        }
+        .width('85%')
+        .padding(20)
+        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+        .borderRadius($r('app.float.app_radius_lg'))
+      }
+      .width('100%')
+      .height('100%')
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('rgba(0,0,0,0.5)')
+    .onClick(() => {
+      this.showPersonaPicker = false;
     })
   }
 

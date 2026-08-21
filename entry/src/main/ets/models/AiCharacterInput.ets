@@ -12,6 +12,14 @@
  */
 
 /**
+ * 角色卡类型。
+ * - Character: 单角色(默认),AI 生成一个具体角色
+ * - Narrator: 叙述者,AI 生成第三人称叙述者角色卡
+ * - MultiScene: 多人场景,AI 生成包含多个角色的场景卡
+ */
+export type AiCharacterType = 'character' | 'narrator' | 'multiScene';
+
+/**
  * AI 角色卡创意输入。
  *
  * 用户只需填写 conceptDescription 即可生成,其余字段均为可选辅助信息。
@@ -20,6 +28,8 @@
 export interface AiCharacterInput {
   /** 角色创意描述(必填,用户主要输入) */
   readonly conceptDescription: string;
+  /** 角卡类型(默认单角色) */
+  readonly characterType: AiCharacterType;
   /** 角色名称(可留空让 AI 生成) */
   readonly name: string;
   /** 世界观或故事背景 */
@@ -44,6 +54,7 @@ export interface AiCharacterInput {
 export function createEmptyAiCharacterInput(): AiCharacterInput {
   return {
     conceptDescription: '',
+    characterType: 'character',
     name: '',
     backstory: '',
     personalityKeywords: '',

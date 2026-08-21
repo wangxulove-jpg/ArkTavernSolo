@@ -41,6 +41,11 @@ export interface Chat {
    * 存 ChatStatusState 的序列化字符串,仅单人聊天使用;留空表示无状态配置。
    */
   readonly statusConfigJson: string;
+  /**
+   * 聊天锁定的 Persona ID(空=未锁定,Phase 2A 引入)。
+   * 非空时该聊天优先使用此 Persona,查找优先级:聊天锁定 > 角色锁定 > 全局默认。
+   */
+  readonly personaId: string;
 }
 
 export interface CreateChatOptions {
@@ -52,6 +57,7 @@ export interface CreateChatOptions {
   readonly sortOrder?: number;
   readonly conversationMode?: ConversationMode;
   readonly statusConfigJson?: string;
+  readonly personaId?: string;
 }
 
 export interface ChatUpdates {
@@ -64,6 +70,7 @@ export interface ChatUpdates {
   readonly sortOrder?: number;
   readonly conversationMode?: ConversationMode;
   readonly statusConfigJson?: string;
+  readonly personaId?: string | null;
 }
 
 export function createChat(options?: CreateChatOptions): Chat {
@@ -99,6 +106,10 @@ export function createChat(options?: CreateChatOptions): Chat {
     options !== undefined && options.statusConfigJson !== undefined
       ? options.statusConfigJson
       : '';
+  const personaId: string =
+    options !== undefined && options.personaId !== undefined
+      ? options.personaId
+      : '';
   return {
     id: id,
     characterId: characterId,
@@ -110,7 +121,8 @@ export function createChat(options?: CreateChatOptions): Chat {
     userNameOverride: userNameOverride,
     sortOrder: sortOrder,
     conversationMode: conversationMode,
-    statusConfigJson: statusConfigJson
+    statusConfigJson: statusConfigJson,
+    personaId: personaId
   };
 }
 
@@ -138,6 +150,11 @@ export function updateChat(chat: Chat, updates: ChatUpdates): Chat {
     updates.conversationMode !== undefined ? updates.conversationMode : chat.conversationMode;
   const statusConfigJson: string =
     updates.statusConfigJson !== undefined ? updates.statusConfigJson : chat.statusConfigJson;
+  // personaId 支持 null(清空锁定)与 undefined(不变)两种语义
+  const personaId: string =
+    updates.personaId !== undefined
+      ? (updates.personaId === null ? '' : updates.personaId)
+      : chat.personaId;
   return {
     id: chat.id,
     characterId: characterId,
@@ -149,6 +166,7 @@ export function updateChat(chat: Chat, updates: ChatUpdates): Chat {
     userNameOverride: userNameOverride,
     sortOrder: sortOrder,
     conversationMode: conversationMode,
-    statusConfigJson: statusConfigJson
+    statusConfigJson: statusConfigJson,
+    personaId: personaId
   };
 }

@@ -2,6 +2,7 @@ import { AbilityConstant, Configuration, ConfigurationConstant, UIAbility, Want 
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window, KeyboardAvoidMode, display } from '@kit.ArkUI';
 import { AppServices } from '../services/AppServices';
+import { WebDavSyncService } from '../services/sync/WebDavSyncService';
 
 const DOMAIN = 0x0000;
 
@@ -14,7 +15,9 @@ export default class EntryAbility extends UIAbility {
     const systemDark: boolean = systemColorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
     AppStorage.setOrCreate<boolean>(SYSTEM_DARK_KEY, systemDark);
     hilog.info(DOMAIN, 'testTag', 'Ability onCreate systemDark=%{public}s', String(systemDark));
-    AppServices.initialize(this.context).catch((e: Object): void => {
+    AppServices.initialize(this.context).then(() => {
+      this.triggerAutoSync();
+    }).catch((e: Object): void => {
       hilog.error(DOMAIN, 'testTag', 'AppServices initialize failed: %{public}s', (e as Error).message);
     });
   }
@@ -106,6 +109,21 @@ export default class EntryAbility extends UIAbility {
     }
     const systemDark: boolean | undefined = AppStorage.get<boolean>(SYSTEM_DARK_KEY);
     return systemDark ?? true;
+  }
+
+  private triggerAutoSync(): void {
+    try {
+      const syncService: WebDavSyncService = AppServices.getWebDavSyncService();
+      syncService.autoSync().then((result): void => {
+        if (result !== null) {
+          hilog.info(DOMAIN, 'testTag', 'Auto-sync result: %{public}s', result.message);
+        }
+      }).catch((e: Object): void => {
+        hilog.warn(DOMAIN, 'testTag', 'Auto-sync failed: %{public}s', (e as Error).message);
+      });
+    } catch (e) {
+      hilog.warn(DOMAIN, 'testTag', 'Auto-sync not available: %{public}s', (e as Error).message);
+    }
   }
 
   onWindowStageDestroy(): void {
