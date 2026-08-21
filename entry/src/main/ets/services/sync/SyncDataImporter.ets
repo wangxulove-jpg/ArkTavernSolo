@@ -31,6 +31,7 @@ import { ProviderKeyStore } from '../../storage/ProviderKeyStore';
 import { CryptoHelper } from '../../utils/CryptoHelper';
 import { DATABASE_VERSION } from '../../database/DatabaseConstants';
 import { Logger } from '../../utils/Logger';
+import { SyncDataExporter } from './SyncDataExporter';
 
 const LOG_TAG: string = 'SyncDataImporter';
 const EXPECTED_FORMAT: string = 'arktavern_sync_v1';
@@ -99,7 +100,12 @@ export interface SyncImportResult {
 /**
  * 行内列值映射类型。
  */
-type ColumnValueMap = Record<string, string>;
+type ColumnValueMap = Record<string, string | null>;
+
+interface ColumnInfo {
+  name: string;
+  type: string;
+}
 
 /**
  * 创建校验失败结果。
@@ -409,13 +415,17 @@ export class SyncDataImporter {
     }
 
     const tableName: string = tableData.tableName;
+    if (!SyncDataImporter.isValidTableName(tableName)) {
+      Logger.error(LOG_TAG, 'importTable: invalid table name=' + tableName);
+      return result;
+    }
     let rowsProcessed: number = 0;
     let rowsSkipped: number = 0;
     let anyRowImported: boolean = false;
 
     const store: relationalStore.RdbStore = dbHelper.getStore();
-    const validColumns: string[] = await SyncDataImporter.getTableColumns(store, tableName);
-    if (validColumns.length === 0) {
+    const columnInfos: ColumnInfo[] = await SyncDataImporter.getTableColumns(store, tableName);
+    if (columnInfos.length === 0) {
       Logger.error(LOG_TAG, 'importTable: no columns found table=' + tableName);
       return result;
     }
@@ -425,7 +435,7 @@ export class SyncDataImporter {
         async (txStore: relationalStore.RdbStore): Promise<void> => {
           for (let i = 0; i < rows.length; i++) {
             const rawRow: ColumnValueMap = rows[i];
-            const row: ColumnValueMap = SyncDataImporter.filterColumns(rawRow, validColumns);
+            const row: ColumnValueMap = SyncDataImporter.filterColumns(rawRow, columnInfos);
             if (SyncDataImporter.isRowEmpty(row)) {
               rowsSkipped++;
               continue;
@@ -434,7 +444,7 @@ export class SyncDataImporter {
 
             if (rowId === undefined || rowId === null || rowId.length === 0) {
               try {
-                const sql: string = SyncDataImporter.buildInsertOrReplaceSql(tableName, row);
+                const sql: string = SyncDataImporter.buildInsertOrReplaceSql(tableName, row, columnInfos);
                 await txStore.executeSql(sql);
                 rowsProcessed++;
                 anyRowImported = true;
@@ -453,7 +463,7 @@ export class SyncDataImporter {
 
             if (localUpdatedAt === null) {
               try {
-                const sql: string = SyncDataImporter.buildInsertOrReplaceSql(tableName, row);
+                const sql: string = SyncDataImporter.buildInsertOrReplaceSql(tableName, row, columnInfos);
                 await txStore.executeSql(sql);
                 rowsProcessed++;
                 anyRowImported = true;
@@ -463,9 +473,9 @@ export class SyncDataImporter {
                 rowsSkipped++;
               }
             } else if (remoteUpdatedAt !== null && remoteUpdatedAt.length > 0) {
-              if (remoteUpdatedAt > localUpdatedAt) {
+              if (SyncDataImporter.compareTimestamps(remoteUpdatedAt, localUpdatedAt) > 0) {
                 try {
-                  const sql: string = SyncDataImporter.buildInsertOrReplaceSql(tableName, row);
+                  const sql: string = SyncDataImporter.buildInsertOrReplaceSql(tableName, row, columnInfos);
                   await txStore.executeSql(sql);
                   rowsProcessed++;
                   anyRowImported = true;
@@ -479,7 +489,7 @@ export class SyncDataImporter {
               }
             } else {
               try {
-                const sql: string = SyncDataImporter.buildInsertOrReplaceSql(tableName, row);
+                const sql: string = SyncDataImporter.buildInsertOrReplaceSql(tableName, row, columnInfos);
                 await txStore.executeSql(sql);
                 rowsProcessed++;
                 anyRowImported = true;
@@ -507,17 +517,20 @@ export class SyncDataImporter {
   private static async getTableColumns(
     store: relationalStore.RdbStore,
     tableName: string
-  ): Promise<string[]> {
-    const columns: string[] = [];
+  ): Promise<ColumnInfo[]> {
+    const columns: ColumnInfo[] = [];
     try {
       const sql: string = 'PRAGMA table_info(' + tableName + ')';
       const resultSet: relationalStore.ResultSet = await store.querySql(sql);
       if (resultSet.goToFirstRow()) {
         const nameIndex: number = resultSet.getColumnIndex('name');
-        if (nameIndex >= 0) {
+        const typeIndex: number = resultSet.getColumnIndex('type');
+        if (nameIndex >= 0 && typeIndex >= 0) {
           do {
             const colName: string = resultSet.getString(nameIndex);
-            columns.push(colName);
+            const colType: string = resultSet.getString(typeIndex);
+            const info: ColumnInfo = { name: colName, type: colType };
+            columns.push(info);
           } while (resultSet.goToNextRow());
         }
       }
@@ -530,12 +543,12 @@ export class SyncDataImporter {
 
   private static filterColumns(
     row: ColumnValueMap,
-    validColumns: string[]
+    columnInfos: ColumnInfo[]
   ): ColumnValueMap {
     const filtered: ColumnValueMap = {};
-    for (let i = 0; i < validColumns.length; i++) {
-      const col: string = validColumns[i];
-      const value: string | undefined = row[col];
+    for (let i = 0; i < columnInfos.length; i++) {
+      const col: string = columnInfos[i].name;
+      const value: string | null | undefined = row[col];
       if (value !== undefined) {
         filtered[col] = value;
       }
@@ -552,7 +565,10 @@ export class SyncDataImporter {
    * 获取行的 id 值。
    */
   private static getRowId(row: ColumnValueMap): string | undefined {
-    const value: string | undefined = row[COLUMN_ID];
+    const value: string | null | undefined = row[COLUMN_ID];
+    if (value === null || value === undefined) {
+      return undefined;
+    }
     return value;
   }
 
@@ -560,7 +576,7 @@ export class SyncDataImporter {
    * 获取行的 updated_at 值(远程)。
    */
   private static getRemoteUpdatedAt(row: ColumnValueMap): string | null {
-    const value: string | undefined = row[COLUMN_UPDATED_AT];
+    const value: string | null | undefined = row[COLUMN_UPDATED_AT];
     if (value === undefined || value === null) {
       return null;
     }
@@ -606,14 +622,62 @@ export class SyncDataImporter {
    */
   private static buildInsertOrReplaceSql(
     tableName: string,
-    row: ColumnValueMap
+    row: ColumnValueMap,
+    columnInfos: ColumnInfo[]
   ): string {
     const keys: string[] = SyncDataImporter.getRecordKeys(row);
-    const columns: string = keys.join(', ');
+    const columns: string = keys.map((key: string): string => {
+      return '"' + key + '"';
+    }).join(', ');
     const values: string = keys.map((key: string): string => {
-      return SyncDataImporter.escapeSqlValue(row[key]);
+      const value: string | null | undefined = row[key];
+      const colType: string = SyncDataImporter.getColumnType(key, columnInfos);
+      return SyncDataImporter.formatSqlValue(value, colType);
     }).join(', ');
     return 'INSERT OR REPLACE INTO ' + tableName + ' (' + columns + ') VALUES (' + values + ')';
+  }
+
+  private static getColumnType(colName: string, columnInfos: ColumnInfo[]): string {
+    for (let i = 0; i < columnInfos.length; i++) {
+      if (columnInfos[i].name === colName) {
+        return columnInfos[i].type;
+      }
+    }
+    return 'TEXT';
+  }
+
+  private static formatSqlValue(value: string | null | undefined, colType: string): string {
+    if (value === undefined || value === null) {
+      return 'NULL';
+    }
+    const upperType: string = colType.toUpperCase();
+    if (upperType === 'INTEGER' || upperType === 'INT' || upperType === 'BIGINT') {
+      if (value.length === 0) {
+        return 'NULL';
+      }
+      const num: number = Number(value);
+      if (!isNaN(num) && Number.isFinite(num)) {
+        return Math.trunc(num).toString();
+      }
+      return '0';
+    }
+    if (upperType === 'REAL' || upperType === 'FLOAT' || upperType === 'DOUBLE' || upperType === 'NUMERIC') {
+      if (value.length === 0) {
+        return 'NULL';
+      }
+      const num: number = Number(value);
+      if (!isNaN(num) && Number.isFinite(num)) {
+        return num.toString();
+      }
+      return '0';
+    }
+    if (upperType === 'BLOB') {
+      if (value.length === 0) {
+        return 'NULL';
+      }
+      return 'NULL';
+    }
+    return SyncDataImporter.escapeSqlValue(value);
   }
 
 
@@ -623,11 +687,10 @@ export class SyncDataImporter {
    * null/undefined → 'NULL'
    * 字符串 → 加引号并转义内部单引号
    */
-  private static escapeSqlValue(value: string | undefined): string {
+  private static escapeSqlValue(value: string | null | undefined): string {
     if (value === undefined || value === null) {
       return 'NULL';
     }
-    // 转义单引号: ' → ''
     const escaped: string = value.replace(new RegExp("'", 'g'), "''");
     return '\'' + escaped + '\'';
   }
@@ -636,8 +699,39 @@ export class SyncDataImporter {
    * 获取 Record 的所有键。
    * 与项目中其他模块保持一致,使用 Object.keys。
    */
-  private static getRecordKeys(record: Record<string, string>): string[] {
+  private static getRecordKeys(record: Record<string, string | null>): string[] {
     return Object.keys(record);
+  }
+
+  private static compareTimestamps(a: string, b: string): number {
+    const numA: number = Number(a);
+    const numB: number = Number(b);
+    if (!isNaN(numA) && !isNaN(numB)) {
+      if (numA > numB) {
+        return 1;
+      }
+      if (numA < numB) {
+        return -1;
+      }
+      return 0;
+    }
+    if (a > b) {
+      return 1;
+    }
+    if (a < b) {
+      return -1;
+    }
+    return 0;
+  }
+
+  private static isValidTableName(tableName: string): boolean {
+    const validNames: string[] = SyncDataExporter.getAllTableNames();
+    for (let i = 0; i < validNames.length; i++) {
+      if (validNames[i] === tableName) {
+        return true;
+      }
+    }
+    return false;
   }
 
   // ===== Preferences 导入 =====

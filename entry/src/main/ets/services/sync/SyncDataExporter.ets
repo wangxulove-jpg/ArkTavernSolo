@@ -151,7 +151,8 @@ const KNOWN_PREFS_KEYS: string[] = [
   'sync_auto_enabled',
   'sync_wifi_only',
   'sync_last_sync_time',
-  'sync_device_id'
+  'sync_device_id',
+  'sync_last_manifest'
 ];
 
 /**
@@ -434,13 +435,12 @@ export class SyncDataExporter {
       columnNames.push(name);
     }
 
-    const rows: Record<string, string>[] = [];
+    const rows: Record<string, string | null>[] = [];
     if (resultSet.goToFirstRow()) {
       do {
-        const row: Record<string, string> = {};
+        const row: Record<string, string | null> = {};
         for (let i: number = 0; i < columnCount; i++) {
           const colName: string = columnNames[i];
-          let value: string = '';
           try {
             const columnIndex: number = resultSet.getColumnIndex(colName);
             if (columnIndex < 0) {
@@ -448,15 +448,13 @@ export class SyncDataExporter {
             }
             const isNull: boolean = resultSet.isColumnNull(columnIndex);
             if (isNull) {
-              value = '';
+              row[colName] = null;
             } else {
-              value = resultSet.getString(columnIndex);
+              row[colName] = resultSet.getString(columnIndex);
             }
           } catch (e) {
-            // 读取列值失败时使用空字符串
-            value = '';
+            row[colName] = null;
           }
-          row[colName] = value;
         }
         rows.push(row);
       } while (resultSet.goToNextRow());

@@ -102,6 +102,14 @@ export class WebDavSyncService {
     }
     this.syncing = true;
     try {
+      return await this.uploadInternal();
+    } finally {
+      this.syncing = false;
+    }
+  }
+
+  private async uploadInternal(): Promise<SyncResult> {
+    try {
       this.reportProgress('preparing', 0, '准备上传...');
       const client: WebDavClient | null = await this.createClient();
       if (client === null) {
@@ -260,8 +268,6 @@ export class WebDavSyncService {
       Logger.error(LOG_TAG, 'upload failed: ' + (e as Error).message);
       const r: SyncResult = { success: false, direction: 'upload', message: '上传失败: ' + (e as Error).message };
       return r;
-    } finally {
-      this.syncing = false;
     }
   }
 
@@ -447,8 +453,7 @@ export class WebDavSyncService {
         }
       }
       this.reportProgress('uploading', 30, '上传本地数据...');
-      this.syncing = false;
-      const uploadResult: SyncResult = await this.upload();
+      const uploadResult: SyncResult = await this.uploadInternal();
       return uploadResult;
     } catch (e) {
       Logger.error(LOG_TAG, 'bidirectional sync failed: ' + (e as Error).message);
