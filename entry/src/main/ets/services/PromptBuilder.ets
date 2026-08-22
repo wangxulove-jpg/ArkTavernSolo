@@ -287,7 +287,9 @@ export class PromptBuilder {
         }
       }
       let source: ChatMessageSource = ChatMessageSource.Conversation;
-      if (msg.role === ChatRole.System) {
+      if (msg.senderType === 'narrator') {
+        source = ChatMessageSource.NarratorInstruction;
+      } else if (msg.role === ChatRole.System) {
         source = ChatMessageSource.ExternalSystem;
       } else if (msg.role === ChatRole.Assistant && !firstAssistantSeen) {
         source = ChatMessageSource.CharacterFirstMessage;

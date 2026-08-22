@@ -82,6 +82,7 @@ import { PersonaSelectionStore } from '../storage/PersonaSelectionStore';
 import { PersonaService } from './PersonaService';
 import { SyncConfigStore } from '../storage/SyncConfigStore';
 import { WebDavSyncService } from './sync/WebDavSyncService';
+import { DeepSeekBalanceService } from './DeepSeekBalanceService';
 
 import { Logger } from '../utils/Logger';
 
@@ -193,6 +194,8 @@ export class AppServices {
   private readonly syncConfigStore: SyncConfigStore;
   /** WebDavSyncService 云同步服务 */
   private webDavSyncService: WebDavSyncService | null = null;
+  /** DeepSeekBalanceService DeepSeek余额查询服务 */
+  private deepSeekBalanceService: DeepSeekBalanceService | null = null;
   /** AssetStoreKeyStore 安全存储(共享实例) */
   private readonly assetKeyStore: AssetStoreKeyStore;
   /** ProviderKeyStore(不对页面公开) */
@@ -418,6 +421,12 @@ export class AppServices {
             services.providerConfigStore,
             services.syncConfigStore,
             services.appContext
+          );
+          services.deepSeekBalanceService = new DeepSeekBalanceService(
+            new HarmonyHttpClient(),
+            services.providerKeyStore,
+            services.providerConfigStore,
+            services.appPreferences
           );
         }
         Logger.warn(LOG_TAG, 'AppServices initialized');
@@ -729,6 +738,14 @@ export class AppServices {
     const service: WebDavSyncService | null = AppServices.getInstance().webDavSyncService;
     if (service === null) {
       throw new Error('WebDavSyncService not initialized');
+    }
+    return service;
+  }
+
+  static getDeepSeekBalanceService(): DeepSeekBalanceService {
+    const service: DeepSeekBalanceService | null = AppServices.getInstance().deepSeekBalanceService;
+    if (service === null) {
+      throw new Error('DeepSeekBalanceService not initialized');
     }
     return service;
   }

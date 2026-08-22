@@ -35,6 +35,7 @@ import {
 } from '../models/ContextBudgetConfig';
 import { Logger } from '../utils/Logger';
 import { ThemePalette } from '../theme/ThemePalette';
+import { DeepSeekBalanceInfo } from '../services/DeepSeekBalanceService';
 
 const LOG_TAG: string = 'ContextBudgetPage';
 
@@ -52,6 +53,8 @@ struct ContextBudgetPage {
   /** 预算配置变更通知(由本页面写入触发) */
   @StorageProp('chatBudgetConfigVersion') @Watch('onBudgetConfigVersionChanged') chatBudgetConfigVersion: number = 0;
   @StorageProp('effectiveTheme') effectiveTheme: string = 'dark';
+  @State showDeepSeekBalance: boolean = false;
+  @State deepSeekBalance: DeepSeekBalanceInfo | null = null;
 
   aboutToAppear(): void {
     try {
@@ -76,6 +79,7 @@ struct ContextBudgetPage {
     this.viewModel = vm;
     vm.initialize(this.chatId).then((): void => {
       this.loadSnapshot();
+      this.loadDeepSeekBalanceSettings();
     }).catch((e: Error): void => {
       Logger.error(LOG_TAG, 'vm.initialize failed: ' + e.message);
     });
@@ -238,6 +242,11 @@ struct ContextBudgetPage {
 
       // 自动管理
       this.autoManageRow()
+
+      Divider().color(ThemePalette.dividerColor(this.effectiveTheme)).margin({ top: 4, bottom: 4 })
+
+      // DeepSeek 余额显示
+      this.deepSeekBalanceRow()
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
@@ -528,6 +537,31 @@ struct ContextBudgetPage {
           this.onAutoManageChange(isOn);
         })
         .enabled(this.viewModel !== null && !this.viewModel!.isOperating)
+    }
+    .width('100%')
+    .padding({ top: 12, bottom: 12 })
+    .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder
+  deepSeekBalanceRow() {
+    Row() {
+      Column() {
+        Text('显示 DeepSeek 余额')
+          .fontSize($r('app.float.app_font_body'))
+          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        Text('在聊天顶栏显示当前账户余额')
+          .fontSize($r('app.float.app_font_caption'))
+          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+          .margin({ top: 2 })
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+
+      Toggle({ type: ToggleType.Switch, isOn: this.showDeepSeekBalance })
+        .onChange((isOn: boolean) => {
+          this.onDeepSeekBalanceToggle(isOn);
+        })
     }
     .width('100%')
     .padding({ top: 12, bottom: 12 })
@@ -841,6 +875,34 @@ struct ContextBudgetPage {
     }
     await this.viewModel!.resetToDefault();
     this.loadSnapshot();
+  }
+
+  private loadDeepSeekBalanceSettings(): void {
+    const service = AppServices.getDeepSeekBalanceService();
+    service.isShowBalance().then((show: boolean): void => {
+      this.showDeepSeekBalance = show;
+      if (show) {
+        service.fetchBalance().then((info: DeepSeekBalanceInfo | null): void => {
+          this.deepSeekBalance = info;
+        }).catch((): void => {
+        });
+      }
+    }).catch((): void => {
+    });
+  }
+
+  private async onDeepSeekBalanceToggle(isOn: boolean): Promise<void> {
+    const service = AppServices.getDeepSeekBalanceService();
+    await service.setShowBalance(isOn);
+    this.showDeepSeekBalance = isOn;
+    if (isOn) {
+      service.fetchBalance().then((info: DeepSeekBalanceInfo | null): void => {
+        this.deepSeekBalance = info;
+      }).catch((): void => {
+      });
+    } else {
+      this.deepSeekBalance = null;
+    }
   }
 
   // ===== 格式化 =====

@@ -25,7 +25,7 @@ import { Logger } from '../utils/Logger';
  * - 本类为单角色聊天重建的稳定展示对象,直接替代 ChatMessageBubble 的 @Prop message
  */
 
-import { ChatMessage, ChatMessageStatus } from './ChatMessage';
+import { ChatMessage, ChatMessageStatus, MessageSenderType } from './ChatMessage';
 import { ChatRole } from './ChatRole';
 import { ChatMessageSource } from './ChatMessageSource';
 
@@ -47,6 +47,8 @@ export class ChatMessageRenderState {
   role: ChatRole;
   /** 消息来源(开场白等) */
   source: ChatMessageSource | undefined;
+  /** 发送者类型(user/character/narrator) */
+  senderType: MessageSenderType | undefined;
   /** 错误信息(生成失败时) */
   errorMessage: string;
   /** 更新时间(毫秒时间戳) */
@@ -61,6 +63,7 @@ export class ChatMessageRenderState {
     this.status = message.status !== undefined ? message.status : ChatMessageStatus.Completed;
     this.role = message.role;
     this.source = message.source;
+    this.senderType = message.senderType;
     this.errorMessage = message.errorMessage !== undefined ? message.errorMessage : '';
     this.updatedAt = message.updatedAt !== undefined ? message.updatedAt : message.createdAt;
   }
@@ -84,6 +87,7 @@ export class ChatMessageRenderState {
     this.isStreaming = message.isStreaming === true;
     this.status = message.status !== undefined ? message.status : ChatMessageStatus.Completed;
     this.source = message.source;
+    this.senderType = message.senderType;
     this.errorMessage = message.errorMessage !== undefined ? message.errorMessage : '';
     this.updatedAt = message.updatedAt !== undefined ? message.updatedAt : message.createdAt;
     if (this.isStreaming) {

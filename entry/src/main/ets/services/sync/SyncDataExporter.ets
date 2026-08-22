@@ -152,7 +152,13 @@ const KNOWN_PREFS_KEYS: string[] = [
   'sync_wifi_only',
   'sync_last_sync_time',
   'sync_device_id',
-  'sync_last_manifest'
+  'sync_last_manifest',
+  'show_deepseek_balance',
+  'tts_mode',
+  'tts_speed',
+  'tts_volume',
+  'tts_pitch',
+  'tts_voice_person'
 ];
 
 /**

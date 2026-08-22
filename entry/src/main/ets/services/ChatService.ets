@@ -314,7 +314,11 @@ function stripFencesForStatus(text: string): string {
 export enum ChatGenerationKind {
   NormalResponse = 'NormalResponse',
   SwipeCandidate = 'SwipeCandidate',
-  BranchRegeneration = 'BranchRegeneration'
+  BranchRegeneration = 'BranchRegeneration',
+  Impersonate = 'Impersonate',
+  AutoContinue = 'AutoContinue',
+  Narrator = 'Narrator',
+  ContinueGeneration = 'ContinueGeneration'
 }
 
 /**
@@ -323,20 +327,14 @@ export enum ChatGenerationKind {
  * 不持久化,不记录完整 ID。
  */
 interface ActiveGenerationContext {
-  /** 生成操作标识,用于拒绝迟到回调 */
   readonly operationId: number;
-  /** 生成类型(普通 / Swipe / BranchRegeneration) */
   readonly kind: ChatGenerationKind;
-  /** 所属 chatId(用于跨会话污染防护) */
   readonly chatId: string;
-  /** 目标 Assistant 消息 ID */
   readonly assistantMessageId: string;
-  /** Swipe 候选索引(仅 SwipeCandidate 类型时存在) */
   readonly swipeCandidateIndex?: number;
-  /** 目标 Branch ID(仅 BranchRegeneration 类型时存在) */
   readonly branchId?: string;
-  /** Fork User Message ID(仅 BranchRegeneration 类型时存在) */
   readonly forkMessageId?: string;
+  readonly autoContinueStep?: 'impersonate' | 'response';
 }
 
 export class ChatService {
@@ -970,6 +968,300 @@ export class ChatService {
 
     // 5. 启动网络请求(失败也保留消息)
     this.doStream(assistantId, callbacks, this.activeGeneration);
+  }
+
+  /**
+   * Impersonate: AI 以 {{user}} 身份生成消息。
+   *
+   * 流程:
+   * 1. 不创建 User 消息
+   * 2. 创建 role=User, senderType='character' 的 Streaming 占位
+   * 3. 注入 impersonate System 指令
+   * 4. AI 生成的回复存为 role=User（后续对话 AI 会视为用户说的话）
+   */
+  async impersonate(callbacks: ChatServiceCallbacks): Promise<void> {
+    if (this.disposed) {
+      throw new Error('ChatService disposed');
+    }
+    if (this.isBusy()) {
+      Logger.warn(LOG_TAG, 'impersonate rejected: busy');
+      return;
+    }
+    if (this.currentChatId === undefined) {
+      callbacks.onError('会话未初始化');
+      return;
+    }
+
+    this.lastCallbacks = callbacks;
+    this.generationOperationId++;
+
+    const assistantId: string = 'msg-' + generateUuid();
+    const impersonateMsg: ChatMessage = {
+      id: assistantId,
+      role: ChatRole.User,
+      content: '',
+      createdAt: Date.now(),
+      isStreaming: true,
+      status: ChatMessageStatus.Streaming,
+      source: ChatMessageSource.Conversation,
+      senderType: 'character',
+      senderCharacterId: this.character !== null ? this.character.id : ''
+    };
+
+    if (this.persistenceService !== null && this.currentChatId !== undefined) {
+      try {
+        const seq: number =
+          await this.persistenceService.appendMessage(
+            this.currentChatId, impersonateMsg
+          );
+        this.currentSequenceNumber = seq;
+        this.lastPersistedContentLength = 0;
+        this.pendingPersistAssistantId = assistantId;
+      } catch (e) {
+        const msg: string = e instanceof Error ? e.message : String(e);
+        Logger.error(LOG_TAG, 'impersonate persist failed: ' + msg);
+        this.setState(ChatState.Failed, callbacks);
+        callbacks.onError('消息保存失败,请重试');
+        return;
+      }
+    }
+
+    this.messages = [...this.messages, impersonateMsg];
+    this.currentAssistantId = assistantId;
+    this.activeGeneration = {
+      operationId: this.generationOperationId,
+      kind: ChatGenerationKind.Impersonate,
+      chatId: this.currentChatId,
+      assistantMessageId: assistantId
+    };
+    this.setState(ChatState.Sending, callbacks);
+    this.emitMessages(callbacks);
+    this.doStream(assistantId, callbacks, this.activeGeneration);
+  }
+
+  /**
+   * AutoContinue: AI 先以 {{user}} 身份写消息,再自动生成角色回复。
+   *
+   * 两步串行:
+   * Step 1 (impersonate): AI 生成 role=User, senderType='character' 的消息
+   * Step 2 (response): AI 生成 role=Assistant, senderType='character' 的消息
+   */
+  async autoContinue(callbacks: ChatServiceCallbacks): Promise<void> {
+    if (this.disposed) {
+      throw new Error('ChatService disposed');
+    }
+    if (this.isBusy()) {
+      Logger.warn(LOG_TAG, 'autoContinue rejected: busy');
+      return;
+    }
+    if (this.currentChatId === undefined) {
+      callbacks.onError('会话未初始化');
+      return;
+    }
+
+    this.lastCallbacks = callbacks;
+    this.generationOperationId++;
+
+    const impersonateId: string = 'msg-' + generateUuid();
+    const impersonateMsg: ChatMessage = {
+      id: impersonateId,
+      role: ChatRole.User,
+      content: '',
+      createdAt: Date.now(),
+      isStreaming: true,
+      status: ChatMessageStatus.Streaming,
+      source: ChatMessageSource.Conversation,
+      senderType: 'character',
+      senderCharacterId: this.character !== null ? this.character.id : ''
+    };
+
+    if (this.persistenceService !== null && this.currentChatId !== undefined) {
+      try {
+        const seq: number =
+          await this.persistenceService.appendMessage(
+            this.currentChatId, impersonateMsg
+          );
+        this.currentSequenceNumber = seq;
+        this.lastPersistedContentLength = 0;
+        this.pendingPersistAssistantId = impersonateId;
+      } catch (e) {
+        const msg: string = e instanceof Error ? e.message : String(e);
+        Logger.error(LOG_TAG, 'autoContinue persist failed: ' + msg);
+        this.setState(ChatState.Failed, callbacks);
+        callbacks.onError('消息保存失败,请重试');
+        return;
+      }
+    }
+
+    this.messages = [...this.messages, impersonateMsg];
+    this.currentAssistantId = impersonateId;
+    this.activeGeneration = {
+      operationId: this.generationOperationId,
+      kind: ChatGenerationKind.AutoContinue,
+      chatId: this.currentChatId,
+      assistantMessageId: impersonateId,
+      autoContinueStep: 'impersonate'
+    };
+    this.setState(ChatState.Sending, callbacks);
+    this.emitMessages(callbacks);
+    this.doStream(impersonateId, callbacks, this.activeGeneration);
+  }
+
+  /**
+   * Narrator: 用户输入旁白文本,AI 角色接续回复。
+   *
+   * 流程:
+   * 1. 创建 role=System, senderType='narrator' 的旁白消息
+   * 2. 创建 role=Assistant, senderType='character' 的 Streaming 占位
+   * 3. AI 根据旁白内容接续回复
+   */
+  async narratorMessage(content: string, callbacks: ChatServiceCallbacks): Promise<void> {
+    if (this.disposed) {
+      throw new Error('ChatService disposed');
+    }
+    if (content.trim().length === 0) {
+      return;
+    }
+    if (this.isBusy()) {
+      Logger.warn(LOG_TAG, 'narratorMessage rejected: busy');
+      return;
+    }
+    if (this.currentChatId === undefined) {
+      callbacks.onError('会话未初始化');
+      return;
+    }
+
+    this.lastCallbacks = callbacks;
+    this.generationOperationId++;
+
+    const narratorMsg: ChatMessage = {
+      id: 'msg-' + generateUuid(),
+      role: ChatRole.System,
+      content: content,
+      createdAt: Date.now(),
+      isStreaming: false,
+      status: ChatMessageStatus.Completed,
+      source: ChatMessageSource.Conversation,
+      senderType: 'narrator'
+    };
+
+    const assistantId: string = 'msg-' + generateUuid();
+    const assistantMsg: ChatMessage = {
+      id: assistantId,
+      role: ChatRole.Assistant,
+      content: '',
+      createdAt: Date.now(),
+      isStreaming: true,
+      status: ChatMessageStatus.Streaming,
+      source: ChatMessageSource.Conversation,
+      senderType: 'character',
+      senderCharacterId: this.character !== null ? this.character.id : ''
+    };
+
+    if (this.persistenceService !== null && this.currentChatId !== undefined) {
+      try {
+        const result =
+          await this.persistenceService.appendUserAndStreamingAssistant(
+            this.currentChatId, narratorMsg, assistantMsg
+          );
+        this.currentSequenceNumber = result.assistantSequenceNumber;
+        this.lastPersistedContentLength = 0;
+        this.pendingPersistAssistantId = assistantId;
+      } catch (e) {
+        const msg: string = e instanceof Error ? e.message : String(e);
+        Logger.error(LOG_TAG, 'narratorMessage persist failed: ' + msg);
+        this.setState(ChatState.Failed, callbacks);
+        callbacks.onError('消息保存失败,请重试');
+        return;
+      }
+    }
+
+    this.messages = [...this.messages, narratorMsg, assistantMsg];
+    this.currentAssistantId = assistantId;
+    this.activeGeneration = {
+      operationId: this.generationOperationId,
+      kind: ChatGenerationKind.Narrator,
+      chatId: this.currentChatId,
+      assistantMessageId: assistantId
+    };
+    this.setState(ChatState.Sending, callbacks);
+    this.emitMessages(callbacks);
+    this.doStream(assistantId, callbacks, this.activeGeneration);
+  }
+
+  /**
+   * ContinueGeneration: 继续生成上条 AI 消息(追加内容)。
+   *
+   * 流程:
+   * 1. 找到最后一条 Assistant 消息
+   * 2. 将其标记为 Streaming,追加 Continue 指令
+   * 3. AI 继续生成内容(追加到现有内容末尾)
+   */
+  async continueGeneration(callbacks: ChatServiceCallbacks): Promise<void> {
+    if (this.disposed) {
+      throw new Error('ChatService disposed');
+    }
+    if (this.isBusy()) {
+      Logger.warn(LOG_TAG, 'continueGeneration rejected: busy');
+      return;
+    }
+
+    const lastAssistantIdx: number = this.findLastAssistantIndex();
+    if (lastAssistantIdx < 0) {
+      callbacks.onError('没有可继续的消息');
+      return;
+    }
+
+    const lastMsg: ChatMessage = this.messages[lastAssistantIdx];
+    if (lastMsg.status === ChatMessageStatus.Streaming) {
+      return;
+    }
+
+    this.lastCallbacks = callbacks;
+    this.generationOperationId++;
+
+    const resumedMsg: ChatMessage = mergeChatMessage(lastMsg, {
+      isStreaming: true,
+      status: ChatMessageStatus.Streaming
+    });
+
+    this.messages[lastAssistantIdx] = resumedMsg;
+    this.currentAssistantId = lastMsg.id;
+    this.lastPersistedContentLength = lastMsg.content.length;
+    this.pendingPersistAssistantId = lastMsg.id;
+
+    if (this.persistenceService !== null && this.currentChatId !== undefined) {
+      try {
+        await this.persistenceService.updateMessage(lastMsg.id, resumedMsg);
+      } catch (e) {
+        const msg: string = e instanceof Error ? e.message : String(e);
+        Logger.error(LOG_TAG, 'continueGeneration persist failed: ' + msg);
+        this.setState(ChatState.Failed, callbacks);
+        callbacks.onError('消息更新失败,请重试');
+        return;
+      }
+    }
+
+    this.activeGeneration = {
+      operationId: this.generationOperationId,
+      kind: ChatGenerationKind.ContinueGeneration,
+      chatId: this.currentChatId !== undefined ? this.currentChatId : '',
+      assistantMessageId: lastMsg.id
+    };
+    this.setState(ChatState.Sending, callbacks);
+    this.emitMessages(callbacks);
+    this.doStream(lastMsg.id, callbacks, this.activeGeneration);
+  }
+
+  private findLastAssistantIndex(): number {
+    for (let i: number = this.messages.length - 1; i >= 0; i--) {
+      if (this.messages[i].role === ChatRole.Assistant
+        || (this.messages[i].role === ChatRole.User
+          && this.messages[i].senderType === 'character')) {
+        return i;
+      }
+    }
+    return -1;
   }
 
   /**
@@ -2126,6 +2418,23 @@ export class ChatService {
   }
 
   /**
+   * 主动构建请求消息用于上下文占用估算(不影响实际发送)。
+   * 当 lastBuiltRequestMessages 为空时由 UI 调用,使预算指示器在发消息前即可显示。
+   */
+  async buildEstimateMessages(): Promise<void> {
+    if (this.lastBuiltRequestMessages !== undefined) {
+      return;
+    }
+    try {
+      const snapshot: PromptPresetRequestSnapshot = await this.createPresetRequestSnapshot();
+      this.lastBuiltRequestMessages = await this.buildRequestMessages(snapshot.presetSystemPrompt);
+      await this.updateRequestPlan(this.lastBuiltRequestMessages, snapshot.generationSettings);
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'buildEstimateMessages failed: ' + String(e));
+    }
+  }
+
+  /**
    * 释放资源,停止当前请求。dispose 后不可复用。
    * 释放前 flush 任何 pending delta 持久化。
    */
@@ -2388,6 +2697,34 @@ export class ChatService {
     // 保存最近构建的请求消息,供 UI 估算上下文占用
     this.lastBuiltRequestMessages = requestMessages;
 
+    // Impersonate/AutoContinue: 注入代写指令
+    if (context.kind === ChatGenerationKind.Impersonate
+      || (context.kind === ChatGenerationKind.AutoContinue
+        && context.autoContinueStep === 'impersonate')) {
+      const impersonateInstruction: ChatMessage = {
+        id: 'sys-impersonate',
+        role: ChatRole.System,
+        content: 'Please continue the conversation by writing what the user ({{user}}) would say or do next. Write ONLY from the user\'s perspective as their dialogue, actions, and thoughts. Do NOT write any response for {{char}}. Write in the same style and tone as previous user messages in the conversation.',
+        createdAt: Date.now(),
+        status: ChatMessageStatus.Completed,
+        source: ChatMessageSource.ExternalSystem
+      };
+      requestMessages = [...requestMessages, impersonateInstruction];
+    }
+
+    // ContinueGeneration: 注入续写指令
+    if (context.kind === ChatGenerationKind.ContinueGeneration) {
+      const continueInstruction: ChatMessage = {
+        id: 'sys-continue',
+        role: ChatRole.System,
+        content: 'Continue generating from where you left off. Do not repeat what was already written. Simply continue the text seamlessly.',
+        createdAt: Date.now(),
+        status: ChatMessageStatus.Completed,
+        source: ChatMessageSource.ExternalSystem
+      };
+      requestMessages = [...requestMessages, continueInstruction];
+    }
+
     // 计算 Token 预算 → 超预算则裁剪 → 重算预算
     await this.updateRequestPlan(requestMessages, snapshot.generationSettings);
 
@@ -2441,6 +2778,74 @@ export class ChatService {
   /**
    * 助手 Turn 最终完成流程。
    */
+  /**
+   * AutoContinue 第二步: impersonate 完成后自动启动角色回复。
+   * 创建 Assistant 占位并启动 doStream(kind=AutoContinue, step='response')。
+   */
+  private startAutoContinueResponseStep(callbacks: ChatServiceCallbacks): void {
+    if (this.disposed || this.currentChatId === undefined) {
+      this.setState(ChatState.Failed, callbacks);
+      callbacks.onError('AutoContinue 第二步失败');
+      return;
+    }
+
+    this.generationOperationId++;
+
+    const assistantId: string = 'msg-' + generateUuid();
+    const assistantMsg: ChatMessage = {
+      id: assistantId,
+      role: ChatRole.Assistant,
+      content: '',
+      createdAt: Date.now(),
+      isStreaming: true,
+      status: ChatMessageStatus.Streaming,
+      source: ChatMessageSource.Conversation,
+      senderType: 'character',
+      senderCharacterId: this.character !== null ? this.character.id : ''
+    };
+
+    if (this.persistenceService !== null) {
+      this.persistenceService.appendMessage(
+        this.currentChatId, assistantMsg
+      ).then((seq: number): void => {
+        this.currentSequenceNumber = seq;
+        this.lastPersistedContentLength = 0;
+        this.pendingPersistAssistantId = assistantId;
+
+        this.messages = [...this.messages, assistantMsg];
+        this.currentAssistantId = assistantId;
+        this.activeGeneration = {
+          operationId: this.generationOperationId,
+          kind: ChatGenerationKind.AutoContinue,
+          chatId: this.currentChatId !== undefined ? this.currentChatId : '',
+          assistantMessageId: assistantId,
+          autoContinueStep: 'response'
+        };
+        this.setState(ChatState.Sending, callbacks);
+        this.emitMessages(callbacks);
+        this.doStream(assistantId, callbacks, this.activeGeneration);
+      }).catch((e: Object): void => {
+        const msg: string = e instanceof Error ? e.message : String(e);
+        Logger.error(LOG_TAG, 'autoContinue response persist failed: ' + msg);
+        this.setState(ChatState.Failed, callbacks);
+        callbacks.onError('角色回复保存失败,请重试');
+      });
+    } else {
+      this.messages = [...this.messages, assistantMsg];
+      this.currentAssistantId = assistantId;
+      this.activeGeneration = {
+        operationId: this.generationOperationId,
+        kind: ChatGenerationKind.AutoContinue,
+        chatId: '',
+        assistantMessageId: assistantId,
+        autoContinueStep: 'response'
+      };
+      this.setState(ChatState.Sending, callbacks);
+      this.emitMessages(callbacks);
+      this.doStream(assistantId, callbacks, this.activeGeneration);
+    }
+  }
+
   private finalizeAssistantTurn(
     assistantId: string,
     result: ChatStreamResult,
@@ -2498,6 +2903,15 @@ export class ChatService {
       this.persistChatActivity();
       this.clearActiveGeneration(operationId);
       this.updateLastAssistantMessageId();
+
+      // AutoContinue: impersonate step 完成,自动触发 response step
+      if (context.kind === ChatGenerationKind.AutoContinue
+        && context.autoContinueStep === 'impersonate'
+        && finalStatus !== ChatMessageStatus.Failed) {
+        this.startAutoContinueResponseStep(callbacks);
+        return;
+      }
+
       if (finalStatus === ChatMessageStatus.Failed) {
         this.setState(ChatState.Failed, callbacks);
         callbacks.onError('模型返回了空回复,请重试');
@@ -2514,6 +2928,13 @@ export class ChatService {
     }).catch((_e: Object): void => {
       this.clearActiveGeneration(operationId);
       this.updateLastAssistantMessageId();
+      // AutoContinue: impersonate step 持久化失败,不继续 response
+      if (context.kind === ChatGenerationKind.AutoContinue
+        && context.autoContinueStep === 'impersonate') {
+        this.setState(ChatState.Failed, callbacks);
+        callbacks.onError('代写消息持久化失败,请重试');
+        return;
+      }
       if (context.kind === ChatGenerationKind.SwipeCandidate) {
         this.setState(ChatState.Failed, callbacks);
         callbacks.onError('候选回复持久化失败,请重试');

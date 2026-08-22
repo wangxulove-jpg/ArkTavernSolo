@@ -767,7 +767,15 @@ export class SyncDataImporter {
       'sync_wifi_only',
       'status_instruction_enabled',
       'memory_auto_summary_enabled',
-      'chat_smart_grip_enabled'
+      'chat_smart_grip_enabled',
+      'show_deepseek_balance'
+    ];
+    const NUMBER_KEYS: string[] = [
+      'tts_mode',
+      'tts_speed',
+      'tts_volume',
+      'tts_pitch',
+      'tts_voice_person'
     ];
     const EXCLUDED_KEYS: string[] = [
       'sync_auto_enabled',

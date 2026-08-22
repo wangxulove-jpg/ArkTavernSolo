@@ -77,6 +77,8 @@ import { Persona } from '../models/Persona';
 import { Logger } from '../utils/Logger';
 import { MacroReplacer } from '../services/MacroReplacer';
 import { ThemePalette } from '../theme/ThemePalette';
+import { TtsService } from '../services/TtsService';
+import { TtsReadMode } from '../models/TtsReadMode';
 
 const LOG_TAG: string = 'ChatPage';
 
@@ -111,6 +113,12 @@ struct ChatPage {
   @State actionSheetMsg: ChatMessage | null = null;
   /** 是否显示清空确认 */
   @State showClearConfirm: boolean = false;
+  /** 旁白输入模式是否激活 */
+  @State narratorModeActive: boolean = false;
+  /** TTS 服务实例 */
+  private ttsService: TtsService = new TtsService();
+  /** TTS 是否正在朗读 */
+  @State ttsIsSpeaking: boolean = false;
   /** v9: 是否显示本对话称呼覆盖编辑对话框 */
   @State showUserNameOverrideDialog: boolean = false;
   /** v9: 对话称呼输入草稿(对话框中使用) */
@@ -214,6 +222,10 @@ struct ChatPage {
   @State cacheHitRatio: number = -1;
   @State cacheCachedTokens: number = 0;
   @State cachePromptTokens: number = 0;
+
+  // ===== DeepSeek 余额 =====
+  @State deepSeekBalanceText: string = '';
+  @State showDeepSeekBalance: boolean = false;
 
   // ===== 状态/世界书面板(T-7.x) =====
   /** AI 操作区是否展开 */
@@ -354,6 +366,8 @@ struct ChatPage {
     this.loadPersistedSendButtonPos();
     this.loadPersistedSmartGrip();
     this.registerGripListener();
+    this.loadDeepSeekBalance();
+    this.loadTtsSettings();
   }
 
   /**
@@ -482,6 +496,52 @@ struct ChatPage {
     } catch (_e) {}
   }
 
+  private loadTtsSettings(): void {
+    try {
+      const prefs = AppServices.getAppPreferences();
+      if (!prefs.isInitialized()) {
+        return;
+      }
+      prefs.getString('tts_mode', '0')
+        .then((value: string): void => {
+          const mode: number = parseInt(value, 10);
+          this.ttsService.readMode = isNaN(mode) ? TtsReadMode.Off : (mode as TtsReadMode);
+        })
+        .catch((_e: Object): void => {});
+      prefs.getString('tts_speed', '1.0')
+        .then((value: string): void => {
+          const speed: number = parseFloat(value);
+          if (!isNaN(speed)) { this.ttsService.speed = speed; }
+        })
+        .catch((_e: Object): void => {});
+      prefs.getString('tts_volume', '1.0')
+        .then((value: string): void => {
+          const volume: number = parseFloat(value);
+          if (!isNaN(volume)) { this.ttsService.volume = volume; }
+        })
+        .catch((_e: Object): void => {});
+      prefs.getString('tts_pitch', '1.0')
+        .then((value: string): void => {
+          const pitch: number = parseFloat(value);
+          if (!isNaN(pitch)) { this.ttsService.pitch = pitch; }
+        })
+        .catch((_e: Object): void => {});
+      prefs.getString('tts_voice_person', '13')
+        .then((value: string): void => {
+          const person: number = parseInt(value, 10);
+          if (!isNaN(person)) {
+            this.ttsService.voicePerson = person;
+            if (person === 8) {
+              this.ttsService.language = 'en-US';
+            } else {
+              this.ttsService.language = 'zh-CN';
+            }
+          }
+        })
+        .catch((_e: Object): void => {});
+    } catch (_e) {}
+  }
+
   private persistSmartGrip(): void {
     try {
       const prefs = AppServices.getAppPreferences();
@@ -521,6 +581,30 @@ struct ChatPage {
       // 忽略注销失败
     }
     this.gripCallback = null;
+  }
+
+  private loadDeepSeekBalance(): void {
+    try {
+      const service = AppServices.getDeepSeekBalanceService();
+      service.isShowBalance().then((show: boolean): void => {
+        this.showDeepSeekBalance = show;
+        if (show) {
+          service.isDeepSeekProvider().then((isDs: boolean): void => {
+            if (isDs) {
+              service.fetchBalance().then((info): void => {
+                if (info !== null) {
+                  this.deepSeekBalanceText = info.totalBalance + ' ' + info.currency;
+                }
+              }).catch((): void => {
+              });
+            }
+          }).catch((): void => {
+          });
+        }
+      }).catch((): void => {
+      });
+    } catch (_e) {
+    }
   }
 
   private isSendButtonOnLeft(): boolean {
@@ -651,6 +735,8 @@ struct ChatPage {
     this.chatAppearancePanelVisible = false;
     // 关闭世界书面板
     this.statusPanelVisible = false;
+    // 关闭 TTS 引擎
+    this.ttsService.shutdown();
     this.cacheHitRatio = -1;
     this.cacheCachedTokens = 0;
     this.cachePromptTokens = 0;
@@ -898,8 +984,6 @@ struct ChatPage {
         // margin bottom 12vp + navigationBarHeight:避开系统手势条;
         // margin left/right 12vp:与页面其他内容对齐。
         Column() {
-          // v8.1: 紧凑上下文占用指示器(输入栏上方,点击打开上下文管理)
-          this.budgetIndicator()
           this.inputArea()
         }
         .width('100%')
@@ -908,7 +992,7 @@ struct ChatPage {
         // OFFSET 模式下输入栏未加 expandSafeArea(KEYBOARD),被系统上抬到键盘上方;
         // bottom 仅控制 inputArea 与 Column 底部的间距:
         // 键盘弹起时 12(系统已上抬,只需小间距);未弹起时 navigationBarHeight + 12(避让手势条)
-        .padding({ left: 12, right: 12, bottom: this.keyboardHeight > 0 ? 12 : this.navigationBarHeight + 12 })
+        .padding({ left: 12, right: 12, bottom: this.keyboardHeight > 0 ? 40 : this.navigationBarHeight + 40 })
         .hitTestBehavior(HitTestMode.Transparent)
 
         // ===== 弹窗层(覆盖在最上层) =====
@@ -1027,22 +1111,20 @@ struct ChatPage {
         this.handleBack();
       })
 
-      // 汉堡按钮(打开会话列表,仅 viewModel 就绪时显示)
-      if (this.viewModel !== null) {
-        Stack() {
-          SymbolGlyph($r('sys.symbol.line_3_horizontal'))
-            .fontSize(22)
-            .fontColor([ThemePalette.textPrimaryColor(this.effectiveTheme)])
-        }
-        .width(40)
-        .height(40)
-        .margin({ left: 4 })
-        .onClick(() => {
-          this.viewModel!.openSessionList();
-        })
+      // 上下文占用指示器(居中,点击打开上下文管理)
+      this.topBarBudgetIndicator()
+
+      // DeepSeek 余额指示器
+      if (this.showDeepSeekBalance && this.deepSeekBalanceText.length > 0) {
+        Text(this.deepSeekBalanceText)
+          .fontSize(10)
+          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+          .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+          .borderRadius(8)
+          .backgroundColor('rgba(128,128,128,0.15)')
+          .margin({ left: 4 })
       }
 
-      // 占位:让汉堡按钮和更多按钮分布在两侧(已按用户要求移除头像和角色名)
       Blank()
 
       // 显示按钮(打开气泡不透明度设置卡片)
@@ -2265,7 +2347,7 @@ struct ChatPage {
     Scroll(this.scroller) {
       Column() {
         LazyForEach(this.dataSource, (state: ChatMessageRenderState, _index: number) => {
-          if (state.role !== ChatRole.System) {
+          if (state.role !== ChatRole.System || state.senderType === 'narrator') {
             Column() {
               ChatMessageBubble({
                 renderState: state,
@@ -2280,7 +2362,22 @@ struct ChatPage {
                 onLongPress: (target: ChatMessage): void => {
                   this.actionSheetMsg = target;
                   this.showActionSheet = true;
-                }
+                },
+                onTtsPlay: this.ttsService.readMode !== TtsReadMode.Off
+                  ? (content: string): void => {
+                    if (this.ttsIsSpeaking) {
+                      this.ttsService.stop();
+                      this.ttsIsSpeaking = false;
+                    } else {
+                      this.ttsService.speak(content, (): void => {
+                        this.ttsIsSpeaking = false;
+                      }, (): void => {
+                        this.ttsIsSpeaking = true;
+                      });
+                      this.ttsIsSpeaking = true;
+                    }
+                  }
+                  : undefined
               })
 
               // 分支切换控件(仅 Assistant 非首条消息)
@@ -2344,7 +2441,7 @@ struct ChatPage {
         // 底部空白占位:高度等于悬浮输入栏占用空间(输入栏 56 + bottom padding 12 + navBar 12),
         // 让 scrollEdge(Bottom) 时最后一条消息显示在悬浮输入栏上方,不被遮挡。
         // 键盘弹起时输入栏上移到键盘上方,占位同步增加 keyboardHeight,避免最后一条消息被遮挡。
-        Blank().height(80 + this.navigationBarHeight + this.keyboardHeight)
+        Blank().height(120 + this.navigationBarHeight + this.keyboardHeight)
       }
       .width('100%')
       .padding({
@@ -2555,31 +2652,26 @@ struct ChatPage {
    * - 无统计数据时隐藏
    */
   @Builder
-  budgetIndicator() {
-    if (this.budgetViewModel !== null
-      && this.budgetStats !== null
-      && this.budgetViewModel!.effectiveAvailable > 0
-      && this.budgetStats!.totalInputTokens > 0) {
+  topBarBudgetIndicator() {
+    if (this.budgetViewModel !== null && this.budgetViewModel!.effectiveAvailable > 0) {
       Row() {
         Text(this.getBudgetIndicatorText())
-          .fontSize($r('app.float.app_font_caption'))
-          .fontColor(this.getBudgetIndicatorColor())
+          .fontSize(10)
+          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
           .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
         if (this.cacheHitRatio >= 0) {
           Text(' · ')
-            .fontSize($r('app.float.app_font_caption'))
+            .fontSize(10)
             .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
           Text(this.getCacheHitText())
-            .fontSize($r('app.float.app_font_caption'))
-            .fontColor(this.getCacheHitColor())
+            .fontSize(10)
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
             .maxLines(1)
         }
       }
-      .padding({ left: 12, right: 12, top: 4, bottom: 4 })
-      .margin({ bottom: 6 })
-      .borderRadius(12)
-      .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+      .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+      .borderRadius(8)
+      .backgroundColor('rgba(128,128,128,0.15)')
       .onClick(() => {
         this.navigateToContextBudget();
       })
@@ -2587,14 +2679,107 @@ struct ChatPage {
   }
 
   @Builder
+  budgetIndicator() {
+  }
+
+  @Builder
   inputArea() {
-    Row() {
+    Column() {
+      // AI 操作按钮行(仅空闲时显示)
+      if (this.viewModel !== null && !this.viewModel!.busy && !this.viewModel!.isGenerating) {
+        Row() {
+          Button({ type: ButtonType.Normal }) {
+            Text('🎭代写')
+              .fontSize(11)
+              .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+          }
+          .height(28)
+          .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+          .borderRadius(14)
+          .padding({ left: 10, right: 10 })
+          .margin({ right: 6 })
+          .onClick(() => {
+            if (this.viewModel !== null && !this.viewModel!.busy) {
+              this.viewModel!.impersonate();
+            }
+          })
+
+          Button({ type: ButtonType.Normal }) {
+            Text('⚡续写')
+              .fontSize(11)
+              .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+          }
+          .height(28)
+          .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+          .borderRadius(14)
+          .padding({ left: 10, right: 10 })
+          .margin({ right: 6 })
+          .onClick(() => {
+            if (this.viewModel !== null && !this.viewModel!.busy) {
+              this.viewModel!.autoContinue();
+            }
+          })
+
+          Button({ type: ButtonType.Normal }) {
+            Text(this.narratorModeActive ? '📖旁白✓' : '📖旁白')
+              .fontSize(11)
+              .fontColor(this.narratorModeActive
+                ? ThemePalette.accentColor(this.effectiveTheme)
+                : ThemePalette.textPrimaryColor(this.effectiveTheme))
+          }
+          .height(28)
+          .backgroundColor(this.narratorModeActive
+            ? '#205B7CFA'
+            : ThemePalette.surface2Color(this.effectiveTheme))
+          .borderRadius(14)
+          .padding({ left: 10, right: 10 })
+          .margin({ right: 6 })
+          .onClick(() => {
+            this.narratorModeActive = !this.narratorModeActive;
+          })
+
+          Button({ type: ButtonType.Normal }) {
+            Text('▶继续')
+              .fontSize(11)
+              .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+          }
+          .height(28)
+          .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+          .borderRadius(14)
+          .padding({ left: 10, right: 10 })
+          .margin({ right: 6 })
+          .onClick(() => {
+            if (this.viewModel !== null && !this.viewModel!.busy) {
+              this.viewModel!.continueGeneration();
+            }
+          })
+        }
+        .width('100%')
+        .justifyContent(FlexAlign.Start)
+        .padding({ left: 4, right: 4, bottom: 4 })
+      }
+
+      // 旁白模式标签
+      if (this.narratorModeActive) {
+        Row() {
+          Text('[旁白模式]')
+            .fontSize(10)
+            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+            .fontWeight(FontWeight.Bold)
+          Text(' 输入旁白叙述文本后发送')
+            .fontSize(10)
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+        }
+        .padding({ left: 12, bottom: 2 })
+      }
+
+      Row() {
       if (this.isSendButtonOnLeft()) {
         this.sendStopButton()
       }
 
       TextArea({
-        placeholder: $r('app.string.chat_input_placeholder'),
+        placeholder: this.narratorModeActive ? '输入旁白叙述…' : $r('app.string.chat_input_placeholder'),
         text: this.viewModel !== null ? this.viewModel!.inputText : ''
       })
         .fontSize($r('app.float.app_font_body'))
@@ -2617,7 +2802,12 @@ struct ChatPage {
           if (this.isBudgetExceeded()) {
             this.notifyBudgetBlocked();
           } else if (this.canSend() && this.viewModel !== null) {
-            this.viewModel!.send();
+            if (this.narratorModeActive) {
+              this.viewModel!.sendNarrator();
+              this.narratorModeActive = false;
+            } else {
+              this.viewModel!.send();
+            }
           }
           event?.keepEditableState();
         })
@@ -2639,7 +2829,12 @@ struct ChatPage {
               return true;
             }
             if (this.canSend() && this.viewModel !== null) {
-              this.viewModel!.send();
+              if (this.narratorModeActive) {
+                this.viewModel!.sendNarrator();
+                this.narratorModeActive = false;
+              } else {
+                this.viewModel!.send();
+              }
               return true;
             }
           }
@@ -2649,15 +2844,17 @@ struct ChatPage {
       if (!this.isSendButtonOnLeft()) {
         this.sendStopButton()
       }
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
     }
     .width('100%')
-    .alignItems(VerticalAlign.Center)
     .borderRadius(24)
     .border({ width: 0.5, color: ThemePalette.surface2Color(this.effectiveTheme) })
     .backgroundBlurStyle(BlurStyle.Regular, {
       policy: BlurStyleActivePolicy.ALWAYS_ACTIVE
     })
-    .padding({ left: 4, right: 4, top: 0, bottom: 0 })
+    .padding({ left: 4, right: 4, top: 4, bottom: 4 })
   }
 
   @Builder
@@ -2699,7 +2896,12 @@ struct ChatPage {
           return;
         }
         if (this.canSend() && this.viewModel !== null) {
-          this.viewModel!.send();
+          if (this.narratorModeActive) {
+            this.viewModel!.sendNarrator();
+            this.narratorModeActive = false;
+          } else {
+            this.viewModel!.send();
+          }
         }
       })
     }
@@ -3106,7 +3308,10 @@ struct ChatPage {
    * v8.1: 当前占用比例(0~1+,无 stats 时返回 0)。
    */
   private getBudgetUsageRatio(): number {
-    if (this.budgetViewModel === null || this.budgetStats === null) {
+    if (this.budgetViewModel === null) {
+      return 0;
+    }
+    if (this.budgetStats === null) {
       return 0;
     }
     const available: number = this.budgetViewModel!.effectiveAvailable;
@@ -3120,10 +3325,10 @@ struct ChatPage {
    * v8.1: 紧凑指示器文本,如 "12.4K / 32K · 39%"。
    */
   private getBudgetIndicatorText(): string {
-    if (this.budgetViewModel === null || this.budgetStats === null) {
+    if (this.budgetViewModel === null) {
       return '';
     }
-    const used: number = this.budgetStats!.totalInputTokens;
+    const used: number = this.budgetStats !== null ? this.budgetStats!.totalInputTokens : 0;
     const available: number = this.budgetViewModel!.effectiveAvailable;
     const ratio: number = this.getBudgetUsageRatio();
     const percent: number = Math.round(ratio * 100);
@@ -3166,16 +3371,6 @@ struct ChatPage {
    * - Exceeded(>100%):app_danger
    */
   private getBudgetIndicatorColor(): ResourceColor {
-    if (this.budgetViewModel === null || this.budgetStats === null) {
-      return ThemePalette.textTertiaryColor(this.effectiveTheme);
-    }
-    const ratio: number = this.getBudgetUsageRatio();
-    if (ratio >= 0.9) {
-      return $r('app.color.app_danger');
-    }
-    if (ratio >= 0.7) {
-      return ThemePalette.accentColor(this.effectiveTheme);
-    }
     return ThemePalette.textTertiaryColor(this.effectiveTheme);
   }
 
@@ -3188,12 +3383,6 @@ struct ChatPage {
   }
 
   private getCacheHitColor(): ResourceColor {
-    if (this.cacheHitRatio >= 0.7) {
-      return ThemePalette.forTheme(this.effectiveTheme).success;
-    }
-    if (this.cacheHitRatio >= 0.3) {
-      return ThemePalette.accentColor(this.effectiveTheme);
-    }
     return ThemePalette.textTertiaryColor(this.effectiveTheme);
   }
 
@@ -3411,16 +3600,43 @@ struct ChatPage {
     if (chatId === undefined || chatId.length === 0) {
       return;
     }
+    if (this.budgetViewModel!.chatId !== chatId) {
+      this.budgetViewModel!.initialize(chatId!).then((): void => {
+        this.doRefreshBudgetSnapshot(chatId!);
+      }).catch((): void => {
+      });
+      return;
+    }
+    this.doRefreshBudgetSnapshot(chatId);
+  }
+
+  private doRefreshBudgetSnapshot(chatId: string): void {
+    let requestMessages = this.viewModel!.getLastBuiltRequestMessages();
+    if (requestMessages === undefined) {
+      this.viewModel!.buildEstimateMessages().then((): void => {
+        requestMessages = this.viewModel!.getLastBuiltRequestMessages();
+        const budget = this.viewModel!.getLastTokenBudget();
+        const store = ContextBudgetSnapshotStore.getInstance();
+        store.setSnapshot({
+          chatId: chatId,
+          budget: budget,
+          requestMessages: requestMessages
+        });
+        this.budgetViewModel!.refreshFromSnapshot(budget, requestMessages).then((): void => {
+          this.budgetStats = this.budgetViewModel!.stats;
+        }).catch((): void => {
+        });
+      }).catch((): void => {
+      });
+      return;
+    }
     const budget = this.viewModel!.getLastTokenBudget();
-    const requestMessages = this.viewModel!.getLastBuiltRequestMessages();
-    // 写入 SnapshotStore(无论是否为空,都更新最新状态)
     const store = ContextBudgetSnapshotStore.getInstance();
     store.setSnapshot({
       chatId: chatId,
       budget: budget,
       requestMessages: requestMessages
     });
-    // 异步刷新 VM 统计(避免阻塞 UI)
     this.budgetViewModel!.refreshFromSnapshot(budget, requestMessages).then((): void => {
       this.budgetStats = this.budgetViewModel!.stats;
     }).catch((e: Error): void => {

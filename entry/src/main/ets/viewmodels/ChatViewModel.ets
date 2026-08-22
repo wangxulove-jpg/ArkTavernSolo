@@ -287,6 +287,91 @@ export class ChatViewModel {
     this.flushMessagesNow();
   }
 
+  async impersonate(): Promise<void> {
+    if (this.disposed || this.busy) {
+      return;
+    }
+    this.errorMessage = '';
+    this.statusMessage = '';
+    this.isGenerating = true;
+    this.canRegenerate = false;
+    this.userScrolledUp = false;
+    const callbacks: ChatServiceCallbacks = this.createCallbacks();
+    try {
+      await this.chatService.impersonate(callbacks);
+    } catch (e) {
+      this.isGenerating = false;
+      this.errorMessage = this.toUserError(String(e));
+      this.statusMessage = '';
+      Logger.error(LOG_TAG, 'impersonate failed: ' + String(e));
+    }
+  }
+
+  async autoContinue(): Promise<void> {
+    if (this.disposed || this.busy) {
+      return;
+    }
+    this.errorMessage = '';
+    this.statusMessage = '';
+    this.isGenerating = true;
+    this.canRegenerate = false;
+    this.userScrolledUp = false;
+    const callbacks: ChatServiceCallbacks = this.createCallbacks();
+    try {
+      await this.chatService.autoContinue(callbacks);
+    } catch (e) {
+      this.isGenerating = false;
+      this.errorMessage = this.toUserError(String(e));
+      this.statusMessage = '';
+      Logger.error(LOG_TAG, 'autoContinue failed: ' + String(e));
+    }
+  }
+
+  async sendNarrator(): Promise<void> {
+    if (this.disposed || !this.canSend) {
+      return;
+    }
+    const content: string = this.inputText;
+    if (content.trim().length === 0) {
+      return;
+    }
+    this.errorMessage = '';
+    this.statusMessage = '';
+    this.isGenerating = true;
+    this.canRegenerate = false;
+    this.userScrolledUp = false;
+    const callbacks: ChatServiceCallbacks = this.createCallbacks();
+    try {
+      await this.chatService.narratorMessage(content, callbacks);
+      this.inputText = '';
+    } catch (e) {
+      this.isGenerating = false;
+      this.errorMessage = this.toUserError(String(e));
+      this.statusMessage = '';
+      Logger.error(LOG_TAG, 'sendNarrator failed: ' + String(e));
+    }
+  }
+
+  async continueGeneration(): Promise<void> {
+    if (this.disposed || this.busy) {
+      return;
+    }
+    this.errorMessage = '';
+    this.statusMessage = '';
+    this.isGenerating = true;
+    this.canRegenerate = false;
+    this.userScrolledUp = false;
+    const callbacks: ChatServiceCallbacks = this.createCallbacks();
+    try {
+      await this.chatService.continueGeneration(callbacks);
+    } catch (e) {
+      this.isGenerating = false;
+      this.errorMessage = this.toUserError(String(e));
+      this.statusMessage = '';
+      Logger.error(LOG_TAG, 'continueGeneration failed: ' + String(e));
+    }
+  }
+
   clear(): void {
     this.chatService.clearConversation();
     this.messages = [];
@@ -944,6 +1029,10 @@ export class ChatViewModel {
 
   getLastBuiltRequestMessages(): ChatMessage[] | undefined {
     return this.chatService.getLastBuiltRequestMessages();
+  }
+
+  async buildEstimateMessages(): Promise<void> {
+    await this.chatService.buildEstimateMessages();
   }
 
   getLastTokenBudget(): TokenBudget | undefined {

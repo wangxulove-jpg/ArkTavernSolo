@@ -44,5 +44,7 @@ export enum ChatMessageSource {
   /** Persona 描述,角色定义之后(受保护,Phase 2A) */
   PersonaAfter = 'personaAfter',
   /** W5C2: 跨会话上下文(摘要+记忆,受保护,不进入聊天历史) */
-  CrossSessionContext = 'crossSessionContext'
+  CrossSessionContext = 'crossSessionContext',
+  /** 旁白叙述指令(senderType='narrator'的System消息,受保护) */
+  NarratorInstruction = 'narratorInstruction'
 }

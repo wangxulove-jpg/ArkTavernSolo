@@ -28,7 +28,7 @@ import { Logger } from '../utils/Logger';
  * - 网络/数据库/服务
  */
 
-import { ChatMessage, ChatMessageStatus } from '../models/ChatMessage';
+import { ChatMessage, ChatMessageStatus, MessageSenderType } from '../models/ChatMessage';
 import { ChatRole } from '../models/ChatRole';
 import { CharacterImageView } from './CharacterImageView';
 import { ChatRichText, ChatSenderType } from './ChatRichText';
@@ -52,6 +52,8 @@ export struct ChatMessageBubble {
   onLongPress?: (msg: ChatMessage) => void;
   /** 点击 Assistant 头像回调(可选) */
   onAvatarClick?: () => void;
+  /** TTS 朗读回调(可选,点击气泡内播放按钮) */
+  onTtsPlay?: (content: string) => void;
   /** 聊天文本样式设置(v11 富文本,@Prop 确保父组件样式变化时同步) */
   @Prop settings: ChatTextStyle | null = null;
   /** 发送者角色 ID(用于角色独立颜色) */
@@ -112,13 +114,20 @@ export struct ChatMessageBubble {
   }
 
   build() {
-    if (this.renderState.role === ChatRole.System) {
-      this.systemBubble()
-    } else if (this.renderState.role === ChatRole.User) {
-      this.userBubble()
-    } else {
-      this.assistantBubble()
+    Column() {
+      if (this.renderState.senderType === 'narrator') {
+        this.narratorBubble()
+      } else if (this.renderState.senderType === 'character' && this.renderState.role === ChatRole.User) {
+        this.impersonateBubble()
+      } else if (this.renderState.role === ChatRole.System) {
+        this.systemBubble()
+      } else if (this.renderState.role === ChatRole.User) {
+        this.userBubble()
+      } else {
+        this.assistantBubble()
+      }
     }
+    .width('100%')
   }
 
   aboutToUpdate(): void {
@@ -286,6 +295,27 @@ export struct ChatMessageBubble {
           .borderRadius(8)
           .margin({ top: 6 })
         }
+
+        // TTS 朗读按钮(仅完成状态且非流式时显示)
+        if (this.renderState.status === ChatMessageStatus.Completed
+          && !this.renderState.isStreaming && this.onTtsPlay !== undefined) {
+          Row() {
+            SymbolGlyph($r('sys.symbol.speaker_wave_2'))
+              .fontSize(12)
+              .fontColor([ThemePalette.textTertiaryColor(this.effectiveTheme)])
+            Text(' 朗读')
+              .fontSize(10)
+              .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+          }
+          .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+          .borderRadius(8)
+          .margin({ top: 4 })
+          .onClick(() => {
+            if (this.onTtsPlay !== undefined) {
+              this.onTtsPlay!(this.renderState.displayContent);
+            }
+          })
+        }
       }
       .backgroundColor(this.computeAssistantBubbleColor())
       .border({
@@ -310,6 +340,152 @@ export struct ChatMessageBubble {
         color: $r('app.color.chat_assistant_shadow'),
         offsetX: 0,
         offsetY: 2
+      })
+      .gesture(
+        LongPressGesture()
+          .onAction(() => {
+            if (this.onLongPress !== undefined) {
+              this.onLongPress!(this.renderState.message);
+            }
+          })
+      )
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+    .margin({ top: 8, bottom: 8 })
+  }
+
+  /** 旁白消息:居中、斜体、灰色调、无头像、装饰线 */
+  @Builder
+  narratorBubble() {
+    Column() {
+      Row() {
+        Row()
+          .width(24)
+          .height(1)
+          .backgroundColor('#80808040')
+        Text('NARRATOR')
+          .fontSize(9)
+          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+          .letterSpacing(1.5)
+          .margin({ left: 8, right: 8 })
+        Row()
+          .width(24)
+          .height(1)
+          .backgroundColor('#80808040')
+      }
+      .justifyContent(FlexAlign.Center)
+      .margin({ bottom: 4 })
+
+      Column() {
+        ChatRichText({
+          content: this.renderState.displayContent,
+          senderType: 'narrator' as ChatSenderType,
+          senderCharacterId: '',
+          isStreaming: this.renderState.isStreaming,
+          settings: this.settings,
+          colorTheme: this.colorTheme,
+          selectable: true
+        })
+      }
+      .constraintSize({ maxWidth: '80%' })
+      .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+      .backgroundColor('#20808080')
+      .borderRadius(8)
+      .gesture(
+        LongPressGesture()
+          .onAction(() => {
+            if (this.onLongPress !== undefined) {
+              this.onLongPress!(this.renderState.message);
+            }
+          })
+      )
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Center)
+    .margin({ top: 6, bottom: 6 })
+  }
+
+  /** AI代写消息:左对齐、角色头像、淡蓝背景+左侧蓝色竖线+[U]标签 */
+  @Builder
+  impersonateBubble() {
+    Column() {
+      if (this.showAvatar) {
+        Row() {
+          CharacterImageView({
+            imageUri: this.characterAvatarUri,
+            fallbackName: this.characterName,
+            imgWidth: 28,
+            imgHeight: 28,
+            imgBorderRadius: 14,
+            displayMode: 'thumbnail',
+            objectFit: ImageFit.Cover
+          })
+          Text('[U]')
+            .fontSize(9)
+            .fontColor('#5B7CFA')
+            .fontWeight(FontWeight.Bold)
+            .margin({ left: 6 })
+          Text(this.characterName)
+            .fontSize(11)
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            .margin({ left: 4 })
+        }
+        .margin({ bottom: 4 })
+      }
+
+      Column() {
+        ChatRichText({
+          content: this.renderState.displayContent.length > 0 ? this.renderState.displayContent : ' ',
+          senderType: 'user' as ChatSenderType,
+          senderCharacterId: '',
+          isStreaming: this.renderState.isStreaming,
+          settings: this.settings,
+          colorTheme: this.colorTheme,
+          selectable: true
+        })
+
+        if (this.renderState.isStreaming && this.renderState.content.length > 0) {
+          Text('▍')
+            .fontSize($r('app.float.app_font_body'))
+            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+            .margin({ top: 2 })
+        }
+
+        if (this.renderState.isStreaming && this.renderState.content.length === 0) {
+          Row() {
+            Text('代写中')
+              .fontSize($r('app.float.app_font_caption'))
+              .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+              .fontStyle(FontStyle.Italic)
+            Text('...')
+              .fontSize($r('app.float.app_font_caption'))
+              .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+              .margin({ left: 2 })
+          }
+          .margin({ top: 2 })
+        }
+
+        if (this.renderState.status === ChatMessageStatus.Failed) {
+          Row() {
+            Text('⚠ 代写失败')
+              .fontSize(11)
+              .fontColor($r('app.color.app_danger'))
+          }
+          .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+          .backgroundColor($r('app.color.chat_status_failed_bg'))
+          .borderRadius(8)
+          .margin({ top: 6 })
+        }
+      }
+      .constraintSize({ maxWidth: '88%' })
+      .backgroundColor('#145B7CFA')
+      .borderRadius({ topLeft: 16, topRight: 16, bottomLeft: 16, bottomRight: 6 })
+      .padding({
+        left: $r('app.float.chat_bubble_padding_h'),
+        right: $r('app.float.chat_bubble_padding_h'),
+        top: $r('app.float.chat_bubble_padding_v'),
+        bottom: $r('app.float.chat_bubble_padding_v')
       })
       .gesture(
         LongPressGesture()

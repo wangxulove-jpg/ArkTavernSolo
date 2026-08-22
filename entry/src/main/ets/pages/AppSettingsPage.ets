@@ -17,6 +17,7 @@ import { ThemePalette, ThemeColors } from '../theme/ThemePalette';
 import { GLOBAL_USER_NAME_KEY } from '../services/ChatService';
 import { motion } from '@kit.MultimodalAwarenessKit';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { TtsReadMode } from '../models/TtsReadMode';
 
 /** 主题选项模型(供构建器使用) */
 interface ThemeOption {
@@ -48,6 +49,16 @@ struct AppSettingsPage {
   @State smartGripEnabled: boolean = false;
   /** 设备是否支持智感握姿 */
   @State smartGripSupported: boolean = true;
+  /** TTS 朗读模式 */
+  @State ttsReadMode: number = 0;
+  /** TTS 语速 */
+  @State ttsSpeed: number = 1.0;
+  /** TTS 音量 */
+  @State ttsVolume: number = 1.0;
+  /** TTS 音调 */
+  @State ttsPitch: number = 1.0;
+  /** TTS 音色 person */
+  @State ttsVoicePerson: number = 13;
 
   private preferences: AppPreferences | null = null;
   private themeManager: ThemeManager | null = null;
@@ -60,6 +71,7 @@ struct AppSettingsPage {
       this.loadGlobalUserName();
       this.loadSendButtonSettings();
       this.checkGripSupport();
+      this.loadTtsSettings();
     }).catch(() => {
       this.errorMessage = 'AppServices 初始化失败';
       this.isLoading = false;
@@ -149,6 +161,89 @@ struct AppSettingsPage {
     } catch (_e) {
       this.smartGripSupported = false;
     }
+  }
+
+  private async loadTtsSettings(): Promise<void> {
+    if (this.preferences === null) {
+      return;
+    }
+    try {
+      const mode: string = await this.preferences.getString('tts_mode', '0');
+      this.ttsReadMode = parseInt(mode, 10);
+      if (isNaN(this.ttsReadMode)) {
+        this.ttsReadMode = 0;
+      }
+      const speed: string = await this.preferences.getString('tts_speed', '1.0');
+      this.ttsSpeed = parseFloat(speed);
+      if (isNaN(this.ttsSpeed)) {
+        this.ttsSpeed = 1.0;
+      }
+      const volume: string = await this.preferences.getString('tts_volume', '1.0');
+      this.ttsVolume = parseFloat(volume);
+      if (isNaN(this.ttsVolume)) {
+        this.ttsVolume = 1.0;
+      }
+      const pitch: string = await this.preferences.getString('tts_pitch', '1.0');
+      this.ttsPitch = parseFloat(pitch);
+      if (isNaN(this.ttsPitch)) {
+        this.ttsPitch = 1.0;
+      }
+      const person: string = await this.preferences.getString('tts_voice_person', '13');
+      this.ttsVoicePerson = parseInt(person, 10);
+      if (isNaN(this.ttsVoicePerson)) {
+        this.ttsVoicePerson = 13;
+      }
+    } catch (_e) {}
+  }
+
+  private async saveTtsMode(mode: number): Promise<void> {
+    if (this.preferences === null) {
+      return;
+    }
+    this.ttsReadMode = mode;
+    try {
+      await this.preferences.putString('tts_mode', String(mode));
+    } catch (_e) {}
+  }
+
+  private async saveTtsSpeed(speed: number): Promise<void> {
+    if (this.preferences === null) {
+      return;
+    }
+    this.ttsSpeed = speed;
+    try {
+      await this.preferences.putString('tts_speed', String(speed));
+    } catch (_e) {}
+  }
+
+  private async saveTtsVolume(volume: number): Promise<void> {
+    if (this.preferences === null) {
+      return;
+    }
+    this.ttsVolume = volume;
+    try {
+      await this.preferences.putString('tts_volume', String(volume));
+    } catch (_e) {}
+  }
+
+  private async saveTtsPitch(pitch: number): Promise<void> {
+    if (this.preferences === null) {
+      return;
+    }
+    this.ttsPitch = pitch;
+    try {
+      await this.preferences.putString('tts_pitch', String(pitch));
+    } catch (_e) {}
+  }
+
+  private async saveTtsVoicePerson(person: number): Promise<void> {
+    if (this.preferences === null) {
+      return;
+    }
+    this.ttsVoicePerson = person;
+    try {
+      await this.preferences.putString('tts_voice_person', String(person));
+    } catch (_e) {}
   }
 
   /** 根据模式获取标题资源 */
@@ -457,6 +552,142 @@ struct AppSettingsPage {
               .margin({ top: 12 })
               .alignItems(VerticalAlign.Center)
             }
+
+            // ===== 语音朗读 (TTS) 分区 =====
+            Text('语音朗读')
+              .fontSize($r('app.float.app_font_subtitle'))
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.page_primary_text'))
+              .width('100%')
+              .margin({ top: 24, bottom: 12 })
+
+            Text('使用系统语音引擎朗读角色回复')
+              .fontSize($r('app.float.app_font_caption'))
+              .fontColor($r('app.color.page_secondary_text'))
+              .width('100%')
+              .margin({ bottom: 8 })
+
+            // 朗读模式
+            Row() {
+              Text('朗读模式')
+                .fontSize($r('app.float.app_font_body'))
+                .fontColor($r('app.color.page_primary_text'))
+                .layoutWeight(1)
+              Row() {
+                Button('关闭')
+                  .fontSize(12)
+                  .height(28)
+                  .backgroundColor(this.ttsReadMode === TtsReadMode.Off
+                    ? $r('app.color.app_accent') : Color.Transparent)
+                  .fontColor(this.ttsReadMode === TtsReadMode.Off
+                    ? $r('app.color.app_on_accent') : $r('app.color.page_secondary_text'))
+                  .borderRadius(14)
+                  .padding({ left: 10, right: 10 })
+                  .onClick(() => { this.saveTtsMode(TtsReadMode.Off); })
+                Button('全文')
+                  .fontSize(12)
+                  .height(28)
+                  .backgroundColor(this.ttsReadMode === TtsReadMode.All
+                    ? $r('app.color.app_accent') : Color.Transparent)
+                  .fontColor(this.ttsReadMode === TtsReadMode.All
+                    ? $r('app.color.app_on_accent') : $r('app.color.page_secondary_text'))
+                  .borderRadius(14)
+                  .padding({ left: 10, right: 10 })
+                  .onClick(() => { this.saveTtsMode(TtsReadMode.All); })
+                Button('仅对白')
+                  .fontSize(12)
+                  .height(28)
+                  .backgroundColor(this.ttsReadMode === TtsReadMode.QuotesOnly
+                    ? $r('app.color.app_accent') : Color.Transparent)
+                  .fontColor(this.ttsReadMode === TtsReadMode.QuotesOnly
+                    ? $r('app.color.app_on_accent') : $r('app.color.page_secondary_text'))
+                  .borderRadius(14)
+                  .padding({ left: 10, right: 10 })
+                  .onClick(() => { this.saveTtsMode(TtsReadMode.QuotesOnly); })
+              }
+            }
+            .width('100%')
+            .padding({ left: 12, right: 12, top: 12, bottom: 12 })
+            .borderRadius($r('app.float.app_radius_md'))
+            .backgroundColor($r('app.color.app_surface_1'))
+            .border({ width: 1, color: $r('app.color.app_divider') })
+            .alignItems(VerticalAlign.Center)
+
+            // 语速
+            Row() {
+              Text('语速')
+                .fontSize($r('app.float.app_font_body'))
+                .fontColor($r('app.color.page_primary_text'))
+                .layoutWeight(1)
+              Text(this.ttsSpeed.toFixed(1))
+                .fontSize($r('app.float.app_font_body'))
+                .fontColor($r('app.color.page_secondary_text'))
+                .width(30)
+                .textAlign(TextAlign.End)
+            }
+            .width('100%')
+            .padding({ left: 12, right: 12, top: 8, bottom: 0 })
+
+            Slider({
+              value: this.ttsSpeed,
+              min: 0.5,
+              max: 2.0,
+              step: 0.1,
+              style: SliderStyle.OutSet
+            })
+              .width('100%')
+              .padding({ left: 12, right: 12 })
+              .trackColor($r('app.color.app_divider'))
+              .selectedColor($r('app.color.app_accent'))
+              .onChange((value: number) => { this.saveTtsSpeed(value); })
+
+            // 音色
+            Row() {
+              Text('音色')
+                .fontSize($r('app.float.app_font_body'))
+                .fontColor($r('app.color.page_primary_text'))
+                .layoutWeight(1)
+              Text(this.ttsVoicePerson === 21 ? '凌飞哲(男)' : this.ttsVoicePerson === 8 ? 'Laura(en)' : '聆小珊(女)')
+                .fontSize($r('app.float.app_font_body'))
+                .fontColor($r('app.color.page_secondary_text'))
+            }
+            .width('100%')
+            .padding({ left: 12, right: 12, top: 8, bottom: 0 })
+
+            Row() {
+              Button('聆小珊(女)')
+                .fontSize(12)
+                .height(28)
+                .backgroundColor(this.ttsVoicePerson === 13
+                  ? $r('app.color.app_accent') : Color.Transparent)
+                .fontColor(this.ttsVoicePerson === 13
+                  ? $r('app.color.app_on_accent') : $r('app.color.page_secondary_text'))
+                .borderRadius(14)
+                .padding({ left: 10, right: 10 })
+                .onClick(() => { this.saveTtsVoicePerson(13); })
+              Button('凌飞哲(男)')
+                .fontSize(12)
+                .height(28)
+                .backgroundColor(this.ttsVoicePerson === 21
+                  ? $r('app.color.app_accent') : Color.Transparent)
+                .fontColor(this.ttsVoicePerson === 21
+                  ? $r('app.color.app_on_accent') : $r('app.color.page_secondary_text'))
+                .borderRadius(14)
+                .padding({ left: 10, right: 10 })
+                .onClick(() => { this.saveTtsVoicePerson(21); })
+              Button('Laura(en)')
+                .fontSize(12)
+                .height(28)
+                .backgroundColor(this.ttsVoicePerson === 8
+                  ? $r('app.color.app_accent') : Color.Transparent)
+                .fontColor(this.ttsVoicePerson === 8
+                  ? $r('app.color.app_on_accent') : $r('app.color.page_secondary_text'))
+                .borderRadius(14)
+                .padding({ left: 10, right: 10 })
+                .onClick(() => { this.saveTtsVoicePerson(8); })
+            }
+            .width('100%')
+            .padding({ left: 12, right: 12, top: 4, bottom: 12 })
           }
           .width('100%')
           .padding({
