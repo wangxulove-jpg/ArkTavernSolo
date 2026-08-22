@@ -117,8 +117,6 @@ export struct ChatMessageBubble {
     Column() {
       if (this.renderState.senderType === 'narrator') {
         this.narratorBubble()
-      } else if (this.renderState.senderType === 'character' && this.renderState.role === ChatRole.User) {
-        this.impersonateBubble()
       } else if (this.renderState.role === ChatRole.System) {
         this.systemBubble()
       } else if (this.renderState.role === ChatRole.User) {
@@ -406,98 +404,4 @@ export struct ChatMessageBubble {
     .margin({ top: 6, bottom: 6 })
   }
 
-  /** AI代写消息:左对齐、角色头像、淡蓝背景+左侧蓝色竖线+[U]标签 */
-  @Builder
-  impersonateBubble() {
-    Column() {
-      if (this.showAvatar) {
-        Row() {
-          CharacterImageView({
-            imageUri: this.characterAvatarUri,
-            fallbackName: this.characterName,
-            imgWidth: 28,
-            imgHeight: 28,
-            imgBorderRadius: 14,
-            displayMode: 'thumbnail',
-            objectFit: ImageFit.Cover
-          })
-          Text('[U]')
-            .fontSize(9)
-            .fontColor('#5B7CFA')
-            .fontWeight(FontWeight.Bold)
-            .margin({ left: 6 })
-          Text(this.characterName)
-            .fontSize(11)
-            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-            .margin({ left: 4 })
-        }
-        .margin({ bottom: 4 })
-      }
-
-      Column() {
-        ChatRichText({
-          content: this.renderState.displayContent.length > 0 ? this.renderState.displayContent : ' ',
-          senderType: 'user' as ChatSenderType,
-          senderCharacterId: '',
-          isStreaming: this.renderState.isStreaming,
-          settings: this.settings,
-          colorTheme: this.colorTheme,
-          selectable: true
-        })
-
-        if (this.renderState.isStreaming && this.renderState.content.length > 0) {
-          Text('▍')
-            .fontSize($r('app.float.app_font_body'))
-            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-            .margin({ top: 2 })
-        }
-
-        if (this.renderState.isStreaming && this.renderState.content.length === 0) {
-          Row() {
-            Text('代写中')
-              .fontSize($r('app.float.app_font_caption'))
-              .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-              .fontStyle(FontStyle.Italic)
-            Text('...')
-              .fontSize($r('app.float.app_font_caption'))
-              .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-              .margin({ left: 2 })
-          }
-          .margin({ top: 2 })
-        }
-
-        if (this.renderState.status === ChatMessageStatus.Failed) {
-          Row() {
-            Text('⚠ 代写失败')
-              .fontSize(11)
-              .fontColor($r('app.color.app_danger'))
-          }
-          .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-          .backgroundColor($r('app.color.chat_status_failed_bg'))
-          .borderRadius(8)
-          .margin({ top: 6 })
-        }
-      }
-      .constraintSize({ maxWidth: '88%' })
-      .backgroundColor('#145B7CFA')
-      .borderRadius({ topLeft: 16, topRight: 16, bottomLeft: 16, bottomRight: 6 })
-      .padding({
-        left: $r('app.float.chat_bubble_padding_h'),
-        right: $r('app.float.chat_bubble_padding_h'),
-        top: $r('app.float.chat_bubble_padding_v'),
-        bottom: $r('app.float.chat_bubble_padding_v')
-      })
-      .gesture(
-        LongPressGesture()
-          .onAction(() => {
-            if (this.onLongPress !== undefined) {
-              this.onLongPress!(this.renderState.message);
-            }
-          })
-      )
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
-    .margin({ top: 8, bottom: 8 })
-  }
 }

@@ -34,6 +34,7 @@ import { MessageSwipeSummary, MAX_SWIPE_CANDIDATES } from '../models/MessageSwip
 import { MessageSwipeControls } from '../components/MessageSwipeControls';
 import { HistoricalMessageEditDialog } from '../components/HistoricalMessageEditDialog';
 import { ChatMessageBubble } from '../components/ChatMessageBubble';
+import { ImpersonateCandidatesPanel } from '../components/ImpersonateCandidatesPanel';
 import { ChatMessageDataSource } from '../components/ChatMessageDataSource';
 import { ChatMessageActionSheet, MessageAction } from '../components/ChatMessageActionSheet';
 import { ChatMoreMenuSheet } from '../components/ChatMoreMenuSheet';
@@ -859,7 +860,7 @@ struct ChatPage {
                     ['#FF000000', 1.0]
                   ]
                 })
-                .hitTestBehavior(HitTestMode.Transparent)
+        .hitTestBehavior(HitTestMode.None)
                 .blendMode(BlendMode.DST_IN)
                 .position({ x: 0, y: 0 })
             }
@@ -984,6 +985,25 @@ struct ChatPage {
         // margin bottom 12vp + navigationBarHeight:避开系统手势条;
         // margin left/right 12vp:与页面其他内容对齐。
         Column() {
+          if (this.viewModel !== null
+            && (this.viewModel!.impersonateCandidates.length > 0
+              || this.viewModel!.isImpersonateGenerating)) {
+            ImpersonateCandidatesPanel({
+              candidates: this.viewModel!.impersonateCandidates,
+              isGenerating: this.viewModel!.isImpersonateGenerating,
+              onSelect: (index: number): void => {
+                if (this.viewModel !== null) {
+                  this.viewModel!.selectImpersonateCandidate(index);
+                }
+              },
+              onDismiss: (): void => {
+                if (this.viewModel !== null) {
+                  this.viewModel!.dismissImpersonateCandidates();
+                }
+              }
+            })
+          }
+
           this.inputArea()
         }
         .width('100%')
@@ -2441,7 +2461,11 @@ struct ChatPage {
         // 底部空白占位:高度等于悬浮输入栏占用空间(输入栏 56 + bottom padding 12 + navBar 12),
         // 让 scrollEdge(Bottom) 时最后一条消息显示在悬浮输入栏上方,不被遮挡。
         // 键盘弹起时输入栏上移到键盘上方,占位同步增加 keyboardHeight,避免最后一条消息被遮挡。
-        Blank().height(120 + this.navigationBarHeight + this.keyboardHeight)
+        // 代写候选面板出现时额外增加高度,避免面板遮挡最后一条消息。
+        Blank().height(120 + this.navigationBarHeight + this.keyboardHeight
+          + (this.viewModel !== null
+            && (this.viewModel!.impersonateCandidates.length > 0
+              || this.viewModel!.isImpersonateGenerating) ? 150 : 0))
       }
       .width('100%')
       .padding({

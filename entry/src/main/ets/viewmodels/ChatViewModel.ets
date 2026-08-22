@@ -32,6 +32,7 @@ import { Character } from '../models/Character';
 import { CharacterService } from '../services/CharacterService';
 import { PromptPresetService } from '../services/PromptPresetService';
 import { PromptPreset } from '../models/PromptPreset';
+import { ImpersonateCandidate } from '../models/ImpersonateCandidate';
 import { Logger } from '../utils/Logger';
 import { MessageSwipeSummary } from '../models/MessageSwipe';
 import { TokenBudget } from '../models/TokenBudget';
@@ -92,6 +93,10 @@ export class ChatViewModel {
   isSwipeOperating: boolean = false;
   swipeError: string = '';
 
+  // ===== 代写候选状态 =====
+  impersonateCandidates: ImpersonateCandidate[] = [];
+  isImpersonateGenerating: boolean = false;
+
   // ===== T-4.5 会话列表状态 =====
   sessions: Chat[] = [];
   showSessionList: boolean = false;
@@ -151,7 +156,8 @@ export class ChatViewModel {
   }
 
   get busy(): boolean {
-    return this.isGenerating || this.isSwipeOperating || this.isBranchOperating;
+    return this.isGenerating || this.isSwipeOperating || this.isBranchOperating
+      || this.isImpersonateGenerating;
   }
 
   async initialize(characterId?: string, forceNew: boolean = false): Promise<void> {
@@ -293,18 +299,35 @@ export class ChatViewModel {
     }
     this.errorMessage = '';
     this.statusMessage = '';
-    this.isGenerating = true;
-    this.canRegenerate = false;
-    this.userScrolledUp = false;
-    const callbacks: ChatServiceCallbacks = this.createCallbacks();
+    this.impersonateCandidates = [];
+    this.isImpersonateGenerating = true;
     try {
-      await this.chatService.impersonate(callbacks);
+      const candidates: ImpersonateCandidate[] =
+        await this.chatService.generateImpersonateCandidates();
+      Logger.info(LOG_TAG, 'impersonate got candidates: ' + candidates.length);
+      for (let i = 0; i < candidates.length; i++) {
+        Logger.info(LOG_TAG, '  candidate[' + i + ']: ' + candidates[i].content);
+      }
+      this.impersonateCandidates = candidates;
+      this.isImpersonateGenerating = false;
     } catch (e) {
-      this.isGenerating = false;
+      this.isImpersonateGenerating = false;
       this.errorMessage = this.toUserError(String(e));
       this.statusMessage = '';
       Logger.error(LOG_TAG, 'impersonate failed: ' + String(e));
     }
+  }
+
+  selectImpersonateCandidate(index: number): void {
+    if (index < 0 || index >= this.impersonateCandidates.length) {
+      return;
+    }
+    this.inputText = this.impersonateCandidates[index].content;
+    this.impersonateCandidates = [];
+  }
+
+  dismissImpersonateCandidates(): void {
+    this.impersonateCandidates = [];
   }
 
   async autoContinue(): Promise<void> {

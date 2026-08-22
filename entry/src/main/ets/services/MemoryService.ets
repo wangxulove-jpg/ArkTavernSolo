@@ -1065,8 +1065,16 @@ export class MemoryService {
     const parts: string[] = [];
     for (let i = 0; i < messages.length; i++) {
       const msg: ChatMessage = messages[i];
-      const role: string = msg.role === ChatRole.User ? '用户' :
-        msg.role === ChatRole.Assistant ? '角色' : '系统';
+      let role: string;
+      if (msg.senderType === 'narrator') {
+        role = '旁白';
+      } else if (msg.role === ChatRole.User) {
+        role = '用户';
+      } else if (msg.role === ChatRole.Assistant) {
+        role = '角色';
+      } else {
+        role = '系统';
+      }
       parts.push(role + ': ' + msg.content);
     }
     return parts.join('\n');
