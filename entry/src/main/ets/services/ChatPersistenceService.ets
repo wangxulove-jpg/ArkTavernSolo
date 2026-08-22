@@ -437,6 +437,19 @@ export class ChatPersistenceService {
     return updated;
   }
 
+  async updateUserPersonaSummary(chatId: string, summary: string): Promise<Chat> {
+    const existing: Chat | null = await this.chatRepository.getById(chatId);
+    if (existing === null) {
+      throw new Error('会话不存在或已删除');
+    }
+    const updated: Chat = updateChat(existing, {
+      userPersonaSummary: summary,
+      userPersonaSummaryUpdatedAt: nowMillis()
+    });
+    await this.chatRepository.update(updated);
+    return updated;
+  }
+
   /**
    * 更新会话的角色状态配置 JSON(CHAT-STATUS-1A,v34 引入)。
    * - 序列化后的 ChatStatusState 字符串,写入 chat.status_config_json 列

@@ -3237,7 +3237,7 @@ struct ChatPage {
                       Text(persona.description)
                         .fontSize(12)
                         .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-                        .maxLines(1)
+                        .maxLines(3)
                         .textOverflow({ overflow: TextOverflow.Ellipsis })
                         .margin({ top: 2 })
                     }
@@ -3270,6 +3270,86 @@ struct ChatPage {
           }
           .height(280)
           .scrollBar(BarState.Auto)
+
+          Divider()
+            .color(ThemePalette.dividerColor(this.effectiveTheme))
+            .margin({ top: 8, bottom: 8 })
+
+          Column() {
+            Text('用户性格总结')
+              .fontSize(15)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+              .margin({ bottom: 6 })
+
+            if (this.viewModel !== null && this.viewModel!.userPersonaSummary.length > 0) {
+              Text(this.viewModel!.userPersonaSummary)
+                .fontSize(13)
+                .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+                .maxLines(8)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .width('100%')
+                .margin({ bottom: 8 })
+            } else {
+              Text('尚未生成。点击下方按钮从角色卡提取或从对话总结。')
+                .fontSize(13)
+                .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+                .margin({ bottom: 8 })
+            }
+
+            Row() {
+              Button('从角色卡提取')
+                .fontSize(13)
+                .height(34)
+                .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+                .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+                .enabled(this.viewModel !== null && !this.viewModel!.isExtractingUserPersona)
+                .layoutWeight(1)
+                .onClick(() => {
+                  if (this.viewModel !== null) {
+                    this.viewModel!.extractUserFromCharacter();
+                  }
+                })
+              Button('从对话总结')
+                .fontSize(13)
+                .height(34)
+                .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+                .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+                .enabled(this.viewModel !== null && !this.viewModel!.isSummarizingUserPersona)
+                .layoutWeight(1)
+                .margin({ left: 8 })
+                .onClick(() => {
+                  if (this.viewModel !== null) {
+                    this.viewModel!.summarizeUserPersona();
+                  }
+                })
+              if (this.viewModel !== null && this.viewModel!.userPersonaSummary.length > 0) {
+                Button('清除')
+                  .fontSize(13)
+                  .height(34)
+                  .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+                  .fontColor($r('app.color.app_danger'))
+                  .layoutWeight(0.6)
+                  .margin({ left: 8 })
+                  .onClick(() => {
+                    if (this.viewModel !== null) {
+                      this.viewModel!.clearUserPersonaSummary();
+                    }
+                  })
+              }
+            }
+            .width('100%')
+
+            if (this.viewModel !== null &&
+              (this.viewModel!.isExtractingUserPersona || this.viewModel!.isSummarizingUserPersona)) {
+              LoadingProgress()
+                .width(20)
+                .height(20)
+                .color(ThemePalette.accentColor(this.effectiveTheme))
+                .margin({ top: 8 })
+            }
+          }
+          .width('100%')
 
           Row() {
             Button('取消')

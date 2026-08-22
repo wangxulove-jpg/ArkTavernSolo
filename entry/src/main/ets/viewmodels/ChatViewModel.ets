@@ -97,6 +97,10 @@ export class ChatViewModel {
   impersonateCandidates: ImpersonateCandidate[] = [];
   isImpersonateGenerating: boolean = false;
 
+  // ===== 用户性格总结状态 =====
+  isExtractingUserPersona: boolean = false;
+  isSummarizingUserPersona: boolean = false;
+
   // ===== T-4.5 会话列表状态 =====
   sessions: Chat[] = [];
   showSessionList: boolean = false;
@@ -328,6 +332,67 @@ export class ChatViewModel {
 
   dismissImpersonateCandidates(): void {
     this.impersonateCandidates = [];
+  }
+
+  async extractUserFromCharacter(): Promise<void> {
+    if (this.disposed || this.busy) {
+      return;
+    }
+    this.isExtractingUserPersona = true;
+    try {
+      const extractResult: string = await this.chatService.extractUserFromCharacter();
+      const existingSummary: string = this.userPersonaSummary;
+      let combined: string = extractResult;
+      if (existingSummary.length > 0 && !existingSummary.includes(extractResult)) {
+        combined = existingSummary + '\n' + extractResult;
+      }
+      await this.chatService.updateCurrentChatUserPersonaSummary(combined);
+      this.statusMessage = '';
+    } catch (e) {
+      this.errorMessage = this.toUserError(String(e));
+    } finally {
+      this.isExtractingUserPersona = false;
+    }
+  }
+
+  async summarizeUserPersona(): Promise<void> {
+    if (this.disposed || this.busy) {
+      return;
+    }
+    this.isSummarizingUserPersona = true;
+    try {
+      const summaryResult: string = await this.chatService.summarizeUserPersona();
+      const existingSummary: string = this.userPersonaSummary;
+      let combined: string = summaryResult;
+      if (existingSummary.length > 0 && !existingSummary.includes(summaryResult)) {
+        combined = existingSummary + '\n' + summaryResult;
+      }
+      await this.chatService.updateCurrentChatUserPersonaSummary(combined);
+      this.statusMessage = '';
+    } catch (e) {
+      this.errorMessage = this.toUserError(String(e));
+    } finally {
+      this.isSummarizingUserPersona = false;
+    }
+  }
+
+  get userPersonaSummary(): string {
+    const chat: Chat | null = this.chatService.getCurrentChat();
+    if (chat === null) {
+      return '';
+    }
+    return chat.userPersonaSummary;
+  }
+
+  async clearUserPersonaSummary(): Promise<void> {
+    if (this.disposed) {
+      return;
+    }
+    try {
+      await this.chatService.updateCurrentChatUserPersonaSummary('');
+    } catch (e) {
+      this.errorMessage = this.toUserError(String(e));
+    }
   }
 
   async autoContinue(): Promise<void> {

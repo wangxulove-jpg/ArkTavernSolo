@@ -859,6 +859,20 @@ export class ChatService {
     return updated;
   }
 
+  async updateCurrentChatUserPersonaSummary(summary: string): Promise<Chat | null> {
+    if (this.persistenceService === null) {
+      throw new Error('persistenceService unavailable');
+    }
+    if (this.currentChatId === undefined) {
+      throw new Error('当前无活跃会话');
+    }
+    const updated: Chat = await this.persistenceService.updateUserPersonaSummary(
+      this.currentChatId, summary
+    );
+    this.currentChat = updated;
+    return updated;
+  }
+
   /** 获取当前角色的默认 Persona ID */
   getCharacterDefaultPersonaId(): string {
     return this.character !== null ? this.character.defaultPersonaId : '';
@@ -971,6 +985,119 @@ export class ChatService {
     this.doStream(assistantId, callbacks, this.activeGeneration);
   }
 
+  async extractUserFromCharacter(): Promise<string> {
+    if (this.disposed) {
+      throw new Error('ChatService disposed');
+    }
+    if (this.character === null) {
+      throw new Error('当前会话无角色');
+    }
+    const config: ProviderConfig | null = await this.modelService.getCurrentConfig();
+    if (config === null) {
+      throw new Error('未配置模型');
+    }
+    const modelName: string = config.modelName.trim();
+    if (modelName.length === 0) {
+      throw new Error('模型名称为空');
+    }
+    const char: Character = this.character;
+    const charInfo: string = [
+      '角色名: ' + char.name,
+      char.description.length > 0 ? '描述: ' + char.description : '',
+      char.personality.length > 0 ? '性格: ' + char.personality : '',
+      char.scenario.length > 0 ? '场景: ' + char.scenario : '',
+      char.mesExample.length > 0 ? '对话示例: ' + char.mesExample : ''
+    ].filter((s: string) => s.length > 0).join('\n');
+
+    const systemMsg: ChatMessage = {
+      id: 'sys-extract-user',
+      role: ChatRole.System,
+      content: '你是一个角色分析专家。根据以下角色卡信息，分析并提取出与用户（{{user}}）互动相关的身份特征：\n- 用户在故事中扮演什么角色（如：朋友、恋人、同事、陌生人等）\n- 用户与角色的关系动态\n- 用户可能拥有的隐含特征（根据角色对用户的态度推断）\n\n输出格式：用2-3句话简洁描述，不要编造角色卡中没有的信息，只提取合理推断的内容。',
+      createdAt: Date.now(),
+      status: ChatMessageStatus.Completed,
+      source: ChatMessageSource.ExternalSystem
+    };
+    const userMsg: ChatMessage = {
+      id: 'usr-extract-user',
+      role: ChatRole.User,
+      content: charInfo,
+      createdAt: Date.now(),
+      status: ChatMessageStatus.Completed,
+      source: ChatMessageSource.ExternalSystem
+    };
+    const request: ChatRequest = {
+      model: modelName,
+      messages: [systemMsg, userMsg],
+      temperature: 0.3,
+      topP: 0.9,
+      maxTokens: 512,
+      stream: false
+    };
+    const response: ChatResponse = await this.modelService.sendChat(request);
+    const summary: string = response.content.trim();
+    if (summary.length === 0) {
+      throw new Error('AI 返回为空');
+    }
+    return summary;
+  }
+
+  async summarizeUserPersona(): Promise<string> {
+    if (this.disposed) {
+      throw new Error('ChatService disposed');
+    }
+    const config: ProviderConfig | null = await this.modelService.getCurrentConfig();
+    if (config === null) {
+      throw new Error('未配置模型');
+    }
+    const modelName: string = config.modelName.trim();
+    if (modelName.length === 0) {
+      throw new Error('模型名称为空');
+    }
+    const userMessages: string[] = [];
+    for (let i = 0; i < this.messages.length; i++) {
+      if (this.messages[i].role === ChatRole.User) {
+        userMessages.push(this.messages[i].content);
+      }
+    }
+    if (userMessages.length === 0) {
+      throw new Error('当前对话无用户消息');
+    }
+    let combined: string = userMessages.join('\n---\n');
+    if (combined.length > 4000) {
+      combined = combined.substring(combined.length - 4000);
+    }
+    const systemMsg: ChatMessage = {
+      id: 'sys-summarize-user',
+      role: ChatRole.System,
+      content: '根据以下对话中用户的发言，总结这个用户的性格特征和说话风格：\n- 说话语气（如：温柔、强势、幽默、冷淡等）\n- 常用表达方式（如：喜欢用反问、喜欢简短回复、喜欢描写动作等）\n- 行为倾向（如：主动型、被动型、进攻型、回避型等）\n- 与角色的互动模式\n\n输出格式：用2-3句话简洁描述，不要逐条列举，要融合成连贯的性格总结。',
+      createdAt: Date.now(),
+      status: ChatMessageStatus.Completed,
+      source: ChatMessageSource.ExternalSystem
+    };
+    const userMsg: ChatMessage = {
+      id: 'usr-summarize-user',
+      role: ChatRole.User,
+      content: '以下是用户的发言记录：\n\n' + combined,
+      createdAt: Date.now(),
+      status: ChatMessageStatus.Completed,
+      source: ChatMessageSource.ExternalSystem
+    };
+    const request: ChatRequest = {
+      model: modelName,
+      messages: [systemMsg, userMsg],
+      temperature: 0.3,
+      topP: 0.9,
+      maxTokens: 512,
+      stream: false
+    };
+    const response: ChatResponse = await this.modelService.sendChat(request);
+    const summary: string = response.content.trim();
+    if (summary.length === 0) {
+      throw new Error('AI 返回为空');
+    }
+    return summary;
+  }
+
   /**
    * 生成代写候选:AI 生成 3 条简短的用户消息候选,不持久化。
    *
@@ -1018,10 +1145,17 @@ export class ChatService {
       return swappedMsg;
     });
 
+    let impersonateContent: string =
+      'You are ' + userName + ', the human player. ' + charName + ' is the character talking to you.\n\nTask: Write 3 DIFFERENT short replies you (' + userName + ') might give next. Each reply must be a complete, standalone sentence or action — NOT a continuation or paragraph of the same idea. The 3 replies should be distinct alternatives (e.g. different tones, different actions), not parts of one long response.\n\nRules:\n- Speak in first person as ' + userName + '\n- Use asterisks for actions: *smiles*, *walks away*\n- Each line = one complete independent reply\n- Do NOT write as ' + charName + '\n- Do NOT split one reply across multiple lines';
+    if (this.currentChat !== null && this.currentChat.userPersonaSummary.length > 0) {
+      impersonateContent += '\n\n' + userName + '的性格特征：' + this.currentChat.userPersonaSummary;
+    }
+    impersonateContent += '\n\nFormat:\n1.\n2.\n3.';
+
     const impersonateSystem: ChatMessage = {
       id: 'sys-impersonate',
       role: ChatRole.System,
-      content: 'You are ' + userName + ', the human player. ' + charName + ' is the character talking to you.\n\nTask: Write 3 DIFFERENT short replies you (' + userName + ') might give next. Each reply must be a complete, standalone sentence or action — NOT a continuation or paragraph of the same idea. The 3 replies should be distinct alternatives (e.g. different tones, different actions), not parts of one long response.\n\nRules:\n- Speak in first person as ' + userName + '\n- Use asterisks for actions: *smiles*, *walks away*\n- Each line = one complete independent reply\n- Do NOT write as ' + charName + '\n- Do NOT split one reply across multiple lines\n\nFormat:\n1.\n2.\n3.',
+      content: impersonateContent,
       createdAt: Date.now(),
       status: ChatMessageStatus.Completed,
       source: ChatMessageSource.ExternalSystem

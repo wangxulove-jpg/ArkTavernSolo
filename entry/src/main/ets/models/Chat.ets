@@ -46,6 +46,17 @@ export interface Chat {
    * 非空时该聊天优先使用此 Persona,查找优先级:聊天锁定 > 角色锁定 > 全局默认。
    */
   readonly personaId: string;
+  /**
+   * 对话级用户性格总结(v36 引入)。
+   * AI 从角色卡提取或从用户发言总结的用户性格描述，代写时注入 prompt。
+   * 空字符串=未生成，所有分支共享。
+   */
+  readonly userPersonaSummary: string;
+  /**
+   * 用户性格总结更新时间戳(v36 引入)。
+   * 用于判断总结是否覆盖当前分支内容。
+   */
+  readonly userPersonaSummaryUpdatedAt: number;
 }
 
 export interface CreateChatOptions {
@@ -58,6 +69,8 @@ export interface CreateChatOptions {
   readonly conversationMode?: ConversationMode;
   readonly statusConfigJson?: string;
   readonly personaId?: string;
+  readonly userPersonaSummary?: string;
+  readonly userPersonaSummaryUpdatedAt?: number;
 }
 
 export interface ChatUpdates {
@@ -71,6 +84,8 @@ export interface ChatUpdates {
   readonly conversationMode?: ConversationMode;
   readonly statusConfigJson?: string;
   readonly personaId?: string | null;
+  readonly userPersonaSummary?: string | null;
+  readonly userPersonaSummaryUpdatedAt?: number;
 }
 
 export function createChat(options?: CreateChatOptions): Chat {
@@ -110,6 +125,14 @@ export function createChat(options?: CreateChatOptions): Chat {
     options !== undefined && options.personaId !== undefined
       ? options.personaId
       : '';
+  const userPersonaSummary: string =
+    options !== undefined && options.userPersonaSummary !== undefined
+      ? options.userPersonaSummary
+      : '';
+  const userPersonaSummaryUpdatedAt: number =
+    options !== undefined && options.userPersonaSummaryUpdatedAt !== undefined
+      ? options.userPersonaSummaryUpdatedAt
+      : 0;
   return {
     id: id,
     characterId: characterId,
@@ -122,7 +145,9 @@ export function createChat(options?: CreateChatOptions): Chat {
     sortOrder: sortOrder,
     conversationMode: conversationMode,
     statusConfigJson: statusConfigJson,
-    personaId: personaId
+    personaId: personaId,
+    userPersonaSummary: userPersonaSummary,
+    userPersonaSummaryUpdatedAt: userPersonaSummaryUpdatedAt
   };
 }
 
@@ -155,6 +180,14 @@ export function updateChat(chat: Chat, updates: ChatUpdates): Chat {
     updates.personaId !== undefined
       ? (updates.personaId === null ? '' : updates.personaId)
       : chat.personaId;
+  const userPersonaSummary: string =
+    updates.userPersonaSummary !== undefined
+      ? (updates.userPersonaSummary === null ? '' : updates.userPersonaSummary)
+      : chat.userPersonaSummary;
+  const userPersonaSummaryUpdatedAt: number =
+    updates.userPersonaSummaryUpdatedAt !== undefined
+      ? updates.userPersonaSummaryUpdatedAt
+      : chat.userPersonaSummaryUpdatedAt;
   return {
     id: chat.id,
     characterId: characterId,
@@ -167,6 +200,8 @@ export function updateChat(chat: Chat, updates: ChatUpdates): Chat {
     sortOrder: sortOrder,
     conversationMode: conversationMode,
     statusConfigJson: statusConfigJson,
-    personaId: personaId
+    personaId: personaId,
+    userPersonaSummary: userPersonaSummary,
+    userPersonaSummaryUpdatedAt: userPersonaSummaryUpdatedAt
   };
 }

@@ -6,7 +6,7 @@
  */
 
 export const DATABASE_NAME: string = 'arktavern_solo.db';
-export const DATABASE_VERSION: number = 35;
+export const DATABASE_VERSION: number = 36;
 
 export const TABLE_CHARACTERS: string = 'characters';
 export const TABLE_CHATS: string = 'chats';
@@ -806,3 +806,16 @@ export const ALTER_CHATS_ADD_PERSONA_ID: string =
 /** v35 迁移: ALTER characters 添加 character_default_persona_id 列 */
 export const ALTER_CHARACTERS_ADD_DEFAULT_PERSONA_ID: string =
   `ALTER TABLE ${TABLE_CHARACTERS} ADD COLUMN ${COLUMN_CHARACTER_DEFAULT_PERSONA_ID} TEXT NOT NULL DEFAULT ''`;
+
+// ===== v36: 对话级用户性格总结 =====
+/** chats 表新增列: user_persona_summary(对话级用户性格总结) */
+export const COLUMN_CHAT_USER_PERSONA_SUMMARY: string = 'user_persona_summary';
+/** chats 表新增列: user_persona_summary_updated_at(用户性格总结更新时间) */
+export const COLUMN_CHAT_USER_PERSONA_SUMMARY_UPDATED_AT: string = 'user_persona_summary_updated_at';
+
+/** v36 迁移: ALTER chats 添加 user_persona_summary 列 */
+export const ALTER_CHATS_ADD_USER_PERSONA_SUMMARY: string =
+  `ALTER TABLE ${TABLE_CHATS} ADD COLUMN ${COLUMN_CHAT_USER_PERSONA_SUMMARY} TEXT NOT NULL DEFAULT ''`;
+/** v36 迁移: ALTER chats 添加 user_persona_summary_updated_at 列 */
+export const ALTER_CHATS_ADD_USER_PERSONA_SUMMARY_UPDATED_AT: string =
+  `ALTER TABLE ${TABLE_CHATS} ADD COLUMN ${COLUMN_CHAT_USER_PERSONA_SUMMARY_UPDATED_AT} INTEGER NOT NULL DEFAULT 0`;

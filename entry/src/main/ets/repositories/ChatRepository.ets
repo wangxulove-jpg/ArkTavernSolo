@@ -32,6 +32,8 @@ import {
   COLUMN_CONVERSATION_MODE,
   COLUMN_CHAT_STATUS_CONFIG_JSON,
   COLUMN_CHAT_PERSONA_ID,
+  COLUMN_CHAT_USER_PERSONA_SUMMARY,
+  COLUMN_CHAT_USER_PERSONA_SUMMARY_UPDATED_AT,
   CONVERSATION_MODE_SINGLE,
   CONVERSATION_MODE_GROUP
 } from '../database/DatabaseConstants';
@@ -76,6 +78,8 @@ function chatToBucket(chat: Chat): relationalStore.ValuesBucket {
   bucket[COLUMN_CONVERSATION_MODE] = conversationModeToString(chat.conversationMode);
   bucket[COLUMN_CHAT_STATUS_CONFIG_JSON] = chat.statusConfigJson;
   bucket[COLUMN_CHAT_PERSONA_ID] = chat.personaId;
+  bucket[COLUMN_CHAT_USER_PERSONA_SUMMARY] = chat.userPersonaSummary;
+  bucket[COLUMN_CHAT_USER_PERSONA_SUMMARY_UPDATED_AT] = chat.userPersonaSummaryUpdatedAt;
   return bucket;
 }
 
@@ -113,6 +117,15 @@ function chatFromRow(rs: relationalStore.ResultSet): Chat {
   const personaId: string = personaIdCol >= 0
     ? safeString(rs, personaIdCol)
     : '';
+  const userPersonaSummaryCol: number = rs.getColumnIndex(COLUMN_CHAT_USER_PERSONA_SUMMARY);
+  const userPersonaSummary: string = userPersonaSummaryCol >= 0
+    ? safeString(rs, userPersonaSummaryCol)
+    : '';
+  const userPersonaSummaryUpdatedAtCol: number =
+    rs.getColumnIndex(COLUMN_CHAT_USER_PERSONA_SUMMARY_UPDATED_AT);
+  const userPersonaSummaryUpdatedAt: number = userPersonaSummaryUpdatedAtCol >= 0
+    ? rs.getLong(userPersonaSummaryUpdatedAtCol)
+    : 0;
   return {
     id: id,
     characterId: characterId,
@@ -125,7 +138,9 @@ function chatFromRow(rs: relationalStore.ResultSet): Chat {
     sortOrder: sortOrder,
     conversationMode: conversationMode,
     statusConfigJson: statusConfigJson,
-    personaId: personaId
+    personaId: personaId,
+    userPersonaSummary: userPersonaSummary,
+    userPersonaSummaryUpdatedAt: userPersonaSummaryUpdatedAt
   };
 }
 
@@ -263,6 +278,8 @@ export class ChatRepository {
     bucket[COLUMN_CONVERSATION_MODE] = conversationModeToString(chat.conversationMode);
     bucket[COLUMN_CHAT_STATUS_CONFIG_JSON] = chat.statusConfigJson;
     bucket[COLUMN_CHAT_PERSONA_ID] = chat.personaId;
+    bucket[COLUMN_CHAT_USER_PERSONA_SUMMARY] = chat.userPersonaSummary;
+    bucket[COLUMN_CHAT_USER_PERSONA_SUMMARY_UPDATED_AT] = chat.userPersonaSummaryUpdatedAt;
 
     const predicates: relationalStore.RdbPredicates =
       new relationalStore.RdbPredicates(TABLE_CHATS);
