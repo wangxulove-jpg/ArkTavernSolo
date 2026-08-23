@@ -20,6 +20,7 @@
     "pages/AiCharacterPreviewPage",
     "pages/PersonaListPage",
     "pages/PersonaEditPage",
-    "pages/SyncSettingsPage"
+    "pages/SyncSettingsPage",
+    "pages/TtsSettingsPage"
   ]
 }

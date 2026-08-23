@@ -93,6 +93,22 @@ export struct SettingsRootView {
                 router.pushUrl({ url: 'pages/AppSettingsPage' });
               }
             )
+
+            this.entryCard(
+              $r('app.string.sync_nav_title'),
+              $r('app.string.sync_nav_desc'),
+              () => {
+                router.pushUrl({ url: 'pages/SyncSettingsPage' });
+              }
+            )
+
+            this.entryCard(
+              '语音朗读',
+              '使用系统语音引擎朗读角色回复',
+              () => {
+                router.pushUrl({ url: 'pages/TtsSettingsPage' });
+              }
+            )
           }
           .width('100%')
           .padding({
