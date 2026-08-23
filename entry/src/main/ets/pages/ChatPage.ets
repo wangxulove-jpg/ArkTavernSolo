@@ -79,7 +79,9 @@ import { Logger } from '../utils/Logger';
 import { MacroReplacer } from '../services/MacroReplacer';
 import { ThemePalette } from '../theme/ThemePalette';
 import { TtsService } from '../services/TtsService';
+import { EdgeTtsService } from '../services/EdgeTtsService';
 import { TtsReadMode } from '../models/TtsReadMode';
+import { TtsEngine } from '../models/TtsEngine';
 
 const LOG_TAG: string = 'ChatPage';
 
@@ -116,8 +118,12 @@ struct ChatPage {
   @State showClearConfirm: boolean = false;
   /** 旁白输入模式是否激活 */
   @State narratorModeActive: boolean = false;
-  /** TTS 服务实例 */
+  /** TTS 服务实例(离线引擎) */
   private ttsService: TtsService = new TtsService();
+  /** TTS 服务实例(Edge 在线引擎) */
+  private edgeTtsService: EdgeTtsService = new EdgeTtsService();
+  /** 当前 TTS 引擎 */
+  @State ttsEngine: TtsEngine = TtsEngine.Offline;
   /** TTS 是否正在朗读 */
   @State ttsIsSpeaking: boolean = false;
   /** v9: 是否显示本对话称呼覆盖编辑对话框 */
@@ -501,32 +507,52 @@ struct ChatPage {
 
   private loadTtsSettings(): void {
     try {
+      const ctx: common.Context = getContext(this) as common.Context;
+      this.edgeTtsService.setContext(ctx);
+
       const prefs = AppServices.getAppPreferences();
       if (!prefs.isInitialized()) {
         return;
       }
+      prefs.getString('tts_engine', '0')
+        .then((value: string): void => {
+          const engine: number = parseInt(value, 10);
+          this.ttsEngine = isNaN(engine) ? TtsEngine.Offline : (engine === TtsEngine.Edge ? TtsEngine.Edge : TtsEngine.Offline);
+        })
+        .catch((_e: Object): void => {});
       prefs.getString('tts_mode', '0')
         .then((value: string): void => {
           const mode: number = parseInt(value, 10);
-          this.ttsService.readMode = isNaN(mode) ? TtsReadMode.Off : (mode as TtsReadMode);
+          const readMode: TtsReadMode = isNaN(mode) ? TtsReadMode.Off : (mode as TtsReadMode);
+          this.ttsService.readMode = readMode;
+          this.edgeTtsService.readMode = readMode;
         })
         .catch((_e: Object): void => {});
       prefs.getString('tts_speed', '1.0')
         .then((value: string): void => {
           const speed: number = parseFloat(value);
-          if (!isNaN(speed)) { this.ttsService.speed = speed; }
+          if (!isNaN(speed)) {
+            this.ttsService.speed = speed;
+            this.edgeTtsService.speed = speed;
+          }
         })
         .catch((_e: Object): void => {});
       prefs.getString('tts_volume', '1.0')
         .then((value: string): void => {
           const volume: number = parseFloat(value);
-          if (!isNaN(volume)) { this.ttsService.volume = volume; }
+          if (!isNaN(volume)) {
+            this.ttsService.volume = volume;
+            this.edgeTtsService.volume = volume;
+          }
         })
         .catch((_e: Object): void => {});
       prefs.getString('tts_pitch', '1.0')
         .then((value: string): void => {
           const pitch: number = parseFloat(value);
-          if (!isNaN(pitch)) { this.ttsService.pitch = pitch; }
+          if (!isNaN(pitch)) {
+            this.ttsService.pitch = pitch;
+            this.edgeTtsService.pitch = pitch;
+          }
         })
         .catch((_e: Object): void => {});
       prefs.getString('tts_voice_person', '13')
@@ -539,6 +565,13 @@ struct ChatPage {
             } else {
               this.ttsService.language = 'zh-CN';
             }
+          }
+        })
+        .catch((_e: Object): void => {});
+      prefs.getString('tts_edge_voice', 'zh-CN-XiaoxiaoNeural')
+        .then((value: string): void => {
+          if (value.length > 0) {
+            this.edgeTtsService.voiceName = value;
           }
         })
         .catch((_e: Object): void => {});
@@ -740,6 +773,7 @@ struct ChatPage {
     this.statusPanelVisible = false;
     // 关闭 TTS 引擎
     this.ttsService.shutdown();
+    this.edgeTtsService.shutdown();
     this.cacheHitRatio = -1;
     this.cacheCachedTokens = 0;
     this.cachePromptTokens = 0;
@@ -2413,14 +2447,20 @@ struct ChatPage {
                   && this.ttsService.readMode !== TtsReadMode.Off
                   ? (): void => {
                     if (this.ttsIsSpeaking) {
-                      this.ttsService.stop();
+                      if (this.ttsEngine === TtsEngine.Edge) {
+                        this.edgeTtsService.stop();
+                      } else {
+                        this.ttsService.stop();
+                      }
                       this.ttsIsSpeaking = false;
                     } else {
-                      this.ttsService.speak(state.displayContent, (): void => {
-                        this.ttsIsSpeaking = false;
-                      }, (): void => {
-                        this.ttsIsSpeaking = true;
-                      });
+                      const onComplete = (): void => { this.ttsIsSpeaking = false; };
+                      const onStart = (): void => { this.ttsIsSpeaking = true; };
+                      if (this.ttsEngine === TtsEngine.Edge) {
+                        this.edgeTtsService.speak(state.displayContent, onComplete, onStart);
+                      } else {
+                        this.ttsService.speak(state.displayContent, onComplete, onStart);
+                      }
                       this.ttsIsSpeaking = true;
                     }
                   }
