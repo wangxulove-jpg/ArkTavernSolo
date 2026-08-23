@@ -22,10 +22,13 @@ import {
   createDefaultContextBudgetConfig,
   DEFAULT_CUSTOM_CONTEXT_WINDOW,
   DEFAULT_CUSTOM_RESERVED_OUTPUT_TOKENS,
+  DEFAULT_RECENT_WINDOW_TARGET,
   MIN_CUSTOM_CONTEXT_WINDOW,
   MAX_CUSTOM_CONTEXT_WINDOW,
   MIN_CUSTOM_RESERVED_OUTPUT_TOKENS,
-  MAX_CUSTOM_RESERVED_OUTPUT_TOKENS
+  MAX_CUSTOM_RESERVED_OUTPUT_TOKENS,
+  MIN_RECENT_WINDOW_TARGET,
+  MAX_RECENT_WINDOW_TARGET
 } from '../models/ContextBudgetConfig';
 
 const LOG_TAG: string = 'ContextBudgetService';
@@ -90,11 +93,23 @@ export class ContextBudgetService {
       );
       const autoManage: boolean = autoStr === 'true';
 
+      // recentWindowTarget 默认 DEFAULT_RECENT_WINDOW_TARGET(30)
+      const windowStr: string = await this.preferences.getString(
+        this.buildKey(chatId, 'window'),
+        DEFAULT_RECENT_WINDOW_TARGET.toString()
+      );
+      const recentWindowTarget: number = this.clamp(
+        this.parseIntSafe(windowStr, DEFAULT_RECENT_WINDOW_TARGET),
+        MIN_RECENT_WINDOW_TARGET,
+        MAX_RECENT_WINDOW_TARGET
+      );
+
       return {
         followModel,
         customContextWindow,
         customReservedOutputTokens: customReserved,
-        autoManage
+        autoManage,
+        recentWindowTarget
       };
     } catch (e) {
       Logger.warn(LOG_TAG, 'getBudget failed: ' + String(e));
@@ -178,6 +193,24 @@ export class ContextBudgetService {
     }
   }
 
+  async setRecentWindowTarget(chatId: string, value: number): Promise<void> {
+    if (chatId.length === 0) {
+      return;
+    }
+    const clamped: number = this.clamp(
+      value,
+      MIN_RECENT_WINDOW_TARGET,
+      MAX_RECENT_WINDOW_TARGET
+    );
+    try {
+      await this.preferences.putString(
+        this.buildKey(chatId, 'window'), clamped.toString()
+      );
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'setRecentWindowTarget failed: ' + String(e));
+    }
+  }
+
   /**
    * 恢复默认值(v8.2: followModel=false + customContextWindow=128K + autoManage=true)。
    * 清除 follow / ctx / reserved / auto 全部字段,下次读取时返回默认值。
@@ -198,6 +231,10 @@ export class ContextBudgetService {
         DEFAULT_CUSTOM_RESERVED_OUTPUT_TOKENS.toString()
       );
       await this.preferences.putString(this.buildKey(chatId, 'auto'), 'true');
+      await this.preferences.putString(
+        this.buildKey(chatId, 'window'),
+        DEFAULT_RECENT_WINDOW_TARGET.toString()
+      );
     } catch (e) {
       Logger.warn(LOG_TAG, 'resetToDefault failed: ' + String(e));
     }
@@ -215,6 +252,7 @@ export class ContextBudgetService {
       await this.preferences.delete(this.buildKey(chatId, 'ctx'));
       await this.preferences.delete(this.buildKey(chatId, 'reserved'));
       await this.preferences.delete(this.buildKey(chatId, 'auto'));
+      await this.preferences.delete(this.buildKey(chatId, 'window'));
     } catch (e) {
       Logger.warn(LOG_TAG, 'deleteBudget failed: ' + String(e));
     }

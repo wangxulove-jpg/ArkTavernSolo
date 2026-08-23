@@ -1123,6 +1123,10 @@ export class ChatViewModel {
     await this.chatService.buildEstimateMessages();
   }
 
+  invalidateEstimateCache(): void {
+    this.chatService.invalidateEstimateCache();
+  }
+
   getLastTokenBudget(): TokenBudget | undefined {
     return this.chatService.getLastTokenBudget();
   }

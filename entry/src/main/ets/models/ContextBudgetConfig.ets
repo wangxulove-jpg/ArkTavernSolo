@@ -28,6 +28,8 @@ export interface ContextBudgetConfig {
   readonly customReservedOutputTokens: number;
   /** 是否自动管理最近消息(超限时自动裁剪) */
   readonly autoManage: boolean;
+  /** 记忆总结后保留的最近完整对话条数(默认 30,范围 2-200) */
+  readonly recentWindowTarget: number;
 }
 
 /** 默认上下文窗口(128K,新 Chat 默认值) */
@@ -70,6 +72,18 @@ export const MAX_SAFETY_MARGIN: number = 8192;
  * - 不是绝对固定值,Token 充足时可多于 30 条
  */
 export const DEFAULT_RECENT_WINDOW_TARGET: number = 30;
+
+/**
+ * 记忆总结后保留的最近完整对话条数下限。
+ * - 最少 2 条,保证至少 1 个完整 User+Assistant 轮次
+ */
+export const MIN_RECENT_WINDOW_TARGET: number = 2;
+
+/**
+ * 记忆总结后保留的最近完整对话条数上限。
+ * - 上限 200 条,避免用户设置过大导致 Token 爆炸
+ */
+export const MAX_RECENT_WINDOW_TARGET: number = 200;
 
 /**
  * 历史最少完整轮次(User+Assistant 对)。
@@ -124,7 +138,8 @@ export function createDefaultContextBudgetConfig(): ContextBudgetConfig {
     followModel: false,
     customContextWindow: DEFAULT_CUSTOM_CONTEXT_WINDOW,
     customReservedOutputTokens: DEFAULT_CUSTOM_RESERVED_OUTPUT_TOKENS,
-    autoManage: true
+    autoManage: true,
+    recentWindowTarget: DEFAULT_RECENT_WINDOW_TARGET
   };
 }
 
@@ -135,12 +150,14 @@ export function createContextBudgetConfig(
   followModel: boolean,
   customContextWindow: number,
   customReservedOutputTokens: number,
-  autoManage: boolean
+  autoManage: boolean,
+  recentWindowTarget: number
 ): ContextBudgetConfig {
   return {
     followModel,
     customContextWindow,
     customReservedOutputTokens,
-    autoManage
+    autoManage,
+    recentWindowTarget
   };
 }

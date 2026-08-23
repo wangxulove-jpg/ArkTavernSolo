@@ -89,7 +89,14 @@ export class RecentMessageSelector {
     // Step 1: 从后向前确定"最近窗口"的边界索引
     // 最近窗口 = 最后 targetCount 条消息(或全部,如果不足 targetCount)
     const lastIndex: number = messages.length - 1;
-    const windowStartIndex: number = Math.max(0, lastIndex - targetCount + 1);
+    const fixedWindowStart: number = Math.max(0, lastIndex - targetCount + 1);
+    // v8.3 Phase 2 fix: 窗口起始还需保护"记忆覆盖尾部到固定窗口"之间的间隙
+    // 若消息 0..memoryEndPos 已被记忆覆盖,则 memoryEndPos+1 是第一条未被覆盖的消息
+    // 必须将其纳入窗口,否则该消息既不在记忆中也不在窗口中,会被静默丢弃
+    const memorySafeStart: number = (memoryEndPos >= 0 && memoryEndPos < lastIndex)
+      ? memoryEndPos + 1
+      : 0;
+    const windowStartIndex: number = Math.min(fixedWindowStart, memorySafeStart);
 
     // Step 2: 标记每条消息是否应保留(去重 + 窗口)
     // v8.3 Phase 2 调整:

@@ -148,6 +148,8 @@ struct ChatPage {
   @StorageProp('chatBgConfigVersion') @Watch('onChatBgConfigVersionChanged') chatBgConfigVersion: number = 0;
   /** 上下文预算配置变更通知(由 ContextBudgetPage 通过 AppStorage.setOrCreate 触发) */
   @StorageProp('chatBudgetConfigVersion') @Watch('onBudgetConfigVersionChanged') chatBudgetConfigVersion: number = 0;
+  /** 记忆变更通知(由记忆生成/删除后通过 AppStorage.setOrCreate 触发) */
+  @StorageProp('chatMemoryVersion') @Watch('onMemoryVersionChanged') chatMemoryVersion: number = 0;
   /** 聊天背景配置(为 null 表示未加载) */
   @State chatBgConfig: ChatBackgroundConfig | null = null;
   /** 顶部状态栏避让高度(由 EntryAbility 写入 AppStorage) */
@@ -768,6 +770,10 @@ struct ChatPage {
       }
     }
     // 从二级页面返回时刷新上下文占用统计
+    // 失效缓存确保使用最新配置(如 recentWindowTarget)重建
+    if (this.viewModel !== null && !this.viewModel!.isDisposed) {
+      this.viewModel!.invalidateEstimateCache();
+    }
     this.refreshBudgetSnapshot();
   }
 
@@ -3706,6 +3712,18 @@ struct ChatPage {
     }
     if (this.budgetViewModel!.chatId !== chatId) {
       this.budgetViewModel!.initialize(chatId!).then((): void => {
+        // 初始化完成后,先从 SnapshotStore 读取已有快照立即刷新 UI
+        // 避免 budgetStats 长时间为 null 导致顶栏指示器消失
+        const existingSnap = ContextBudgetSnapshotStore.getInstance().getSnapshot(chatId!);
+        if (existingSnap !== null) {
+          this.budgetViewModel!.refreshFromSnapshot(
+            existingSnap.budget, existingSnap.requestMessages
+          ).then((): void => {
+            this.budgetStats = this.budgetViewModel!.stats;
+          }).catch((): void => {
+          });
+        }
+        // 然后异步构建新快照(精确更新)
         this.doRefreshBudgetSnapshot(chatId!);
       }).catch((): void => {
       });
@@ -3726,11 +3744,14 @@ struct ChatPage {
           budget: budget,
           requestMessages: requestMessages
         });
+        this.notifyBudgetSnapshotUpdated();
         this.budgetViewModel!.refreshFromSnapshot(budget, requestMessages).then((): void => {
           this.budgetStats = this.budgetViewModel!.stats;
-        }).catch((): void => {
+        }).catch((e: Error): void => {
+          Logger.warn(LOG_TAG, 'refreshFromSnapshot failed in async doRefresh: ' + e.message);
         });
-      }).catch((): void => {
+      }).catch((e: Error): void => {
+        Logger.warn(LOG_TAG, 'buildEstimateMessages failed in doRefresh: ' + e.message);
       });
       return;
     }
@@ -3741,10 +3762,11 @@ struct ChatPage {
       budget: budget,
       requestMessages: requestMessages
     });
+    this.notifyBudgetSnapshotUpdated();
     this.budgetViewModel!.refreshFromSnapshot(budget, requestMessages).then((): void => {
       this.budgetStats = this.budgetViewModel!.stats;
     }).catch((e: Error): void => {
-      Logger.warn(LOG_TAG, 'refreshBudgetSnapshot failed: ' + e.message);
+      Logger.warn(LOG_TAG, 'refreshBudgetSnapshot failed in sync doRefresh: ' + e.message);
     });
   }
 
@@ -3760,12 +3782,39 @@ struct ChatPage {
     if (chatId === undefined || chatId.length === 0) {
       return;
     }
+    // 失效估算缓存(配置变更后需重新构建请求消息,如 recentWindowTarget 调整)
+    this.viewModel!.invalidateEstimateCache();
     // 重新加载配置 + 重算 stats
     this.budgetViewModel!.initialize(chatId).then((): void => {
       this.refreshBudgetSnapshot();
     }).catch((e: Error): void => {
       Logger.warn(LOG_TAG, 'onBudgetConfigVersionChanged reload failed: ' + e.message);
     });
+  }
+
+  /**
+   * 记忆变更后刷新上下文占用。
+   * 记忆生成/删除会改变 Prompt 的记忆摘要段与 RecentMessageSelector 的去重范围,
+   * 需失效估算缓存并重算。
+   */
+  onMemoryVersionChanged(): void {
+    if (this.budgetViewModel === null || this.viewModel === null) {
+      return;
+    }
+    const chatId: string | undefined = this.viewModel!.getCurrentChatId();
+    if (chatId === undefined || chatId.length === 0) {
+      return;
+    }
+    this.viewModel!.invalidateEstimateCache();
+    this.refreshBudgetSnapshot();
+  }
+
+  /**
+   * 通知快照已更新,供 ContextBudgetPage 从 Store 重载最新统计数据。
+   */
+  private notifyBudgetSnapshotUpdated(): void {
+    const v: number = AppStorage.get<number>('chatBudgetSnapshotVersion') ?? 0;
+    AppStorage.setOrCreate<number>('chatBudgetSnapshotVersion', v + 1);
   }
 
   /**

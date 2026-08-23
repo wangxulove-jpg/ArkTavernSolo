@@ -351,6 +351,7 @@ export class MemoryManagementViewModel {
       this.isEditing = false;
       this.editingSummary = '';
       this.editingMemoryId = '';
+      this.notifyMemoryChanged();
       await this.reload();
     } catch (e) {
       this.errorMessage = '保存失败';
@@ -376,6 +377,7 @@ export class MemoryManagementViewModel {
     try {
       await this.memoryService.setEnabled(memoryId, !memory.enabled);
       this.statusMessage = memory.enabled ? '已禁用' : '已启用';
+      this.notifyMemoryChanged();
       await this.reload();
     } catch (e) {
       this.errorMessage = '切换状态失败';
@@ -423,6 +425,7 @@ export class MemoryManagementViewModel {
       if (this.expandedMemoryId === memoryId) {
         this.expandedMemoryId = '';
       }
+      this.notifyMemoryChanged();
       await this.reload();
     } catch (e) {
       this.errorMessage = '删除失败';
@@ -459,6 +462,7 @@ export class MemoryManagementViewModel {
       );
       if (result.success) {
         this.statusMessage = result.memory !== null ? '已生成章节' : '无新消息需归档';
+        this.notifyMemoryChanged();
       } else {
         this.errorMessage = '生成失败: ' + (result.error !== undefined ? result.error : '未知错误');
         this.statusMessage = '';
@@ -488,6 +492,7 @@ export class MemoryManagementViewModel {
     try {
       await this.memoryService.clearOwnedByBranch(this.activeBranchId);
       this.statusMessage = '已清除当前分支记忆';
+      this.notifyMemoryChanged();
       await this.reload();
     } catch (e) {
       this.errorMessage = '清除失败';
@@ -549,5 +554,10 @@ export class MemoryManagementViewModel {
     const pad = (n: number): string => n < 10 ? '0' + n.toString() : n.toString();
     return y.toString() + '-' + pad(m) + '-' + pad(d)
       + ' ' + pad(h) + ':' + pad(min);
+  }
+
+  private notifyMemoryChanged(): void {
+    const v: number = AppStorage.get<number>('chatMemoryVersion') ?? 0;
+    AppStorage.setOrCreate<number>('chatMemoryVersion', v + 1);
   }
 }

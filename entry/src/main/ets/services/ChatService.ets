@@ -78,7 +78,8 @@ import { TokenBudget, DEFAULT_CONTEXT_WINDOW, DEFAULT_RESERVED_OUTPUT_TOKENS } f
 import {
   calculateSafetyMargin,
   DEFAULT_RECENT_WINDOW_TARGET,
-  MIN_COMPLETE_TURNS
+  MIN_COMPLETE_TURNS,
+  ContextBudgetConfig
 } from '../models/ContextBudgetConfig';
 import { ContextHistorySelection } from '../models/ContextHistorySelection';
 import { HistoryTrimResult } from '../models/HistoryTrimResult';
@@ -2521,6 +2522,8 @@ export class ChatService {
         if (!result.success) {
           Logger.warn(LOG_TAG, 'ManualMemorySummary | forced chapter failed'
             + (result.error !== undefined ? ' err=' + result.error : ''));
+        } else {
+          this.notifyMemoryChanged();
         }
       })
       .catch((e: Object): void => {
@@ -2686,6 +2689,23 @@ export class ChatService {
     } catch (e) {
       Logger.warn(LOG_TAG, 'buildEstimateMessages failed: ' + String(e));
     }
+  }
+
+  /**
+   * 失效估算缓存,使下次 refreshBudgetSnapshot 重新构建请求消息。
+   * 用于预算配置变更(如 recentWindowTarget 调整)后强制重算占用。
+   */
+  invalidateEstimateCache(): void {
+    this.lastBuiltRequestMessages = undefined;
+  }
+
+  /**
+   * 通知记忆变更,触发 ChatPage 重新计算上下文占用。
+   * 记忆生成/更新/删除后调用,递增 chatMemoryVersion 让 ChatPage @Watch 响应。
+   */
+  private notifyMemoryChanged(): void {
+    const v: number = AppStorage.get<number>('chatMemoryVersion') ?? 0;
+    AppStorage.setOrCreate<number>('chatMemoryVersion', v + 1);
   }
 
   /**
@@ -3290,7 +3310,7 @@ export class ChatService {
 
     // v8.3 Phase 2: 使用 RecentMessageSelector 选择最近原始消息窗口
     // - 与长期记忆范围去重:已被记忆覆盖且不在最近窗口的消息不注入原文
-    // - 默认保留最近 DEFAULT_RECENT_WINDOW_TARGET(30)条
+    // - 默认保留最近 DEFAULT_RECENT_WINDOW_TARGET(30)条,per-chat 可配置
     // - 保证最近 MIN_COMPLETE_TURNS(2)完整 User+Assistant 轮次
     // - availableTokens 传一个宽松上限,让 RecentMessageSelector 主要做去重 + 窗口
     //   精确 Token 裁剪由后续 HistoryTrimmer 完成
@@ -3298,10 +3318,23 @@ export class ChatService {
     let conversationMessages: ChatMessage[] = sourceMessages;
     if (this.recentMessageSelector !== null && this.tokenCounter !== null) {
       try {
+        // 从 per-chat 配置读取 recentWindowTarget(若可用)
+        let recentWindowTarget: number = DEFAULT_RECENT_WINDOW_TARGET;
+        if (this.contextBudgetService !== null && this.currentChatId !== undefined) {
+          try {
+            const budgetConfig: ContextBudgetConfig =
+              await this.contextBudgetService.getBudget(this.currentChatId);
+            if (budgetConfig.recentWindowTarget > 0) {
+              recentWindowTarget = budgetConfig.recentWindowTarget;
+            }
+          } catch (_e) {
+            // 读取失败用默认值
+          }
+        }
         const selection: ContextHistorySelection = this.recentMessageSelector.select(
           sourceMessages,
           {
-            targetCount: DEFAULT_RECENT_WINDOW_TARGET,
+            targetCount: recentWindowTarget,
             minCompleteTurns: MIN_COMPLETE_TURNS,
             availableTokens: Number.MAX_SAFE_INTEGER,
             memoryEndPosition: memoryEndPosition
@@ -3384,6 +3417,8 @@ export class ChatService {
         if (!result.success) {
           Logger.warn(LOG_TAG, 'MemorySummary | triggered kind=failed'
             + (result.error !== undefined ? ' err=' + result.error : ''));
+        } else {
+          this.notifyMemoryChanged();
         }
       })
       .catch((e: Object): void => {

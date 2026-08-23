@@ -27,10 +27,13 @@ import {
   ContextBudgetConfig,
   DEFAULT_CUSTOM_CONTEXT_WINDOW,
   DEFAULT_CUSTOM_RESERVED_OUTPUT_TOKENS,
+  DEFAULT_RECENT_WINDOW_TARGET,
   MIN_CUSTOM_CONTEXT_WINDOW,
   MAX_CUSTOM_CONTEXT_WINDOW,
   MIN_CUSTOM_RESERVED_OUTPUT_TOKENS,
   MAX_CUSTOM_RESERVED_OUTPUT_TOKENS,
+  MIN_RECENT_WINDOW_TARGET,
+  MAX_RECENT_WINDOW_TARGET,
   BUDGET_SAFETY_MARGIN
 } from '../models/ContextBudgetConfig';
 import { getModelCapability, ModelCapability } from '../models/ModelCapabilities';
@@ -50,7 +53,8 @@ export class ContextBudgetViewModel {
     followModel: false,
     customContextWindow: DEFAULT_CUSTOM_CONTEXT_WINDOW,
     customReservedOutputTokens: DEFAULT_CUSTOM_RESERVED_OUTPUT_TOKENS,
-    autoManage: true
+    autoManage: true,
+    recentWindowTarget: DEFAULT_RECENT_WINDOW_TARGET
   };
   /** 当前模型配置(null 表示无 Provider 配置) */
   currentConfig: ProviderConfig | null = null;
@@ -188,7 +192,8 @@ export class ContextBudgetViewModel {
         followModel: follow,
         customContextWindow: this.config.customContextWindow,
         customReservedOutputTokens: this.config.customReservedOutputTokens,
-        autoManage: this.config.autoManage
+        autoManage: this.config.autoManage,
+        recentWindowTarget: this.config.recentWindowTarget
       };
       this.statusMessage = follow ? '已切换为跟随模型' : '已切换为自定义';
       this.notifyConfigChanged();
@@ -217,7 +222,8 @@ export class ContextBudgetViewModel {
         followModel: this.config.followModel,
         customContextWindow: clamped,
         customReservedOutputTokens: this.config.customReservedOutputTokens,
-        autoManage: this.config.autoManage
+        autoManage: this.config.autoManage,
+        recentWindowTarget: this.config.recentWindowTarget
       };
       this.statusMessage = '已保存上下文窗口';
       this.notifyConfigChanged();
@@ -245,7 +251,8 @@ export class ContextBudgetViewModel {
         followModel: this.config.followModel,
         customContextWindow: this.config.customContextWindow,
         customReservedOutputTokens: clamped,
-        autoManage: this.config.autoManage
+        autoManage: this.config.autoManage,
+        recentWindowTarget: this.config.recentWindowTarget
       };
       this.statusMessage = '已保存预留输出 Token';
       this.notifyConfigChanged();
@@ -272,13 +279,40 @@ export class ContextBudgetViewModel {
         followModel: this.config.followModel,
         customContextWindow: this.config.customContextWindow,
         customReservedOutputTokens: this.config.customReservedOutputTokens,
-        autoManage: auto
+        autoManage: auto,
+        recentWindowTarget: this.config.recentWindowTarget
       };
       this.statusMessage = auto ? '已启用自动管理' : '已关闭自动管理';
       this.notifyConfigChanged();
     } catch (e) {
       this.errorMessage = '保存失败';
       Logger.error(LOG_TAG, 'setAutoManage failed: ' + String(e));
+    } finally {
+      this.isOperating = false;
+    }
+  }
+
+  async setRecentWindowTarget(value: number): Promise<void> {
+    if (this.isOperating) {
+      return;
+    }
+    const clamped: number = this.clampRecentWindowTarget(value);
+    this.isOperating = true;
+    this.errorMessage = '';
+    try {
+      await this.budgetService.setRecentWindowTarget(this.chatId, clamped);
+      this.config = {
+        followModel: this.config.followModel,
+        customContextWindow: this.config.customContextWindow,
+        customReservedOutputTokens: this.config.customReservedOutputTokens,
+        autoManage: this.config.autoManage,
+        recentWindowTarget: clamped
+      };
+      this.statusMessage = '已保存记忆总结后保留条数';
+      this.notifyConfigChanged();
+    } catch (e) {
+      this.errorMessage = '保存失败';
+      Logger.error(LOG_TAG, 'setRecentWindowTarget failed: ' + String(e));
     } finally {
       this.isOperating = false;
     }
@@ -416,6 +450,16 @@ export class ContextBudgetViewModel {
     const finalMax: number = Math.min(hardMax, ctxBound);
     if (value > finalMax) {
       return finalMax;
+    }
+    return value;
+  }
+
+  private clampRecentWindowTarget(value: number): number {
+    if (value < MIN_RECENT_WINDOW_TARGET) {
+      return MIN_RECENT_WINDOW_TARGET;
+    }
+    if (value > MAX_RECENT_WINDOW_TARGET) {
+      return MAX_RECENT_WINDOW_TARGET;
     }
     return value;
   }

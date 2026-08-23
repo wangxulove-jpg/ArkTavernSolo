@@ -31,7 +31,9 @@ import {
 import {
   CONTEXT_WINDOW_PRESETS,
   MIN_CUSTOM_CONTEXT_WINDOW,
-  MIN_CUSTOM_RESERVED_OUTPUT_TOKENS
+  MIN_CUSTOM_RESERVED_OUTPUT_TOKENS,
+  MIN_RECENT_WINDOW_TARGET,
+  MAX_RECENT_WINDOW_TARGET
 } from '../models/ContextBudgetConfig';
 import { Logger } from '../utils/Logger';
 import { ThemePalette } from '../theme/ThemePalette';
@@ -52,9 +54,13 @@ struct ContextBudgetPage {
   @StorageProp('navigationBarHeight') navigationBarHeight: number = 0;
   /** 预算配置变更通知(由本页面写入触发) */
   @StorageProp('chatBudgetConfigVersion') @Watch('onBudgetConfigVersionChanged') chatBudgetConfigVersion: number = 0;
+  /** 快照更新通知(由 ChatPage 写入新快照后触发,本页面据此重载统计数据) */
+  @StorageProp('chatBudgetSnapshotVersion') @Watch('onBudgetSnapshotVersionChanged') chatBudgetSnapshotVersion: number = 0;
   @StorageProp('effectiveTheme') effectiveTheme: string = 'dark';
   @State showDeepSeekBalance: boolean = false;
   @State deepSeekBalance: DeepSeekBalanceInfo | null = null;
+  private pendingRefresh: boolean = false;
+  private refreshPollCount: number = 0;
 
   aboutToAppear(): void {
     try {
@@ -119,11 +125,58 @@ struct ContextBudgetPage {
    * 此处重新加载快照,以便用户改完上下文上限后立即看到刷新后的占用。
    */
   onBudgetConfigVersionChanged(): void {
-    // 防止本页修改时触发自身的循环刷新:本页修改时 vm 状态已同步,
-    // 这里只刷新 stats(基于已更新的 VM 状态)
     if (this.viewModel !== null) {
       this.stats = this.viewModel!.stats;
     }
+    this.requestRefreshAfterConfigChange();
+  }
+
+  onBudgetSnapshotVersionChanged(): void {
+    this.pendingRefresh = false;
+    if (this.viewModel === null || this.chatId.length === 0) {
+      return;
+    }
+    const store = ContextBudgetSnapshotStore.getInstance();
+    const snapshot = store.getSnapshot(this.chatId);
+    if (snapshot === null) {
+      return;
+    }
+    this.viewModel!.refreshFromSnapshot(snapshot.budget, snapshot.requestMessages).then((): void => {
+      this.stats = this.viewModel!.stats;
+    }).catch((e: Error): void => {
+      Logger.warn(LOG_TAG, 'onBudgetSnapshotVersionChanged refreshFromSnapshot failed: ' + e.message);
+    });
+  }
+
+  private requestRefreshAfterConfigChange(): void {
+    this.pendingRefresh = true;
+    this.refreshPollCount = 0;
+    this.startRefreshPoll();
+  }
+
+  private startRefreshPoll(): void {
+    if (!this.pendingRefresh || this.refreshPollCount >= 5) {
+      this.pendingRefresh = false;
+      return;
+    }
+    this.refreshPollCount++;
+    setTimeout((): void => {
+      if (!this.pendingRefresh) {
+        return;
+      }
+      const store = ContextBudgetSnapshotStore.getInstance();
+      const snapshot = store.getSnapshot(this.chatId);
+      if (snapshot !== null) {
+        this.viewModel!.refreshFromSnapshot(snapshot.budget, snapshot.requestMessages).then((): void => {
+          this.stats = this.viewModel!.stats;
+          this.pendingRefresh = false;
+        }).catch((): void => {
+          this.startRefreshPoll();
+        });
+      } else {
+        this.startRefreshPoll();
+      }
+    }, 200);
   }
 
   build() {
@@ -242,6 +295,11 @@ struct ContextBudgetPage {
 
       // 自动管理
       this.autoManageRow()
+
+      Divider().color(ThemePalette.dividerColor(this.effectiveTheme)).margin({ top: 4, bottom: 4 })
+
+      // 记忆总结后保留条数
+      this.recentWindowTargetRow()
 
       Divider().color(ThemePalette.dividerColor(this.effectiveTheme)).margin({ top: 4, bottom: 4 })
 
@@ -544,6 +602,58 @@ struct ContextBudgetPage {
   }
 
   @Builder
+  recentWindowTargetRow() {
+    Column() {
+      Row() {
+        Column() {
+          Text('记忆总结后保留条数')
+            .fontSize($r('app.float.app_font_body'))
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+          Text('记忆摘要与最近窗口之间无间隙地衔接')
+            .fontSize($r('app.float.app_font_caption'))
+            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+            .margin({ top: 2 })
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        Text(this.getRecentWindowTarget().toString())
+          .fontSize($r('app.float.app_font_body'))
+          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+          .width(60)
+          .textAlign(TextAlign.End)
+      }
+      .width('100%')
+      .margin({ bottom: 4 })
+
+      Slider({
+        value: this.getRecentWindowTarget(),
+        min: MIN_RECENT_WINDOW_TARGET,
+        max: MAX_RECENT_WINDOW_TARGET,
+        step: 2,
+        style: SliderStyle.OutSet
+      })
+        .blockColor(ThemePalette.accentColor(this.effectiveTheme))
+        .trackColor(ThemePalette.surface2Color(this.effectiveTheme))
+        .selectedColor(ThemePalette.accentColor(this.effectiveTheme))
+        .width('100%')
+        .enabled(this.viewModel !== null && !this.viewModel!.isOperating)
+        .onChange((value: number, mode: SliderChangeMode) => {
+          if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
+            this.onRecentWindowTargetChange(Math.round(value));
+          }
+        })
+
+      Text('范围 ' + MIN_RECENT_WINDOW_TARGET.toString()
+        + ' ~ ' + MAX_RECENT_WINDOW_TARGET.toString()
+        + ' 条(默认 30)')
+        .fontSize($r('app.float.app_font_caption'))
+        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+    }
+    .width('100%')
+    .padding({ top: 12, bottom: 12 })
+  }
+
+  @Builder
   deepSeekBalanceRow() {
     Row() {
       Column() {
@@ -745,6 +855,13 @@ struct ContextBudgetPage {
     return this.viewModel!.config.autoManage;
   }
 
+  private getRecentWindowTarget(): number {
+    if (this.viewModel === null) {
+      return 30;
+    }
+    return this.viewModel!.config.recentWindowTarget;
+  }
+
   private getEffectiveContextWindow(): number {
     if (this.viewModel === null) {
       return 0;
@@ -842,8 +959,7 @@ struct ContextBudgetPage {
       return;
     }
     await this.viewModel!.setFollowModel(follow);
-    // 配置变更后,尝试重新加载快照(基于已有 messages)
-    this.loadSnapshot();
+    this.requestRefreshAfterConfigChange();
   }
 
   private async onCustomContextWindowChange(value: number): Promise<void> {
@@ -851,7 +967,7 @@ struct ContextBudgetPage {
       return;
     }
     await this.viewModel!.setCustomContextWindow(value);
-    this.loadSnapshot();
+    this.requestRefreshAfterConfigChange();
   }
 
   private async onCustomReservedChange(value: number): Promise<void> {
@@ -859,7 +975,7 @@ struct ContextBudgetPage {
       return;
     }
     await this.viewModel!.setCustomReservedOutputTokens(value);
-    this.loadSnapshot();
+    this.requestRefreshAfterConfigChange();
   }
 
   private async onAutoManageChange(auto: boolean): Promise<void> {
@@ -867,6 +983,15 @@ struct ContextBudgetPage {
       return;
     }
     await this.viewModel!.setAutoManage(auto);
+    this.requestRefreshAfterConfigChange();
+  }
+
+  private async onRecentWindowTargetChange(value: number): Promise<void> {
+    if (this.viewModel === null) {
+      return;
+    }
+    await this.viewModel!.setRecentWindowTarget(value);
+    this.requestRefreshAfterConfigChange();
   }
 
   private async onResetToDefault(): Promise<void> {
@@ -874,7 +999,7 @@ struct ContextBudgetPage {
       return;
     }
     await this.viewModel!.resetToDefault();
-    this.loadSnapshot();
+    this.requestRefreshAfterConfigChange();
   }
 
   private loadDeepSeekBalanceSettings(): void {
