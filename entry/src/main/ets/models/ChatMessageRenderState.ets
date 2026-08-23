@@ -49,6 +49,8 @@ export class ChatMessageRenderState {
   source: ChatMessageSource | undefined;
   /** 发送者类型(user/character/narrator) */
   senderType: MessageSenderType | undefined;
+  /** 是否计入记忆摘要(v37 旁白重构) */
+  includeInMemory: boolean | undefined;
   /** 错误信息(生成失败时) */
   errorMessage: string;
   /** 更新时间(毫秒时间戳) */
@@ -64,6 +66,7 @@ export class ChatMessageRenderState {
     this.role = message.role;
     this.source = message.source;
     this.senderType = message.senderType;
+    this.includeInMemory = message.includeInMemory;
     this.errorMessage = message.errorMessage !== undefined ? message.errorMessage : '';
     this.updatedAt = message.updatedAt !== undefined ? message.updatedAt : message.createdAt;
   }
@@ -88,6 +91,7 @@ export class ChatMessageRenderState {
     this.status = message.status !== undefined ? message.status : ChatMessageStatus.Completed;
     this.source = message.source;
     this.senderType = message.senderType;
+    this.includeInMemory = message.includeInMemory;
     this.errorMessage = message.errorMessage !== undefined ? message.errorMessage : '';
     this.updatedAt = message.updatedAt !== undefined ? message.updatedAt : message.createdAt;
     if (this.isStreaming) {

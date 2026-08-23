@@ -1065,6 +1065,9 @@ export class MemoryService {
     const parts: string[] = [];
     for (let i = 0; i < messages.length; i++) {
       const msg: ChatMessage = messages[i];
+      if (msg.includeInMemory === false) {
+        continue;
+      }
       let role: string;
       if (msg.senderType === 'narrator') {
         role = '旁白';

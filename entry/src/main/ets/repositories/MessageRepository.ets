@@ -50,7 +50,8 @@ import {
   COLUMN_RECIPIENT_CHARACTER_IDS_JSON,
   COLUMN_PARTICIPANT_IDS_JSON,
   COLUMN_WITNESS_IDS_JSON,
-  COLUMN_REPLY_TARGET_CHARACTER_IDS_JSON
+  COLUMN_REPLY_TARGET_CHARACTER_IDS_JSON,
+  COLUMN_INCLUDE_IN_MEMORY
 } from '../database/DatabaseConstants';
 import {
   parseChatRole,
@@ -218,6 +219,8 @@ function buildValidatedMessageBucket(
     witnessIds.length > 0 ? JSON.stringify(witnessIds) : null;
   bucket[COLUMN_REPLY_TARGET_CHARACTER_IDS_JSON] =
     replyTargetIds.length > 0 ? JSON.stringify(replyTargetIds) : null;
+  bucket[COLUMN_INCLUDE_IN_MEMORY] =
+    message.includeInMemory !== undefined ? (message.includeInMemory ? 1 : 0) : 1;
   return bucket;
 }
 
@@ -332,6 +335,12 @@ function messageFromRow(rs: relationalStore.ResultSet): ChatMessage {
       ? parseStringArrayJson(replyTargetIdsJson)
       : undefined;
 
+  const includeInMemoryCol: number = rs.getColumnIndex(COLUMN_INCLUDE_IN_MEMORY);
+  const includeInMemory: boolean | undefined =
+    (includeInMemoryCol >= 0 && !rs.isColumnNull(includeInMemoryCol))
+      ? rs.getLong(includeInMemoryCol) === 1
+      : undefined;
+
   return {
     id: id,
     role: role,
@@ -350,7 +359,8 @@ function messageFromRow(rs: relationalStore.ResultSet): ChatMessage {
     recipientCharacterIds: recipientCharacterIds,
     participantIds: participantIds,
     witnessIds: witnessIds,
-    replyTargetCharacterIds: replyTargetCharacterIds
+    replyTargetCharacterIds: replyTargetCharacterIds,
+    includeInMemory: includeInMemory
   };
 }
 

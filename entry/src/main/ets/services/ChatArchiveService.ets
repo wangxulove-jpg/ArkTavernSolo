@@ -345,7 +345,8 @@ export class ChatArchiveService {
       visibility: visibility,
       recipientCharacterIds: msg.recipientCharacterIds !== undefined ? msg.recipientCharacterIds.slice() : [],
       participantIds: msg.participantIds !== undefined ? msg.participantIds.slice() : [],
-      witnessIds: msg.witnessIds !== undefined ? msg.witnessIds.slice() : []
+      witnessIds: msg.witnessIds !== undefined ? msg.witnessIds.slice() : [],
+      includeInMemory: msg.includeInMemory
     };
   }
 

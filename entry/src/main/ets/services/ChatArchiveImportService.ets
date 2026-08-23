@@ -695,6 +695,7 @@ export class ChatArchiveImportService {
       recipientCharacterIds: archMsg.recipientCharacterIds.length > 0 ? archMsg.recipientCharacterIds.slice() : undefined,
       participantIds: archMsg.participantIds.length > 0 ? archMsg.participantIds.slice() : undefined,
       witnessIds: archMsg.witnessIds.length > 0 ? archMsg.witnessIds.slice() : undefined,
+      includeInMemory: archMsg.includeInMemory,
       isStreaming: false
     });
     return base;

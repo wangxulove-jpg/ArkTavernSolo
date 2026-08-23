@@ -118,6 +118,12 @@ export interface ChatMessage {
    * 与 recipientCharacterIds(私聊可见性)语义完全分离。
    */
   readonly replyTargetCharacterIds?: string[];
+  /**
+   * 是否计入记忆摘要(v37 旁白重构引入)。
+   * - true / undefined: 计入记忆(默认,旧行为兼容)
+   * - false: 不计入记忆摘要(旁白消息默认值)
+   */
+  readonly includeInMemory?: boolean;
 }
 
 /**
@@ -162,6 +168,7 @@ export interface ChatMessageOverrides {
   participantIds?: string[];
   witnessIds?: string[];
   replyTargetCharacterIds?: string[];
+  includeInMemory?: boolean;
 }
 
 /**
@@ -192,7 +199,8 @@ export function cloneChatMessage(msg: ChatMessage): ChatMessage {
     witnessIds: msg.witnessIds !== undefined
       ? msg.witnessIds.slice() : undefined,
     replyTargetCharacterIds: msg.replyTargetCharacterIds !== undefined
-      ? msg.replyTargetCharacterIds.slice() : undefined
+      ? msg.replyTargetCharacterIds.slice() : undefined,
+    includeInMemory: msg.includeInMemory
   };
 }
 
@@ -235,6 +243,8 @@ export function mergeChatMessage(
       : (base.witnessIds !== undefined ? base.witnessIds.slice() : undefined),
     replyTargetCharacterIds: overrides.replyTargetCharacterIds !== undefined
       ? overrides.replyTargetCharacterIds.slice()
-      : (base.replyTargetCharacterIds !== undefined ? base.replyTargetCharacterIds.slice() : undefined)
+      : (base.replyTargetCharacterIds !== undefined ? base.replyTargetCharacterIds.slice() : undefined),
+    includeInMemory: overrides.includeInMemory !== undefined
+      ? overrides.includeInMemory : base.includeInMemory
   };
 }

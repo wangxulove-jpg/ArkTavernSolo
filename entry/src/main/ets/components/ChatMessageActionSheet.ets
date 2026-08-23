@@ -4,6 +4,7 @@
  * 长按消息后弹出,根据消息类型显示不同操作:
  * - User:复制 / 编辑 / 从此处生成新回复
  * - Assistant:复制 / 重新生成 / 从此处继续 / 切换分支(候选)
+ * - Narrator:复制 / 编辑 / 加入记忆
  *
  * 复用 ChatViewModel 的 canXxx 能力判定(由 ChatPage 传入),不在组件内做业务判定。
  * 点击操作后通过 onAction 回调返回 action 字符串,由 ChatPage 执行实际逻辑。
@@ -25,7 +26,8 @@ export type MessageAction =
   | 'regenerate_assistant'
   | 'continue_from_here'
   | 'switch_branch'
-  | 'fork_chat';
+  | 'fork_chat'
+  | 'add_to_memory';
 
 /** 操作项 */
 interface ActionItem {
@@ -139,7 +141,18 @@ export struct ChatMessageActionSheet {
       return [];
     }
     const items: ActionItem[] = [];
-    if (this.msg.role === ChatRole.User) {
+    if (this.msg.senderType === 'narrator') {
+      items.push({ action: 'copy', label: '复制', enabled: true, isDestructive: false });
+      items.push({ action: 'edit', label: '编辑', enabled: true, isDestructive: false });
+      if (this.msg.includeInMemory !== true) {
+        items.push({ action: 'add_to_memory', label: '加入记忆', enabled: true, isDestructive: false });
+      } else {
+        items.push({ action: 'add_to_memory', label: '已加入记忆', enabled: false, isDestructive: false });
+      }
+      if (this.canForkChat) {
+        items.push({ action: 'fork_chat', label: '从此处创建独立对话', enabled: true, isDestructive: false });
+      }
+    } else if (this.msg.role === ChatRole.User) {
       items.push({ action: 'copy', label: '复制', enabled: true, isDestructive: false });
       if (this.canEdit) {
         items.push({ action: 'edit', label: '编辑', enabled: true, isDestructive: false });
@@ -172,6 +185,9 @@ export struct ChatMessageActionSheet {
   private getTitle(): string {
     if (this.msg === null) {
       return '';
+    }
+    if (this.msg.senderType === 'narrator') {
+      return '旁白消息';
     }
     if (this.msg.role === ChatRole.User) {
       return '用户消息';

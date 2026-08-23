@@ -6,7 +6,7 @@
  */
 
 export const DATABASE_NAME: string = 'arktavern_solo.db';
-export const DATABASE_VERSION: number = 36;
+export const DATABASE_VERSION: number = 37;
 
 export const TABLE_CHARACTERS: string = 'characters';
 export const TABLE_CHATS: string = 'chats';
@@ -207,6 +207,10 @@ export const COLUMN_WITNESS_IDS_JSON: string = 'witness_ids_json';
 /** 公开消息回复目标角色 ID 列表(JSON 数组,空表示全员回复) */
 export const COLUMN_REPLY_TARGET_CHARACTER_IDS_JSON: string = 'reply_target_character_ids_json';
 
+// ===== v37: 旁白重构 — 消息是否计入记忆 =====
+/** 消息是否计入记忆摘要(1=计入,0=不计入,默认1) */
+export const COLUMN_INCLUDE_IN_MEMORY: string = 'include_in_memory';
+
 // messages 索引扩展
 export const INDEX_MESSAGES_CHAT_BATCH: string = 'idx_messages_chat_batch';
 export const INDEX_MESSAGES_SENDER_CHARACTER: string = 'idx_messages_sender_character';
@@ -232,6 +236,10 @@ export const ALTER_MESSAGES_ADD_WITNESS_IDS_JSON: string =
 // ===== v14: G-CONTROL-2A 公开消息回复目标字段迁移 =====
 export const ALTER_MESSAGES_ADD_REPLY_TARGET_CHARACTER_IDS_JSON: string =
   `ALTER TABLE ${TABLE_MESSAGES} ADD COLUMN ${COLUMN_REPLY_TARGET_CHARACTER_IDS_JSON} TEXT`;
+
+// ===== v37: 旁白重构 — include_in_memory 迁移 =====
+export const ALTER_MESSAGES_ADD_INCLUDE_IN_MEMORY: string =
+  `ALTER TABLE ${TABLE_MESSAGES} ADD COLUMN ${COLUMN_INCLUDE_IN_MEMORY} INTEGER NOT NULL DEFAULT 1`;
 
 // ===== CREATE INDEX 语句(新安装和迁移都用) =====
 export const CREATE_INDEX_MESSAGES_CHAT_BATCH: string =

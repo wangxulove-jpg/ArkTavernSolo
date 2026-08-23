@@ -156,6 +156,8 @@ import {
   ALTER_MESSAGES_ADD_PARTICIPANT_IDS_JSON,
   ALTER_MESSAGES_ADD_WITNESS_IDS_JSON,
   ALTER_MESSAGES_ADD_REPLY_TARGET_CHARACTER_IDS_JSON,
+  COLUMN_INCLUDE_IN_MEMORY,
+  ALTER_MESSAGES_ADD_INCLUDE_IN_MEMORY,
   CREATE_INDEX_MESSAGES_CHAT_BATCH,
   CREATE_INDEX_MESSAGES_SENDER_CHARACTER,
   TABLE_CHAT_PARTICIPANTS,
@@ -552,7 +554,8 @@ const CREATE_MESSAGES_TABLE: string =
   `${COLUMN_RECIPIENT_CHARACTER_IDS_JSON} TEXT, ` +
   `${COLUMN_PARTICIPANT_IDS_JSON} TEXT, ` +
   `${COLUMN_WITNESS_IDS_JSON} TEXT, ` +
-  `${COLUMN_REPLY_TARGET_CHARACTER_IDS_JSON} TEXT` +
+  `${COLUMN_REPLY_TARGET_CHARACTER_IDS_JSON} TEXT, ` +
+  `${COLUMN_INCLUDE_IN_MEMORY} INTEGER NOT NULL DEFAULT 1` +
   `)`;
 
 const CREATE_INDEX_CHATS_UPDATED_AT: string =
@@ -2361,9 +2364,19 @@ export const V35_TO_V36_DDL_STATEMENTS: string[] = [
   ALTER_CHATS_ADD_USER_PERSONA_SUMMARY_UPDATED_AT
 ];
 
+/** v36→v37 迁移: messages 表添加 include_in_memory 列 */
+export const V36_TO_V37_DDL_STATEMENTS: string[] = [
+  ALTER_MESSAGES_ADD_INCLUDE_IN_MEMORY
+];
+
 /** v36 完整 Schema(新安装使用) */
 export const V36_SCHEMA_STATEMENTS: string[] = [
   ...V35_SCHEMA_STATEMENTS
+];
+
+/** v37 完整 Schema(新安装使用) */
+export const V37_SCHEMA_STATEMENTS: string[] = [
+  ...V36_SCHEMA_STATEMENTS
 ];
 
 export function getSchemaStatements(version: number): string[] {
@@ -2474,6 +2487,9 @@ export function getSchemaStatements(version: number): string[] {
   }
   if (version === 36) {
     return [...V36_SCHEMA_STATEMENTS];
+  }
+  if (version === 37) {
+    return [...V37_SCHEMA_STATEMENTS];
   }
   return [];
 }

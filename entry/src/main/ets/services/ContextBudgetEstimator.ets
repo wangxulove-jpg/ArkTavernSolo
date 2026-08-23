@@ -110,6 +110,7 @@ export class ContextBudgetEstimator {
       ChatMessageSource.MemorySummary,
       ChatMessageSource.CharacterMesExample,
       ChatMessageSource.CharacterFirstMessage,
+      ChatMessageSource.NarratorInstruction,
       ChatMessageSource.Conversation,
       ChatMessageSource.CharacterPostHistory
     ];
@@ -200,6 +201,8 @@ export class ContextBudgetEstimator {
         return '对话示例';
       case ChatMessageSource.CharacterFirstMessage:
         return '角色首条消息';
+      case ChatMessageSource.NarratorInstruction:
+        return '旁白指令';
       case ChatMessageSource.Conversation:
         return '最近聊天历史';
       case ChatMessageSource.CharacterPostHistory:

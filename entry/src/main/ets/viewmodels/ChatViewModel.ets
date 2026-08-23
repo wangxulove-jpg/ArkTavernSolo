@@ -440,24 +440,32 @@ export class ChatViewModel {
     }
   }
 
-  async continueGeneration(): Promise<void> {
-    if (this.disposed || this.busy) {
+  async sendNarratorOnly(): Promise<void> {
+    if (this.disposed || !this.canSend) {
+      return;
+    }
+    const content: string = this.inputText;
+    if (content.trim().length === 0) {
       return;
     }
     this.errorMessage = '';
     this.statusMessage = '';
-    this.isGenerating = true;
-    this.canRegenerate = false;
-    this.userScrolledUp = false;
     const callbacks: ChatServiceCallbacks = this.createCallbacks();
     try {
-      await this.chatService.continueGeneration(callbacks);
+      await this.chatService.narratorMessageOnly(content, callbacks);
+      this.inputText = '';
     } catch (e) {
-      this.isGenerating = false;
       this.errorMessage = this.toUserError(String(e));
-      this.statusMessage = '';
-      Logger.error(LOG_TAG, 'continueGeneration failed: ' + String(e));
+      Logger.error(LOG_TAG, 'sendNarratorOnly failed: ' + String(e));
     }
+  }
+
+  async markMessageIncludeInMemory(messageId: string, include: boolean): Promise<void> {
+    if (this.disposed) {
+      return;
+    }
+    await this.chatService.markMessageIncludeInMemory(messageId, include);
+    this.flushMessagesNow();
   }
 
   clear(): void {
@@ -917,6 +925,20 @@ export class ChatViewModel {
       Logger.error(LOG_TAG, 'editUserMessageAndGenerate failed: ' + String(e));
     } finally {
       this.isBranchOperating = false;
+    }
+  }
+
+  async editNarratorMessage(messageId: string, editedContent: string): Promise<void> {
+    if (this.disposed) {
+      return;
+    }
+    this.errorMessage = '';
+    try {
+      await this.chatService.editNarratorMessage(messageId, editedContent);
+      this.flushMessagesNow();
+    } catch (e) {
+      this.errorMessage = this.toUserError(String(e));
+      Logger.error(LOG_TAG, 'editNarratorMessage failed: ' + String(e));
     }
   }
 

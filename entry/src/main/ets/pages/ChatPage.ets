@@ -2457,7 +2457,11 @@ struct ChatPage {
                       const onComplete = (): void => { this.ttsIsSpeaking = false; };
                       const onStart = (): void => { this.ttsIsSpeaking = true; };
                       if (this.ttsEngine === TtsEngine.Edge) {
-                        this.edgeTtsService.speak(state.displayContent, onComplete, onStart);
+                        const onError = (msg: string): void => {
+                          this.ttsIsSpeaking = false;
+                          promptAction.showToast({ message: msg, duration: 2500 });
+                        };
+                        this.edgeTtsService.speak(state.displayContent, onComplete, onStart, onError);
                       } else {
                         this.ttsService.speak(state.displayContent, onComplete, onStart);
                       }
@@ -2823,21 +2827,6 @@ struct ChatPage {
             this.narratorModeActive = !this.narratorModeActive;
           })
 
-          Button({ type: ButtonType.Normal }) {
-            Text('▶继续')
-              .fontSize(11)
-              .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-          }
-          .height(28)
-          .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-          .borderRadius(14)
-          .padding({ left: 10, right: 10 })
-          .margin({ right: 6 })
-          .onClick(() => {
-            if (this.viewModel !== null && !this.viewModel!.busy) {
-              this.viewModel!.continueGeneration();
-            }
-          })
         }
         .width('100%')
         .justifyContent(FlexAlign.Start)
@@ -2851,7 +2840,7 @@ struct ChatPage {
             .fontSize(10)
             .fontColor(ThemePalette.accentColor(this.effectiveTheme))
             .fontWeight(FontWeight.Bold)
-          Text(' 输入旁白叙述文本后发送')
+          Text(' Enter=仅旁白')
             .fontSize(10)
             .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
         }
@@ -2888,7 +2877,7 @@ struct ChatPage {
             this.notifyBudgetBlocked();
           } else if (this.canSend() && this.viewModel !== null) {
             if (this.narratorModeActive) {
-              this.viewModel!.sendNarrator();
+              this.viewModel!.sendNarratorOnly();
               this.narratorModeActive = false;
             } else {
               this.viewModel!.send();
@@ -2915,7 +2904,7 @@ struct ChatPage {
             }
             if (this.canSend() && this.viewModel !== null) {
               if (this.narratorModeActive) {
-                this.viewModel!.sendNarrator();
+                this.viewModel!.sendNarratorOnly();
                 this.narratorModeActive = false;
               } else {
                 this.viewModel!.send();
@@ -2958,6 +2947,47 @@ struct ChatPage {
       .onClick(() => {
         this.viewModel!.stop();
       })
+    } else if (this.narratorModeActive) {
+      Row() {
+        Stack() {
+          Text('📝')
+            .fontSize(14)
+        }
+        .backgroundColor(this.canSend()
+          ? ThemePalette.surface2Color(this.effectiveTheme)
+          : Color.Transparent)
+        .borderRadius(20)
+        .height(36)
+        .width(36)
+        .margin({ left: 1, right: 1 })
+        .onClick(() => {
+          if (this.canSend() && this.viewModel !== null) {
+            this.viewModel!.sendNarratorOnly();
+            this.narratorModeActive = false;
+          }
+        })
+        Stack() {
+          Text('🎬')
+            .fontSize(14)
+        }
+        .backgroundColor(this.canSend()
+          ? ThemePalette.accentColor(this.effectiveTheme)
+          : Color.Transparent)
+        .borderRadius(20)
+        .height(36)
+        .width(36)
+        .margin({ left: 1, right: 1 })
+        .onClick(() => {
+          if (this.isBudgetExceeded()) {
+            this.notifyBudgetBlocked();
+            return;
+          }
+          if (this.canSend() && this.viewModel !== null) {
+            this.viewModel!.sendNarrator();
+            this.narratorModeActive = false;
+          }
+        })
+      }
     } else {
       Stack() {
         SymbolGlyph($r('sys.symbol.arrow_up'))
@@ -2982,7 +3012,7 @@ struct ChatPage {
         }
         if (this.canSend() && this.viewModel !== null) {
           if (this.narratorModeActive) {
-            this.viewModel!.sendNarrator();
+            this.viewModel!.sendNarratorOnly();
             this.narratorModeActive = false;
           } else {
             this.viewModel!.send();
@@ -4218,7 +4248,11 @@ struct ChatPage {
         this.copyMessage(msg);
         break;
       case 'edit':
-        this.openEditUserDialog(msg.id, msg.content);
+        if (msg.senderType === 'narrator') {
+          this.openEditNarratorDialog(msg.id, msg.content);
+        } else {
+          this.openEditUserDialog(msg.id, msg.content);
+        }
         break;
       case 'generate_from_user':
         this.generateFromUserMessage(msg.id);
@@ -4236,6 +4270,9 @@ struct ChatPage {
       case 'fork_chat':
         this.forkChatFromMessage(msg.id);
         break;
+      case 'add_to_memory':
+        this.addToMemory(msg.id);
+        break;
       default:
         break;
     }
@@ -4251,6 +4288,13 @@ struct ChatPage {
       return;
     }
     this.viewModel!.continueFromAssistant(messageId);
+  }
+
+  private addToMemory(messageId: string): void {
+    if (this.viewModel === null) {
+      return;
+    }
+    this.viewModel!.markMessageIncludeInMemory(messageId, true);
   }
 
   private generateFromUserMessage(messageId: string): void {
@@ -4548,5 +4592,33 @@ struct ChatPage {
     this.viewModel!.reloadAfterBranchChange();
     // 分支切换后,上下文占用需重新统计
     this.refreshBudgetSnapshot();
+  }
+
+  private openEditNarratorDialog(messageId: string, originalContent: string): void {
+    if (this.viewModel === null) {
+      return;
+    }
+    this.editingMessageId = messageId;
+    this.editDialogController = new CustomDialogController({
+      builder: HistoricalMessageEditDialog({
+        originalContent: originalContent,
+        isSubmitting: false,
+        onConfirm: (editedContent: string): void => {
+          this.confirmEditNarratorMessage(messageId, editedContent);
+        },
+        onCancel: (): void => {}
+      }),
+      autoCancel: true,
+      alignment: DialogAlignment.Center,
+      customStyle: false
+    });
+    this.editDialogController.open();
+  }
+
+  private confirmEditNarratorMessage(messageId: string, editedContent: string): void {
+    if (this.viewModel === null) {
+      return;
+    }
+    this.viewModel!.editNarratorMessage(messageId, editedContent);
   }
 }

@@ -319,8 +319,7 @@ export enum ChatGenerationKind {
   SwipeCandidate = 'SwipeCandidate',
   BranchRegeneration = 'BranchRegeneration',
   AutoContinue = 'AutoContinue',
-  Narrator = 'Narrator',
-  ContinueGeneration = 'ContinueGeneration'
+  Narrator = 'Narrator'
 }
 
 /**
@@ -1365,12 +1364,12 @@ export class ChatService {
   }
 
   /**
-   * Narrator: 用户输入旁白文本,AI 角色接续回复。
+   * Narrator: 用户输入旁白文本,AI 以旁白身份回复。
    *
    * 流程:
    * 1. 创建 role=System, senderType='narrator' 的旁白消息
-   * 2. 创建 role=Assistant, senderType='character' 的 Streaming 占位
-   * 3. AI 根据旁白内容接续回复
+   * 2. 创建 role=Assistant, senderType='narrator' 的 Streaming 占位
+   * 3. 注入旁白指令,AI 以叙述者视角回复
    */
   async narratorMessage(content: string, callbacks: ChatServiceCallbacks): Promise<void> {
     if (this.disposed) {
@@ -1399,7 +1398,8 @@ export class ChatService {
       isStreaming: false,
       status: ChatMessageStatus.Completed,
       source: ChatMessageSource.Conversation,
-      senderType: 'narrator'
+      senderType: 'narrator',
+      includeInMemory: false
     };
 
     const assistantId: string = 'msg-' + generateUuid();
@@ -1411,8 +1411,9 @@ export class ChatService {
       isStreaming: true,
       status: ChatMessageStatus.Streaming,
       source: ChatMessageSource.Conversation,
-      senderType: 'character',
-      senderCharacterId: this.character !== null ? this.character.id : ''
+      senderType: 'narrator',
+      senderCharacterId: '',
+      includeInMemory: false
     };
 
     if (this.persistenceService !== null && this.currentChatId !== undefined) {
@@ -1447,67 +1448,89 @@ export class ChatService {
   }
 
   /**
-   * ContinueGeneration: 继续生成上条 AI 消息(追加内容)。
-   *
-   * 流程:
-   * 1. 找到最后一条 Assistant 消息
-   * 2. 将其标记为 Streaming,追加 Continue 指令
-   * 3. AI 继续生成内容(追加到现有内容末尾)
+   * Narrator-Only: 仅插入旁白描述消息,不触发 AI 生成。
    */
-  async continueGeneration(callbacks: ChatServiceCallbacks): Promise<void> {
+  async narratorMessageOnly(content: string, callbacks: ChatServiceCallbacks): Promise<void> {
     if (this.disposed) {
       throw new Error('ChatService disposed');
     }
+    if (content.trim().length === 0) {
+      return;
+    }
     if (this.isBusy()) {
-      Logger.warn(LOG_TAG, 'continueGeneration rejected: busy');
+      Logger.warn(LOG_TAG, 'narratorMessageOnly rejected: busy');
       return;
     }
-
-    const lastAssistantIdx: number = this.findLastAssistantIndex();
-    if (lastAssistantIdx < 0) {
-      callbacks.onError('没有可继续的消息');
-      return;
-    }
-
-    const lastMsg: ChatMessage = this.messages[lastAssistantIdx];
-    if (lastMsg.status === ChatMessageStatus.Streaming) {
+    if (this.currentChatId === undefined) {
+      callbacks.onError('会话未初始化');
       return;
     }
 
     this.lastCallbacks = callbacks;
     this.generationOperationId++;
 
-    const resumedMsg: ChatMessage = mergeChatMessage(lastMsg, {
-      isStreaming: true,
-      status: ChatMessageStatus.Streaming
-    });
-
-    this.messages[lastAssistantIdx] = resumedMsg;
-    this.currentAssistantId = lastMsg.id;
-    this.lastPersistedContentLength = lastMsg.content.length;
-    this.pendingPersistAssistantId = lastMsg.id;
+    const narratorMsg: ChatMessage = {
+      id: 'msg-' + generateUuid(),
+      role: ChatRole.System,
+      content: content,
+      createdAt: Date.now(),
+      isStreaming: false,
+      status: ChatMessageStatus.Completed,
+      source: ChatMessageSource.Conversation,
+      senderType: 'narrator',
+      includeInMemory: false
+    };
 
     if (this.persistenceService !== null && this.currentChatId !== undefined) {
       try {
-        await this.persistenceService.updateMessage(lastMsg.id, resumedMsg);
+        const seq: number =
+          await this.persistenceService.appendMessage(
+            this.currentChatId, narratorMsg
+          );
+        this.currentSequenceNumber = seq;
       } catch (e) {
         const msg: string = e instanceof Error ? e.message : String(e);
-        Logger.error(LOG_TAG, 'continueGeneration persist failed: ' + msg);
+        Logger.error(LOG_TAG, 'narratorMessageOnly persist failed: ' + msg);
         this.setState(ChatState.Failed, callbacks);
-        callbacks.onError('消息更新失败,请重试');
+        callbacks.onError('消息保存失败,请重试');
         return;
       }
     }
 
-    this.activeGeneration = {
-      operationId: this.generationOperationId,
-      kind: ChatGenerationKind.ContinueGeneration,
-      chatId: this.currentChatId !== undefined ? this.currentChatId : '',
-      assistantMessageId: lastMsg.id
-    };
-    this.setState(ChatState.Sending, callbacks);
+    this.messages = [...this.messages, narratorMsg];
     this.emitMessages(callbacks);
-    this.doStream(lastMsg.id, callbacks, this.activeGeneration);
+  }
+
+  /**
+   * 标记消息是否计入记忆摘要。
+   */
+  async markMessageIncludeInMemory(messageId: string, include: boolean): Promise<void> {
+    if (this.disposed) {
+      return;
+    }
+    const idx: number = this.findMessageIndexById(messageId);
+    if (idx < 0) {
+      return;
+    }
+    const msg: ChatMessage = this.messages[idx];
+    const updated: ChatMessage = mergeChatMessage(msg, { includeInMemory: include });
+    this.messages[idx] = updated;
+    if (this.persistenceService !== null && this.currentChatId !== undefined) {
+      try {
+        await this.persistenceService.updateMessage(messageId, updated);
+      } catch (e) {
+        Logger.error(LOG_TAG, 'markMessageIncludeInMemory failed: ' + String(e));
+      }
+    }
+  }
+
+  private findMessageIndexById(messageId: string): number {
+    for (let i = 0; i < this.messages.length; i++) {
+      if (this.messages[i].id === messageId) {
+        return i;
+      }
+    }
+    return -1;
   }
 
   private findLastAssistantIndex(): number {
@@ -2971,17 +2994,23 @@ export class ChatService {
     // 保存最近构建的请求消息,供 UI 估算上下文占用
     this.lastBuiltRequestMessages = requestMessages;
 
-    // ContinueGeneration: 注入续写指令
-    if (context.kind === ChatGenerationKind.ContinueGeneration) {
-      const continueInstruction: ChatMessage = {
-        id: 'sys-continue',
+    // Narrator: 注入旁白叙述指令
+    if (context.kind === ChatGenerationKind.Narrator) {
+      const narratorInstruction: ChatMessage = {
+        id: 'sys-narrator',
         role: ChatRole.System,
-        content: 'Continue generating from where you left off. Do not repeat what was already written. Simply continue the text seamlessly.',
+        content: 'You are now acting as the narrator/storyteller of this scene. ' +
+          'Describe the scene, character actions, thoughts, and surroundings from a third-person perspective. ' +
+          'Do NOT speak as the character — instead, narrate what happens. ' +
+          'You may reference lorebook entries, world information, and character memories to enrich the narration. ' +
+          'If the narrator instruction directs a specific character action, describe that action happening. ' +
+          'If the narrator is observing or inquiring, provide descriptive narration about the scene, ' +
+          'character inner thoughts, or world background as relevant.',
         createdAt: Date.now(),
         status: ChatMessageStatus.Completed,
         source: ChatMessageSource.ExternalSystem
       };
-      requestMessages = [...requestMessages, continueInstruction];
+      requestMessages = [...requestMessages, narratorInstruction];
     }
 
     // 计算 Token 预算 → 超预算则裁剪 → 重算预算
@@ -5241,4 +5270,25 @@ export class ChatService {
 
 
 
+  async editNarratorMessage(messageId: string, editedContent: string): Promise<void> {
+    if (this.disposed) {
+      throw new Error('ChatService disposed');
+    }
+    const idx: number = this.findMessageIndexById(messageId);
+    if (idx < 0) {
+      return;
+    }
+    const msg: ChatMessage = this.messages[idx];
+    if (msg.senderType !== 'narrator') {
+      return;
+    }
+    const updated: ChatMessage = mergeChatMessage(msg, {
+      content: editedContent,
+      updatedAt: Date.now()
+    });
+    this.messages[idx] = updated;
+    if (this.persistenceService !== null && this.currentChatId !== undefined) {
+      await this.persistenceService.updateMessage(messageId, updated);
+    }
+  }
 }

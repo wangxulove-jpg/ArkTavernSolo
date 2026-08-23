@@ -179,6 +179,8 @@ export interface ArchiveMessage {
   readonly participantIds: string[];
   /** 目击者 ID 列表(空数组表示无) */
   readonly witnessIds: string[];
+  /** 是否计入记忆摘要(默认 true) */
+  readonly includeInMemory?: boolean;
 }
 
 /** 归档对话 */
