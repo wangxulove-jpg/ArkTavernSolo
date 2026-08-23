@@ -209,7 +209,12 @@ export class TtsService {
   private processText(text: string): string {
     let result: string = text;
     if (this._readMode === TtsReadMode.QuotesOnly) {
-      result = this.extractQuotedText(text);
+      const quoted: string = this.extractQuotedText(text);
+      if (quoted.length > 0) {
+        result = quoted;
+      } else {
+        return '';
+      }
     }
     result = result.trim();
     if (result.length > TTS_MAX_CHARS) {
@@ -220,22 +225,14 @@ export class TtsService {
 
   private extractQuotedText(text: string): string {
     const parts: string[] = [];
-    const doubleQuoteRegex: RegExp = /"([^"]*)"/g;
-    let match: RegExpExecArray | null = doubleQuoteRegex.exec(text);
+    const quoteRegex: RegExp = new RegExp('["\u201C\u201E\u300C\u300E]([^"\u201D\u201F\u300D\u300F\\n]+)["\u201D\u201F\u300D\u300F]', 'g');
+    let match: RegExpExecArray | null = quoteRegex.exec(text);
     while (match !== null) {
       if (match[1].trim().length > 0) {
         parts.push(match[1].trim());
       }
-      match = doubleQuoteRegex.exec(text);
+      match = quoteRegex.exec(text);
     }
-    const cornerBracketRegex: RegExp = /「([^」]*)」/g;
-    match = cornerBracketRegex.exec(text);
-    while (match !== null) {
-      if (match[1].trim().length > 0) {
-        parts.push(match[1].trim());
-      }
-      match = cornerBracketRegex.exec(text);
-    }
-    return parts.join('。');
+    return parts.join('\u3002');
   }
 }

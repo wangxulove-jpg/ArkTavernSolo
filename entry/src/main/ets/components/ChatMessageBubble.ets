@@ -52,8 +52,11 @@ export struct ChatMessageBubble {
   onLongPress?: (msg: ChatMessage) => void;
   /** 点击 Assistant 头像回调(可选) */
   onAvatarClick?: () => void;
-  /** TTS 朗读回调(可选,点击气泡内播放按钮) */
-  onTtsPlay?: (content: string) => void;
+  /** TTS 朗读回调(可选) */
+  onTtsPlay?: () => void;
+  /** 重新生成回调(可选) */
+  onRegenerate?: () => void;
+
   /** 聊天文本样式设置(v11 富文本,@Prop 确保父组件样式变化时同步) */
   @Prop settings: ChatTextStyle | null = null;
   /** 发送者角色 ID(用于角色独立颜色) */
@@ -294,26 +297,47 @@ export struct ChatMessageBubble {
           .margin({ top: 6 })
         }
 
-        // TTS 朗读按钮(仅完成状态且非流式时显示)
-        if (this.renderState.status === ChatMessageStatus.Completed
-          && !this.renderState.isStreaming && this.onTtsPlay !== undefined) {
+        // 操作按钮行:已完成或已停止时显示 TTS + 重新生成
+        if ((this.renderState.status === ChatMessageStatus.Completed
+          || this.renderState.status === ChatMessageStatus.Cancelled)
+          && !this.renderState.isStreaming) {
           Row() {
-            SymbolGlyph($r('sys.symbol.speaker_wave_2'))
-              .fontSize(12)
-              .fontColor([ThemePalette.textTertiaryColor(this.effectiveTheme)])
-            Text(' 朗读')
-              .fontSize(10)
-              .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-          }
-          .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-          .borderRadius(8)
-          .margin({ top: 4 })
-          .onClick(() => {
             if (this.onTtsPlay !== undefined) {
-              this.onTtsPlay!(this.renderState.displayContent);
+              Button({ type: ButtonType.Normal }) {
+                SymbolGlyph($r('sys.symbol.speaker_wave_2'))
+                  .fontSize(14)
+                  .fontColor([ThemePalette.textTertiaryColor(this.effectiveTheme)])
+              }
+              .backgroundColor(Color.Transparent)
+              .width(28)
+              .height(28)
+              .borderRadius(14)
+              .padding(0)
+              .onClick(() => {
+                this.onTtsPlay?.();
+              })
             }
-          })
+            if (this.onRegenerate !== undefined) {
+              Button({ type: ButtonType.Normal }) {
+                SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+                  .fontSize(14)
+                  .fontColor([ThemePalette.textTertiaryColor(this.effectiveTheme)])
+              }
+              .backgroundColor(Color.Transparent)
+              .width(28)
+              .height(28)
+              .borderRadius(14)
+              .padding(0)
+              .margin({ left: 4 })
+              .onClick(() => {
+                this.onRegenerate?.();
+              })
+            }
+          }
+          .margin({ top: 6 })
         }
+
+
       }
       .backgroundColor(this.computeAssistantBubbleColor())
       .border({

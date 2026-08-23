@@ -775,6 +775,7 @@ struct ChatPage {
       this.viewModel!.invalidateEstimateCache();
     }
     this.refreshBudgetSnapshot();
+    this.loadTtsSettings();
   }
 
   onBackPress(): boolean {
@@ -1124,95 +1125,114 @@ struct ChatPage {
 
   @Builder
   topBar() {
-    Row() {
-      // 返回按钮(纯图标,无背景无边框,用 Stack 居中图标)
-      Stack() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(24)
-          .fontColor([ThemePalette.textPrimaryColor(this.effectiveTheme)])
-      }
-      .width(40)
-      .height(40)
-      .onClick(() => {
-        this.handleBack();
-      })
-
-      // 上下文占用指示器(居中,点击打开上下文管理)
-      this.topBarBudgetIndicator()
-
-      // DeepSeek 余额指示器
-      if (this.showDeepSeekBalance && this.deepSeekBalanceText.length > 0) {
-        Text(this.deepSeekBalanceText)
-          .fontSize(10)
-          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-          .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-          .borderRadius(8)
-          .backgroundColor('rgba(128,128,128,0.15)')
-          .margin({ left: 4 })
-      }
-
-      Blank()
-
-      // 显示按钮(打开气泡不透明度设置卡片)
-      Stack() {
-        SymbolGlyph($r('sys.symbol.textformat'))
-          .fontSize(20)
-          .fontColor([ThemePalette.textPrimaryColor(this.effectiveTheme)])
-      }
-      .width(40)
-      .height(40)
-      .margin({ right: 4 })
-      .borderRadius($r('app.float.app_radius_sm'))
-      .backgroundColor(this.chatAppearancePanelVisible
-        ? ThemePalette.surface2Color(this.effectiveTheme) : Color.Transparent)
-      .onClick(() => {
-        this.chatAppearancePanelVisible = !this.chatAppearancePanelVisible;
-      })
-
-      // 世界书面板按钮(打开/关闭世界书查看/AI 操作面板)
-      Stack() {
-        SymbolGlyph($r('sys.symbol.book'))
-          .fontSize(20)
-          .fontColor([ThemePalette.textPrimaryColor(this.effectiveTheme)])
-      }
-      .width(40)
-      .height(40)
-      .margin({ right: 4 })
-      .borderRadius($r('app.float.app_radius_sm'))
-      .backgroundColor(this.statusPanelVisible
-        ? ThemePalette.surface2Color(this.effectiveTheme) : Color.Transparent)
-      .onClick(() => {
-        this.statusPanelVisible = !this.statusPanelVisible;
-        // 打开面板时加载世界书展示数据
-        if (this.statusPanelVisible && this.viewModel !== null) {
-          this.viewModel!.loadLorebookPanelData().then((): void => {
-            this.syncLorebookPanelData();
-          }).catch((): void => {
-          });
+    Column() {
+      Row() {
+        Stack() {
+          SymbolGlyph($r('sys.symbol.chevron_left'))
+            .fontSize(24)
+            .fontColor([ThemePalette.textPrimaryColor(this.effectiveTheme)])
         }
-      })
-      .key('chat.worldbook.toggle')
+        .width(40)
+        .height(40)
+        .onClick(() => {
+          this.handleBack();
+        })
 
-      // 更多按钮(纯图标,无背景无边框)
-      Stack() {
-        SymbolGlyph($r('sys.symbol.more'))
-          .fontSize(22)
-          .fontColor([ThemePalette.textPrimaryColor(this.effectiveTheme)])
+        this.topBarBudgetIndicator()
+
+        Stack() {
+          SymbolGlyph($r('sys.symbol.speaker'))
+            .fontSize(18)
+            .fontColor([ThemePalette.textPrimaryColor(this.effectiveTheme)])
+        }
+        .width(36)
+        .height(36)
+        .borderRadius($r('app.float.app_radius_sm'))
+        .onClick(() => {
+          this.navigateToTtsSettings();
+        })
+
+        Blank()
+
+        Stack() {
+          SymbolGlyph($r('sys.symbol.textformat'))
+            .fontSize(20)
+            .fontColor([ThemePalette.textPrimaryColor(this.effectiveTheme)])
+        }
+        .width(40)
+        .height(40)
+        .margin({ right: 4 })
+        .borderRadius($r('app.float.app_radius_sm'))
+        .backgroundColor(this.chatAppearancePanelVisible
+          ? ThemePalette.surface2Color(this.effectiveTheme) : Color.Transparent)
+        .onClick(() => {
+          this.chatAppearancePanelVisible = !this.chatAppearancePanelVisible;
+        })
+
+        Stack() {
+          SymbolGlyph($r('sys.symbol.book'))
+            .fontSize(20)
+            .fontColor([ThemePalette.textPrimaryColor(this.effectiveTheme)])
+        }
+        .width(40)
+        .height(40)
+        .margin({ right: 4 })
+        .borderRadius($r('app.float.app_radius_sm'))
+        .backgroundColor(this.statusPanelVisible
+          ? ThemePalette.surface2Color(this.effectiveTheme) : Color.Transparent)
+        .onClick(() => {
+          this.statusPanelVisible = !this.statusPanelVisible;
+          if (this.statusPanelVisible && this.viewModel !== null) {
+            this.viewModel!.loadLorebookPanelData().then((): void => {
+              this.syncLorebookPanelData();
+            }).catch((): void => {
+            });
+          }
+        })
+        .key('chat.worldbook.toggle')
+
+        Stack() {
+          SymbolGlyph($r('sys.symbol.more'))
+            .fontSize(22)
+            .fontColor([ThemePalette.textPrimaryColor(this.effectiveTheme)])
+        }
+        .width(40)
+        .height(40)
+        .onClick(() => {
+          this.refreshUserNameDisplay();
+          this.refreshPersonaDisplay();
+          this.showMoreMenu = true;
+        })
       }
-      .width(40)
-      .height(40)
-      .onClick(() => {
-        // 打开菜单前刷新一次当前生效称呼(可能角色或全局设置已变化)
-        this.refreshUserNameDisplay();
-        this.refreshPersonaDisplay();
-        this.showMoreMenu = true;
-      })
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      Row() {
+        if (this.cacheHitRatio >= 0) {
+          Text(this.getCacheHitText())
+            .fontSize(10)
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+            .borderRadius(8)
+            .backgroundColor('rgba(128,128,128,0.15)')
+        }
+
+        if (this.showDeepSeekBalance && this.deepSeekBalanceText.length > 0) {
+          Text(this.deepSeekBalanceText)
+            .fontSize(10)
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+            .borderRadius(8)
+            .backgroundColor('rgba(128,128,128,0.15)')
+            .margin({ left: 4 })
+        }
+      }
+      .width('100%')
+      .padding({ left: 48, right: 4 })
+      .alignItems(VerticalAlign.Center)
     }
     .width('100%')
-    // 顶部 padding = 状态栏高度 + 原始间距 4(避开状态栏,按钮不被遮挡)
     .padding({ left: 4, right: 4, top: this.statusBarHeight + 4, bottom: 4 })
-    .alignItems(VerticalAlign.Center)
-    // 背景层分离:顶栏不设 backgroundColor,透出 Index 根背景,避免形成与状态栏区域的色差。
   }
 
   // ===== CHAT-STATUS-1A / T-7.x: 状态/世界书滑动面板 =====
@@ -2389,13 +2409,14 @@ struct ChatPage {
                   this.actionSheetMsg = target;
                   this.showActionSheet = true;
                 },
-                onTtsPlay: this.ttsService.readMode !== TtsReadMode.Off
-                  ? (content: string): void => {
+                onTtsPlay: state.role === ChatRole.Assistant
+                  && this.ttsService.readMode !== TtsReadMode.Off
+                  ? (): void => {
                     if (this.ttsIsSpeaking) {
                       this.ttsService.stop();
                       this.ttsIsSpeaking = false;
                     } else {
-                      this.ttsService.speak(content, (): void => {
+                      this.ttsService.speak(state.displayContent, (): void => {
                         this.ttsIsSpeaking = false;
                       }, (): void => {
                         this.ttsIsSpeaking = true;
@@ -2403,7 +2424,14 @@ struct ChatPage {
                       this.ttsIsSpeaking = true;
                     }
                   }
-                  : undefined
+                  : undefined,
+                onRegenerate: state.role === ChatRole.Assistant
+                  && this.viewModel !== null
+                  && this.viewModel!.canRegenerateAssistantMessage(state.messageId)
+                  ? (): void => {
+                    this.regenerateAssistantMessage(state.messageId);
+                  }
+                  : undefined,
               })
 
               // 分支切换控件(仅 Assistant 非首条消息)
@@ -2415,15 +2443,11 @@ struct ChatPage {
                   candidateCount: this.getCandidateCount(state.messageId),
                   isGenerating: this.viewModel!.isGenerating,
                   isOperable: this.viewModel!.canOperateSwipe(state.messageId),
-                  isMaxReached: this.getCandidateCount(state.messageId) >= MAX_SWIPE_CANDIDATES,
                   onPrevious: (): void => {
                     this.viewModel!.swipePrevious(state.messageId);
                   },
                   onNext: (): void => {
                     this.viewModel!.swipeNext(state.messageId);
-                  },
-                  onRegenerate: (): void => {
-                    this.viewModel!.regenerateAsNewCandidate();
                   },
                   onStop: (): void => {
                     this.viewModel!.stop();
@@ -2689,15 +2713,6 @@ struct ChatPage {
           .fontSize(10)
           .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
           .maxLines(1)
-        if (this.cacheHitRatio >= 0) {
-          Text(' · ')
-            .fontSize(10)
-            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-          Text(this.getCacheHitText())
-            .fontSize(10)
-            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-            .maxLines(1)
-        }
       }
       .padding({ left: 6, right: 6, top: 2, bottom: 2 })
       .borderRadius(8)
@@ -3694,6 +3709,10 @@ struct ChatPage {
       url: 'pages/MemoryManagementPage',
       params: { chatId: chatId }
     });
+  }
+
+  private navigateToTtsSettings(): void {
+    router.pushUrl({ url: 'pages/TtsSettingsPage' });
   }
 
   /**
