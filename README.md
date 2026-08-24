@@ -13,17 +13,9 @@
 
 ## 截图预览
 
-| 角色卡 | 角色市场 |
-| :---: | :---: |
-| ![角色卡](./docs/screenshots/01-character-cards.jpeg) | ![角色市场](./docs/screenshots/02-character-market.jpeg) |
-
-| 对话记录 | 聊天界面 |
-| :---: | :---: |
-| ![对话记录](./docs/screenshots/03-conversation-history.jpeg) | ![聊天界面](./docs/screenshots/04-chat.jpeg) |
-
-| 设置 |
-| :---: |
-| ![设置](./docs/screenshots/05-settings.jpeg) |
+| 角色卡 | 对话记录 | 聊天界面 | 角色市场 | 设置 |
+| :---: | :---: | :---: | :---: | :---: |
+| ![角色卡](./docs/screenshots/01-character-cards.jpeg) |  ![对话记录](./docs/screenshots/03-conversation-history.jpeg) | ![聊天界面](./docs/screenshots/04-chat.jpeg) | ![角色市场](./docs/screenshots/02-character-market.jpeg) | ![设置](./docs/screenshots/05-settings.jpeg) |
 
 ## 功能特性
 
