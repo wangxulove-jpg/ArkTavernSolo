@@ -7,7 +7,7 @@
 
 **English:** A native **HarmonyOS NEXT** AI **character roleplay** chat client built with **ArkTS** / **ArkUI**. Inspired by **SillyTavern**, it supports **Tavern Card V2/V3** (JSON/PNG) import & export, AI character card generation and editing, conversation branching, world lorebook, long-term memory, OpenAI-compatible model providers (DeepSeek, etc.), TTS, WebDAV sync and multiple themes.
 
-**中文:** 原生 HarmonyOS NEXT AI 角色扮演聊天客户端（单人对话），参考 [SillyTavern](https://github.com/SillyTavern/SillyTavern) 的核心玩法，使用 ArkTS / ArkUI 从零实现。
+**中文:** 原生 HarmonyOS NEXT AI 角色扮演聊天客户端（单人对话），参考 [SillyTavern](https://github.com/SillyTavern/SillyTavern) 的核心玩法，使用 ArkTS / ArkUI 从零实现，鸿蒙酒馆。
 
 > 与完整版 ArkTavern（含群聊/世界/AvatarAI/VRM）相比，Solo 是专注于单人对话体验的精简版，两者数据完全隔离。
 
