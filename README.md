@@ -11,6 +11,20 @@
 
 > 与完整版 ArkTavern（含群聊/世界/AvatarAI/VRM）相比，Solo 是专注于单人对话体验的精简版，两者数据完全隔离。
 
+## 截图预览
+
+| 角色卡 | 角色市场 |
+| :---: | :---: |
+| ![角色卡](./docs/screenshots/01-character-cards.jpeg) | ![角色市场](./docs/screenshots/02-character-market.jpeg) |
+
+| 对话记录 | 聊天界面 |
+| :---: | :---: |
+| ![对话记录](./docs/screenshots/03-conversation-history.jpeg) | ![聊天界面](./docs/screenshots/04-chat.jpeg) |
+
+| 设置 |
+| :---: |
+| ![设置](./docs/screenshots/05-settings.jpeg) |
+
 ## 功能特性
 
 ### 角色卡

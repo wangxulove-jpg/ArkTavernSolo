@@ -13,10 +13,11 @@
 .cache/
 .deveco/
 *.log
-screenshots/
+/.tools/
+/screenshots/
 docs/AGENT/
+docs/角色卡/
 docs/*.md
 AGENT.md
 spec/
 tools/
-/docs/
