@@ -69,6 +69,7 @@ export interface FieldRegenResult {
 export class AiCharacterPreviewViewModel {
   // ===== 卡片字段(可编辑) =====
   name: string = '';
+  nickname: string = '';
   description: string = '';
   personality: string = '';
   scenario: string = '';
@@ -148,6 +149,7 @@ export class AiCharacterPreviewViewModel {
     this.parsedCard = card;
     this.originalInput = input;
     this.name = card.name;
+    this.nickname = card.nickname;
     this.description = card.description;
     this.personality = card.personality;
     this.scenario = card.scenario;
@@ -416,7 +418,15 @@ export class AiCharacterPreviewViewModel {
             && typeof extRaw === 'object' && !Array.isArray(extRaw)) {
             bookExtensions = extRaw as Record<string, Object>;
           }
-          characterBook = { entries: entries, extensions: bookExtensions };
+          characterBook = {
+            entries: entries,
+            name: '',
+            description: '',
+            scanDepth: 0,
+            tokenBudget: 0,
+            recursiveScanning: false,
+            extensions: bookExtensions
+          };
         }
       } catch (e) {
         // character_book 无效时使用原值
@@ -428,13 +438,14 @@ export class AiCharacterPreviewViewModel {
 
     return {
       name: this.name,
+      nickname: this.nickname,
       description: this.description,
       personality: this.personality,
       scenario: this.scenario,
       firstMessage: this.firstMessage,
       systemPrompt: this.systemPrompt,
       avatarUri: '',
-      sourceFormat: 'chara_card_v2',
+      sourceFormat: 'chara_card_v3',
       mesExample: this.mesExample,
       creatorNotes: this.creatorNotes,
       postHistoryInstructions: this.postHistoryInstructions,
@@ -444,7 +455,13 @@ export class AiCharacterPreviewViewModel {
       characterVersion: this.characterVersion.length === 0 ? '1.0' : this.characterVersion,
       extensions: extensions,
       characterBook: characterBook,
-      userName: ''
+      userName: '',
+      groupOnlyGreetings: [],
+      creatorNotesMultilingual: {},
+      source: [],
+      assets: [],
+      creationDate: 0,
+      modificationDate: 0
     };
   }
 
@@ -455,6 +472,9 @@ export class AiCharacterPreviewViewModel {
     switch (fieldPath) {
       case 'data.name':
         this.name = value;
+        break;
+      case 'data.nickname':
+        this.nickname = value;
         break;
       case 'data.description':
         this.description = value;
@@ -558,6 +578,7 @@ function parseBookEntrySimplified(raw: Record<string, Object>, fallbackId: numbe
   const name: string = typeof raw['name'] === 'string' ? raw['name'] as string : '';
   const comment: string = typeof raw['comment'] === 'string' ? raw['comment'] as string : '';
   const id: number = readNumberField(raw, 'id', fallbackId);
+  const useRegex: boolean = readBoolField(raw, 'use_regex', false);
 
   let entryExtensions: Record<string, Object> = {};
   const extRaw: Object | undefined = raw['extensions'];
@@ -580,6 +601,7 @@ function parseBookEntrySimplified(raw: Record<string, Object>, fallbackId: numbe
     insertionOrder: insertionOrder,
     caseSensitive: caseSensitive,
     id: id,
+    useRegex: useRegex,
     extensions: entryExtensions
   };
 }

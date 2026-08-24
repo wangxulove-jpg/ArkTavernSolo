@@ -290,7 +290,14 @@ export class CharacterListViewModel {
         extensions: jsonResult.card.extensions,
         characterBook: jsonResult.card.characterBook,
         sourceFormat: pngResult.sourceFormat,
-        userName: jsonResult.card.userName
+        userName: jsonResult.card.userName,
+        nickname: jsonResult.card.nickname,
+        groupOnlyGreetings: jsonResult.card.groupOnlyGreetings,
+        creatorNotesMultilingual: jsonResult.card.creatorNotesMultilingual,
+        source: jsonResult.card.source,
+        assets: jsonResult.card.assets,
+        creationDate: jsonResult.card.creationDate,
+        modificationDate: jsonResult.card.modificationDate
       };
       this.previewPngUri = uri;
       this.isPngImport = true;
@@ -352,7 +359,14 @@ export class CharacterListViewModel {
                 characterVersion: optimized.characterVersion,
                 extensions: optimized.extensions,
                 characterBook: optimized.characterBook,
-                userName: optimized.userName
+                userName: optimized.userName,
+                nickname: optimized.nickname,
+                groupOnlyGreetings: optimized.groupOnlyGreetings,
+                creatorNotesMultilingual: optimized.creatorNotesMultilingual,
+                source: optimized.source,
+                assets: optimized.assets,
+                creationDate: optimized.creationDate,
+                modificationDate: optimized.modificationDate
               };
               this.previewCard = merged;
               this.aiOptimizing = false;

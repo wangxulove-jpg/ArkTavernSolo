@@ -27,6 +27,11 @@ export interface OpenAiDeltaResult {
   /** 解析错误信息(可选,不含敏感数据) */
   readonly parseError?: string;
   /**
+   * 思考模型(DeepSeek-R1/QwQ等)的推理过程增量片段(可选)。
+   * 来自 delta.reasoning_content,与 content 分开累积。
+   */
+  readonly reasoningContent?: string;
+  /**
    * Phase 4A-3: 工具调用增量片段列表 (可选)。
    *
    * - OpenAI 流式协议中, tool_calls 按 index 分组, arguments 是增量字符串
@@ -180,6 +185,16 @@ function parseChoice(choice: Object): OpenAiDeltaResult {
     // content 为 null 时视为无内容(OpenAI 首帧 delta.role 事件)
   }
 
+  // 提取 delta.reasoning_content(思考模型如 DeepSeek-R1/QwQ)
+  const reasoningVal: Object | undefined = delta['reasoning_content'];
+  let reasoningContent: string | undefined = undefined;
+
+  if (reasoningVal !== undefined && reasoningVal !== null) {
+    if (typeof reasoningVal === 'string') {
+      reasoningContent = reasoningVal;
+    }
+  }
+
   // 提取 delta.role(不产生 content,但表示正常事件)
   const role: string | undefined = getStringField(delta, 'role');
   if (role !== undefined) {
@@ -202,15 +217,16 @@ function parseChoice(choice: Object): OpenAiDeltaResult {
         hasContent: result.hasContent,
         done: false,
         finishReason: finishReason,
+        reasoningContent: reasoningContent,
         toolCallDeltas: toolCallDeltas
       };
     }
-    // 使用展开方式构造,避免对象字面量类型问题
     return {
       content: result.content,
       hasContent: result.hasContent,
       done: false,
-      finishReason: finishReason
+      finishReason: finishReason,
+      reasoningContent: reasoningContent
     };
   }
 
@@ -219,7 +235,17 @@ function parseChoice(choice: Object): OpenAiDeltaResult {
       content: result.content,
       hasContent: result.hasContent,
       done: false,
+      reasoningContent: reasoningContent,
       toolCallDeltas: toolCallDeltas
+    };
+  }
+
+  if (reasoningContent !== undefined) {
+    return {
+      content: result.content,
+      hasContent: result.hasContent,
+      done: false,
+      reasoningContent: reasoningContent
     };
   }
 

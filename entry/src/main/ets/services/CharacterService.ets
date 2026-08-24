@@ -35,7 +35,7 @@ import {
   ParsedCharacterBook,
   ParsedCharacterBookEntry
 } from '../parser/CharacterCardJsonParser';
-import { writeCharacterToJson, writeCharacterToV2Json } from '../parser/CharacterCardJsonWriter';
+import { writeCharacterToJson, writeCharacterToV2Json, writeCharacterToV3Json } from '../parser/CharacterCardJsonWriter';
 import { parsePngCharacterCard, PngParseResult } from '../parser/PngCharacterCardParser';
 import {
   exportCharacterToPng,
@@ -111,7 +111,7 @@ export class CharacterService {
       'char-' + generateUuid(), name, description, personality,
       scenario, firstMessage, systemPrompt,
       '', '', '', '', [], [], '', '', {}, '', '',
-      '', sortOrder
+      '', '', sortOrder
     );
     const error: string | null = validateCharacter(character);
     if (error !== null) {
@@ -330,6 +330,7 @@ export class CharacterService {
       parsed.extensions,
       characterBookId,
       parsed.userName,
+      parsed.nickname,
       '',
       sortOrder
     );
@@ -491,6 +492,35 @@ export class CharacterService {
   }
 
   /**
+   * 导出角色为包含 character_book 的完整 V3 JSON 字符串。
+   * V3 与 V2 数据结构相同,仅 spec/spec_version 不同。
+   * PNG 导出应使用此方法 + ccv3 tEXt chunk。
+   */
+  async exportToV3JsonWithBook(id: string): Promise<string> {
+    this.requireInit();
+    const character: Character | null = await this.repository.getById(id);
+    if (character === null) {
+      throw new Error('CharacterService exportToV3JsonWithBook: not found');
+    }
+    const baseJson: string = writeCharacterToV3Json(character);
+    let characterBookJson: string = '';
+    if (character.characterBookId.length > 0 && this.lorebookRepository !== null) {
+      try {
+        const book: Lorebook | null = await this.lorebookRepository.getById(character.characterBookId);
+        if (book !== null) {
+          characterBookJson = serializeCharacterBook(book);
+        }
+      } catch (e) {
+        Logger.warn(LOG_TAG, 'exportToV3JsonWithBook: load character_book failed: ' + String(e));
+      }
+    }
+    if (characterBookJson.length === 0) {
+      return baseJson;
+    }
+    return injectFieldIntoV2Json(baseJson, 'character_book', characterBookJson);
+  }
+
+  /**
    * 读取角色头像 PNG 字节。
    * - 头像不存在:返回 null(调用方决定使用占位 PNG)
    * - 头像存在:返回 PNG 字节
@@ -510,18 +540,18 @@ export class CharacterService {
   }
 
   /**
-   * 导出角色为 PNG 字节(包含 chara tEXt chunk)。
+   * 导出角色为 PNG 字节(包含 ccv3 tEXt chunk)。
    *
    * 流程:
-   * 1. 生成完整 V2 JSON(含 character_book)
+   * 1. 生成完整 V3 JSON(含 character_book)
    * 2. 读取头像字节(无头像时使用占位 PNG)
-   * 3. 调用 PngCharacterCardWriter 写入 chara tEXt chunk
+   * 3. 调用 PngCharacterCardWriter 写入 ccv3 tEXt chunk
    *
    * 失败时抛错,不生成损坏文件。
    */
   async exportToPngBytes(id: string): Promise<Uint8Array> {
     this.requireInit();
-    const jsonString: string = await this.exportToV2JsonWithBook(id);
+    const jsonString: string = await this.exportToV3JsonWithBook(id);
     let avatarBytes: Uint8Array | null = null;
     try {
       avatarBytes = await this.readAvatarBytes(id);
@@ -540,7 +570,7 @@ export class CharacterService {
       Logger.warn(LOG_TAG, 'exportToPngBytes: read/convert avatar failed, using placeholder: ' + String(e));
       avatarBytes = null;
     }
-    const result: PngWriteResult = exportCharacterToPng(avatarBytes, jsonString);
+    const result: PngWriteResult = exportCharacterToPng(avatarBytes, jsonString, true);
     if (!result.success) {
       throw new Error('PNG 导出失败: ' + result.error);
     }
@@ -667,6 +697,7 @@ export class CharacterService {
       parsed.extensions,
       characterBookId,
       parsed.userName,
+      parsed.nickname,
       '',
       sortOrder
     );
@@ -982,6 +1013,7 @@ function cloneCharacterWithNewId(character: Character, newId: string): Character
     extensions: character.extensions,
     characterBookId: character.characterBookId,
     userName: character.userName,
+    nickname: character.nickname,
     defaultPersonaId: character.defaultPersonaId,
     sortOrder: character.sortOrder,
     createdAt: character.createdAt,

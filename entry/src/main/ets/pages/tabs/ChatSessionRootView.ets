@@ -28,7 +28,7 @@ import { PressableCard } from '../../components/PressableCard';
 import { CharacterImageView } from '../../components/CharacterImageView';
 import { promptAction, router } from '@kit.ArkUI';
 
-import { Character } from '../../models/Character';
+import { Character, resolveCharacterDisplayName } from '../../models/Character';
 
 import { ChatArchiveViewModel } from '../../viewmodels/ChatArchiveViewModel';
 import { ChatArchiveImportConversationResult } from '../../parser/ChatArchiveSchema';
@@ -957,7 +957,7 @@ export struct ChatSessionRootView {
     this.exportTarget = null;
     try {
       const vm: ChatArchiveViewModel = this.ensureArchiveViewModel();
-      const charName: string = target.character !== null ? target.character!.name : '';
+      const charName: string = resolveCharacterDisplayName(target.character);
       const title: string = target.chat.title.length > 0 ? target.chat.title : charName;
       const ok: boolean = await vm.exportCurrentConversation({
         conversationId: target.chat.id,

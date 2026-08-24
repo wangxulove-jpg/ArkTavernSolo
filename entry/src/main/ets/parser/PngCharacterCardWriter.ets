@@ -104,18 +104,21 @@ export function generatePlaceholderPng(
 }
 
 /**
- * 将 Tavern Card V2 JSON 字符串写入 PNG 字节数据。
- * - 在 IEND 之前插入 chara tEXt chunk
- * - chara chunk 内容 = Base64(UTF-8(json))
+ * 将 Tavern Card V2/V3 JSON 字符串写入 PNG 字节数据。
+ * - 在 IEND 之前插入 tEXt chunk
+ * - V2 使用 'chara' keyword, V3 使用 'ccv3' keyword
+ * - chunk 内容 = Base64(UTF-8(json))
  * - 不修改原 PNG 的图片数据
  *
  * @param pngBytes 原始 PNG 字节(必须为合法 PNG,通常为头像或占位图)
- * @param jsonString V2 JSON 字符串
+ * @param jsonString V2/V3 JSON 字符串
+ * @param useV3Keyword true 使用 'ccv3'(V3), false 使用 'chara'(V2)
  * @returns 写入结果
  */
 export function writeCharaCardToPng(
   pngBytes: Uint8Array,
-  jsonString: string
+  jsonString: string,
+  useV3Keyword: boolean = false
 ): PngWriteResult {
   if (pngBytes.byteLength < PNG_SIGNATURE.length) {
     return { success: false, bytes: new Uint8Array(0), error: 'PNG 字节数据过短' };
@@ -144,9 +147,9 @@ export function writeCharaCardToPng(
     return { success: false, bytes: new Uint8Array(0), error: '未找到 IEND chunk' };
   }
 
-  // 构建 chara tEXt chunk 数据:keyword 'chara' + 0x00 + Base64(json)
+  // 构建 tEXt chunk 数据:keyword + 0x00 + Base64(json)
   const base64: string = encodeBase64Utf8(jsonString);
-  const keyword: string = 'chara';
+  const keyword: string = useV3Keyword ? 'ccv3' : 'chara';
   const chunkData: number[] = [];
   // keyword
   for (let i = 0; i < keyword.length; i++) {
@@ -185,15 +188,17 @@ export function writeCharaCardToPng(
  * 否则使用生成的占位 PNG。
  *
  * @param avatarBytes 头像 PNG 字节(可为 null)
- * @param jsonString V2 JSON 字符串
+ * @param jsonString V2/V3 JSON 字符串
+ * @param useV3Keyword true 使用 'ccv3'(V3), false 使用 'chara'(V2)
  * @returns 写入结果
  */
 export function exportCharacterToPng(
   avatarBytes: Uint8Array | null,
-  jsonString: string
+  jsonString: string,
+  useV3Keyword: boolean = false
 ): PngWriteResult {
   const pngBytes: Uint8Array = avatarBytes !== null ? avatarBytes : generatePlaceholderPng();
-  return writeCharaCardToPng(pngBytes, jsonString);
+  return writeCharaCardToPng(pngBytes, jsonString, useV3Keyword);
 }
 
 // ===== 内部工具 =====

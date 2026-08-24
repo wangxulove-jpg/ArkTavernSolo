@@ -48,7 +48,8 @@ import {
   COLUMN_CHARACTER_BOOK_ID,
   COLUMN_SORT_ORDER,
   COLUMN_USER_NAME,
-  COLUMN_CHARACTER_DEFAULT_PERSONA_ID
+  COLUMN_CHARACTER_DEFAULT_PERSONA_ID,
+  COLUMN_NICKNAME
 } from '../database/DatabaseConstants';
 import {
   isValidTimestamp,
@@ -96,6 +97,7 @@ function characterToBucket(character: Character): relationalStore.ValuesBucket {
   bucket[COLUMN_CHARACTER_BOOK_ID] = character.characterBookId;
   bucket[COLUMN_SORT_ORDER] = character.sortOrder;
   bucket[COLUMN_USER_NAME] = character.userName;
+  bucket[COLUMN_NICKNAME] = character.nickname;
   bucket[COLUMN_CHARACTER_DEFAULT_PERSONA_ID] = character.defaultPersonaId;
   return bucket;
 }
@@ -141,6 +143,7 @@ function characterFromRow(rs: relationalStore.ResultSet): Character {
   const characterBookId: string = readStringColumnSafe(rs, COLUMN_CHARACTER_BOOK_ID, '');
   const sortOrder: number = readLongColumnSafe(rs, COLUMN_SORT_ORDER, 0);
   const userName: string = readStringColumnSafe(rs, COLUMN_USER_NAME, '');
+  const nickname: string = readStringColumnSafe(rs, COLUMN_NICKNAME, '');
   const defaultPersonaId: string = readStringColumnSafe(rs, COLUMN_CHARACTER_DEFAULT_PERSONA_ID, '');
 
   return {
@@ -162,6 +165,7 @@ function characterFromRow(rs: relationalStore.ResultSet): Character {
     extensions: extensions,
     characterBookId: characterBookId,
     userName: userName,
+    nickname: nickname,
     defaultPersonaId: defaultPersonaId,
     sortOrder: sortOrder,
     createdAt: createdAt,
@@ -392,6 +396,7 @@ export class CharacterRepository {
     bucket[COLUMN_CHARACTER_BOOK_ID] = character.characterBookId;
     bucket[COLUMN_SORT_ORDER] = character.sortOrder;
     bucket[COLUMN_USER_NAME] = character.userName;
+    bucket[COLUMN_NICKNAME] = character.nickname;
     bucket[COLUMN_CHARACTER_DEFAULT_PERSONA_ID] = character.defaultPersonaId;
 
     const predicates: relationalStore.RdbPredicates =

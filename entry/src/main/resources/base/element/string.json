@@ -857,6 +857,14 @@
       "value": "请输入角色名"
     },
     {
+      "name": "character_edit_field_nickname",
+      "value": "昵称"
+    },
+    {
+      "name": "character_edit_field_nickname_placeholder",
+      "value": "非空时优先用于{{char}}替换"
+    },
+    {
       "name": "character_edit_field_user_name",
       "value": "角色对你的称呼"
     },

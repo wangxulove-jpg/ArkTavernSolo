@@ -592,8 +592,18 @@ export class AiCharacterGenerationService {
             return;
           }
           const content: string = delta.content !== undefined ? delta.content : '';
+          const reasoning: string = delta.reasoningContent !== undefined ? delta.reasoningContent : '';
           if (content.length > 0) {
             state.accumulated += content;
+            if (callbacks !== null) {
+              try {
+                callbacks.onDelta(state.accumulated);
+              } catch (e) {
+                Logger.warn(LOG_TAG, 'onDelta throw: ' + String(e));
+              }
+            }
+          } else if (reasoning.length > 0) {
+            state.accumulated += reasoning;
             if (callbacks !== null) {
               try {
                 callbacks.onDelta(state.accumulated);
@@ -605,9 +615,14 @@ export class AiCharacterGenerationService {
         },
         onComplete: (result: ChatStreamResult): void => {
           // 优先使用 result.content(已聚合),否则用累积值
-          const finalContent: string = result.content !== undefined && result.content.length > 0
+          // 如果 content 和累积值都为空,尝试使用 reasoningContent(思考模型回退)
+          let finalContent: string = result.content !== undefined && result.content.length > 0
             ? result.content
             : state.accumulated;
+          if (finalContent.length === 0 && result.reasoningContent !== undefined
+            && result.reasoningContent.length > 0) {
+            finalContent = result.reasoningContent;
+          }
           resolve(finalContent);
         },
         onError: (error: NetworkError): void => {
@@ -872,6 +887,9 @@ function buildFieldRegenMessages(
   // 构造角色上下文(只保留必要字段)
   const context: Record<string, Object> = {};
   context['name'] = currentCard.name;
+  if (currentCard.nickname.length > 0) {
+    context['nickname'] = currentCard.nickname;
+  }
   context['description'] = currentCard.description;
   context['personality'] = currentCard.personality;
   context['scenario'] = currentCard.scenario;
@@ -898,25 +916,26 @@ function buildFieldRegenMessages(
  * 不改变角色设定,不重新创作,只整理字段归属与补全缺失字段。
  */
 function buildOptimizeMessages(card: ParsedCharacterCard): ChatMessage[] {
-  const systemPrompt: string = '你是 Tavern Card V2 角色卡整理助手。'
-    + '用户会给你一个现有角色卡的内容,你需要**保持角色设定不变**,将其整理为规范、完整的 Tavern Card V2 JSON。'
+  const systemPrompt: string = '你是 Tavern Card V3 角色卡整理助手。'
+    + '用户会给你一个现有角色卡的内容,你需要**保持角色设定不变**,将其整理为规范、完整的 Tavern Card V3 JSON。'
     + '\n\n核心原则:'
-    + '\n- **不重新创作**:保留角色名称、描述、性格、场景、开场白等原有内容与设定,不添加原创设定'
+    + '\n- **不重新创作**:保留角色名称、昵称、描述、性格、场景、开场白等原有内容与设定,不添加原创设定'
     + '\n- **不删减有效信息**:将原有内容按字段语义归类到正确字段,不丢失已有设定'
-    + '\n- **结构匹配**:根据内容判断它属于 description / personality / scenario / first_mes / system_prompt 等哪个字段'
+    + '\n- **结构匹配**:根据内容判断它属于 description / personality / scenario / first_mes / system_prompt / nickname 等哪个字段'
     + '\n- **补全结构**:缺失字段填空字符串或空数组,但不得虚构内容填充必填字段(name 除外,保留原值)'
     + '\n- **语言风格统一**:仅做轻度润色与标点/换行整理,保持原有语言'
     + '\n- 不要修改头像、不要修改角色书已有条目内容'
     + '\n\n输出要求:'
-    + '\n- **只输出**标准 Tavern Card V2 JSON,不要输出 Markdown 代码块标记、解释、标题或其他任何文字'
+    + '\n- **只输出**标准 Tavern Card V3 JSON,不要输出 Markdown 代码块标记、解释、标题或其他任何文字'
     + '\n- JSON 必须可被 JSON.parse 直接解析'
-    + '\n- 必须包含 spec="chara_card_v2"、spec_version="2.0" 和 data 对象'
+    + '\n- 必须包含 spec="chara_card_v3"、spec_version="3.0" 和 data 对象'
     + '\n\nJSON 结构要求(所有字段必填,数组字段即使为空也必须是空数组,extensions 即使为空也必须是空对象):'
     + '\n{'
-    + '\n  "spec": "chara_card_v2",'
-    + '\n  "spec_version": "2.0",'
+    + '\n  "spec": "chara_card_v3",'
+    + '\n  "spec_version": "3.0",'
     + '\n  "data": {'
     + '\n    "name": "角色名称(保持原值)",'
+    + '\n    "nickname": "角色昵称/别名(保持原值,没有则留空)",'
     + '\n    "description": "角色身份、经历、外貌和行为习惯的描述",'
     + '\n    "personality": "性格描述",'
     + '\n    "scenario": "场景设定",'
@@ -937,6 +956,7 @@ function buildOptimizeMessages(card: ParsedCharacterCard): ChatMessage[] {
   // 构造现有卡片内容(序列化为紧凑 JSON,便于模型读取)
   const cardContent: Record<string, Object> = {};
   cardContent['name'] = card.name;
+  cardContent['nickname'] = card.nickname;
   cardContent['description'] = card.description;
   cardContent['personality'] = card.personality;
   cardContent['scenario'] = card.scenario;
@@ -957,7 +977,7 @@ function buildOptimizeMessages(card: ParsedCharacterCard): ChatMessage[] {
 
   const userPrompt: string = '以下是需要整理的现有角色卡内容:\n\n'
     + JSON.stringify(cardContent, null, 2)
-    + '\n\n请保持以上角色设定与内容不变,将其整理为规范、完整的 Tavern Card V2 JSON。'
+    + '\n\n请保持以上角色设定与内容不变,将其整理为规范、完整的 Tavern Card V3 JSON。'
     + '只输出 JSON,不要输出任何其他文字或 Markdown 代码块。';
 
   return [
@@ -972,10 +992,10 @@ function buildOptimizeMessages(card: ParsedCharacterCard): ChatMessage[] {
 function buildSystemPrompt(input: AiCharacterInput): string {
   const typeGuidance: string = buildTypeGuidance(input.characterType);
 
-  return '你是 Tavern Card V2 角色卡生成助手。'
-    + '用户会给你一个角色创意,你需要生成符合 Tavern Card V2 规范的完整角色卡 JSON。'
+  return '你是 Tavern Card V3 角色卡生成助手。'
+    + '用户会给你一个角色创意,你需要生成符合 Tavern Card V3 规范的完整角色卡 JSON。'
     + '\n\n输出要求:'
-    + '\n- **只输出**标准 Tavern Card V2 JSON,不要输出 Markdown 代码块标记、解释、标题或其他任何文字'
+    + '\n- **只输出**标准 Tavern Card V3 JSON,不要输出 Markdown 代码块标记、解释、标题或其他任何文字'
     + '\n- 不要输出模型推理过程'
     + '\n- JSON 必须可被 JSON.parse 直接解析'
     + '\n- 内容语言:跟随创意描述所用语言'
@@ -983,10 +1003,11 @@ function buildSystemPrompt(input: AiCharacterInput): string {
     + typeGuidance
     + '\n\nJSON 结构要求(所有字段必填,数组字段即使为空也必须是空数组,extensions 即使为空也必须是空对象):'
     + '\n{'
-    + '\n  "spec": "chara_card_v2",'
-    + '\n  "spec_version": "2.0",'
+    + '\n  "spec": "chara_card_v3",'
+    + '\n  "spec_version": "3.0",'
     + '\n  "data": {'
     + '\n    "name": "角色名称(必须是一个自然、具体、贴切的名字,如人物本名或昵称)",'
+    + '\n    "nickname": "角色昵称/别名(非空时优先用于{{char}}替换;若角色名已是常用称呼则留空)",'
     + '\n    "description": "角色身份、经历、外貌和行为习惯的描述",'
     + '\n    "personality": "性格描述(不能只是关键词堆积,应清晰说明角色说话方式和性格特点)",'
     + '\n    "scenario": "场景设定,说明角色与用户如何相遇(不替用户决定行为)",'
@@ -1010,6 +1031,7 @@ function buildSystemPrompt(input: AiCharacterInput): string {
     + '\n}'
     + '\n\n角色卡内容要求:'
     + '\n- name 必须是一个自然、贴切、有辨识度的角色名字(如人物本名、昵称或代号),禁止使用占位符(如 Entry、Character、未命名、数字编号等)'
+    + '\n- nickname 是角色的别名/昵称(如角色有常用简称、花名、代号等可填入;若角色名本身已是常用称呼则留空字符串)'
     + '\n- 保持角色设定统一,不矛盾'
     + '\n- 清晰描述角色身份、经历、外貌和行为习惯'
     + '\n- 性格不能只是关键词堆积,应说明角色说话方式和性格特点'
@@ -1063,7 +1085,7 @@ function buildTypeGuidance(characterType: AiCharacterType): string {
  */
 function buildUserPrompt(input: AiCharacterInput): string {
   const parts: string[] = [];
-  parts.push('请根据以下创意生成 Tavern Card V2 角色卡。');
+  parts.push('\n请根据以下创意生成 Tavern Card V3 角色卡。');
 
   if (input.characterType === 'narrator') {
     parts.push('\n【角色卡类型】叙述者 — 这不是具体角色,而是一个第三人称叙述者角色卡');
@@ -1113,7 +1135,7 @@ function buildUserPrompt(input: AiCharacterInput): string {
   parts.push('- 生成多个开场白: ' + (input.generateMultipleGreetings ? '是' : '否'));
   parts.push('- 生成对话示例: ' + (input.generateMesExample ? '是' : '否'));
 
-  parts.push('\n请只输出标准 Tavern Card V2 JSON,不要输出任何其他文字或 Markdown 代码块。');
+  parts.push('\n请只输出标准 Tavern Card V3 JSON,不要输出任何其他文字或 Markdown 代码块。');
 
   return parts.join('\n');
 }

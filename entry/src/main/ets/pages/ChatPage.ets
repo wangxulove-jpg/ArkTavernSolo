@@ -73,7 +73,7 @@ import {
 } from '../services/ContextBudgetEstimator';
 import { ForkChatMode } from '../models/ForkChatOptions';
 import { ChatSessionListPanel } from '../components/ChatSessionListPanel';
-import { Character } from '../models/Character';
+import { Character, resolveCharacterDisplayName } from '../models/Character';
 import { Persona } from '../models/Persona';
 import { Logger } from '../utils/Logger';
 import { MacroReplacer } from '../services/MacroReplacer';
@@ -2625,7 +2625,7 @@ struct ChatPage {
     if (content.length === 0) {
       return '';
     }
-    const charName: string = this.character !== null ? this.character.name : '';
+    const charName: string = resolveCharacterDisplayName(this.character);
     return displayMacroReplacer.replaceDisplayNames(content, charName, this.resolvedUserName);
   }
 
@@ -3950,7 +3950,7 @@ struct ChatPage {
       const title: string = this.viewModel!.characterName.length > 0
         ? this.viewModel!.characterName
         : '对话';
-      const charName: string = this.character !== null ? this.character!.name : '';
+      const charName: string = resolveCharacterDisplayName(this.character);
       const ok: boolean = await vm.exportCurrentConversation({
         conversationId: chatId,
         conversationTitle: title,

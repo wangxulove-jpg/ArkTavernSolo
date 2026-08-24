@@ -473,7 +473,9 @@ import {
   COLUMN_CHAT_USER_PERSONA_SUMMARY,
   COLUMN_CHAT_USER_PERSONA_SUMMARY_UPDATED_AT,
   ALTER_CHATS_ADD_USER_PERSONA_SUMMARY,
-  ALTER_CHATS_ADD_USER_PERSONA_SUMMARY_UPDATED_AT
+  ALTER_CHATS_ADD_USER_PERSONA_SUMMARY_UPDATED_AT,
+  COLUMN_NICKNAME,
+  ALTER_CHARACTERS_ADD_NICKNAME
 } from './DatabaseConstants';
 
 const CREATE_CHARACTERS_TABLE: string =
@@ -499,6 +501,7 @@ const CREATE_CHARACTERS_TABLE: string =
   `${COLUMN_CHARACTER_BOOK_ID} TEXT NOT NULL DEFAULT '', ` +
   `${COLUMN_SORT_ORDER} INTEGER NOT NULL DEFAULT 0, ` +
   `${COLUMN_USER_NAME} TEXT NOT NULL DEFAULT '', ` +
+  `${COLUMN_NICKNAME} TEXT NOT NULL DEFAULT '', ` +
   `${COLUMN_CHARACTER_DEFAULT_PERSONA_ID} TEXT NOT NULL DEFAULT ''` +
   `)`;
 
@@ -2374,9 +2377,19 @@ export const V36_SCHEMA_STATEMENTS: string[] = [
   ...V35_SCHEMA_STATEMENTS
 ];
 
+/** v37→v38 迁移: characters 表添加 nickname 列 */
+export const V37_TO_V38_DDL_STATEMENTS: string[] = [
+  ALTER_CHARACTERS_ADD_NICKNAME
+];
+
 /** v37 完整 Schema(新安装使用) */
 export const V37_SCHEMA_STATEMENTS: string[] = [
   ...V36_SCHEMA_STATEMENTS
+];
+
+/** v38 完整 Schema(新安装使用) */
+export const V38_SCHEMA_STATEMENTS: string[] = [
+  ...V37_SCHEMA_STATEMENTS
 ];
 
 export function getSchemaStatements(version: number): string[] {
@@ -2490,6 +2503,9 @@ export function getSchemaStatements(version: number): string[] {
   }
   if (version === 37) {
     return [...V37_SCHEMA_STATEMENTS];
+  }
+  if (version === 38) {
+    return [...V38_SCHEMA_STATEMENTS];
   }
   return [];
 }

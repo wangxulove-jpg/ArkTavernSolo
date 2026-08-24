@@ -46,7 +46,15 @@ export interface ArkTavernCharacterCard {
   character: ArkTavernCharacterData;
 }
 
-/** V2 chara_card data 字段(snake_case) */
+/** V3 角色资产条目 */
+export interface CharaCardAsset {
+  type: string;
+  uri: string;
+  name: string;
+  ext: string;
+}
+
+/** V2/V3 chara_card data 字段(snake_case) */
 export interface CharaCardV2Data {
   name: string;
   description: string;
@@ -62,6 +70,20 @@ export interface CharaCardV2Data {
   creator: string;
   character_version: string;
   extensions: Record<string, Object>;
+  /** V3: 角色昵称 */
+  nickname?: string;
+  /** V3: 群聊专用开场白 */
+  group_only_greetings?: string[];
+  /** V3: 多语言创作者备注 */
+  creator_notes_multilingual?: Record<string, Object>;
+  /** V3: 来源 URL/ID 数组 */
+  source?: string[];
+  /** V3: 角色资产列表 */
+  assets?: CharaCardAsset[];
+  /** V3: 创建日期(Unix 时间戳,秒) */
+  creation_date?: number;
+  /** V3: 修改日期(Unix 时间戳,秒) */
+  modification_date?: number;
 }
 
 /** V2 chara_card 顶层结构 */
@@ -202,8 +224,14 @@ export function writeCharacterToV3Json(character: Character): string {
     tags: character.tags,
     creator: character.creator,
     character_version: character.characterVersion,
-    extensions: buildExportExtensions(character)
+    extensions: buildExportExtensions(character),
+    group_only_greetings: [],
+    creation_date: Math.floor(character.createdAt / 1000),
+    modification_date: Math.floor(character.updatedAt / 1000)
   };
+  if (character.nickname.trim().length > 0) {
+    data.nickname = character.nickname;
+  }
   const card: CharaCardV2 = {
     spec: 'chara_card_v3',
     spec_version: '3.0',

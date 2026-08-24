@@ -76,6 +76,8 @@ export interface ChatDelta {
   readonly finishReason?: string;
   /** 序号(从 0 开始,每次 delta 递增 1) */
   readonly sequence: number;
+  /** 思考模型推理过程增量片段(可选,如 DeepSeek-R1/QwQ 的 reasoning_content) */
+  readonly reasoningContent?: string;
 }
 
 /**
@@ -129,6 +131,8 @@ export interface ChatStreamResult {
    * - 不解析聊天正文 / Markdown / JSON 代码块
    */
   readonly toolCalls?: StreamToolCallResult[];
+  /** 思考模型推理过程完整内容(可选,如 DeepSeek-R1/QwQ 的 reasoning_content 累积) */
+  readonly reasoningContent?: string;
 }
 
 /**

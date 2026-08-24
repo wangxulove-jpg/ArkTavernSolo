@@ -6,7 +6,7 @@
  */
 
 export const DATABASE_NAME: string = 'arktavern_solo.db';
-export const DATABASE_VERSION: number = 37;
+export const DATABASE_VERSION: number = 38;
 
 export const TABLE_CHARACTERS: string = 'characters';
 export const TABLE_CHATS: string = 'chats';
@@ -827,3 +827,9 @@ export const ALTER_CHATS_ADD_USER_PERSONA_SUMMARY: string =
 /** v36 迁移: ALTER chats 添加 user_persona_summary_updated_at 列 */
 export const ALTER_CHATS_ADD_USER_PERSONA_SUMMARY_UPDATED_AT: string =
   `ALTER TABLE ${TABLE_CHATS} ADD COLUMN ${COLUMN_CHAT_USER_PERSONA_SUMMARY_UPDATED_AT} INTEGER NOT NULL DEFAULT 0`;
+
+// ===== v38: 角色昵称 =====
+export const COLUMN_NICKNAME: string = 'nickname';
+
+export const ALTER_CHARACTERS_ADD_NICKNAME: string =
+  `ALTER TABLE ${TABLE_CHARACTERS} ADD COLUMN ${COLUMN_NICKNAME} TEXT NOT NULL DEFAULT ''`;

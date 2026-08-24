@@ -70,7 +70,7 @@ import {
   isStreamTerminalState
 } from '../models/ChatStreamTypes';
 import { NetworkError } from '../models/NetworkError';
-import { Character, buildCharacterSystemContent } from '../models/Character';
+import { Character, buildCharacterSystemContent, resolveCharacterDisplayName } from '../models/Character';
 import { Lorebook } from '../models/Lorebook';
 import { MacroContext } from '../models/MacroContext';
 import { ProviderConfig } from '../models/ProviderConfig';
@@ -1122,7 +1122,7 @@ export class ChatService {
     }
 
     const userName: string = await this.resolveUserName();
-    const charName: string = this.character !== null ? this.character.name : 'Assistant';
+    const charName: string = this.character !== null ? resolveCharacterDisplayName(this.character) : 'Assistant';
 
     const recentCount: number = Math.min(this.messages.length, 6);
     const recentMessages: ChatMessage[] = this.messages.slice(this.messages.length - recentCount);

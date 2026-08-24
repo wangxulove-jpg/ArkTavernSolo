@@ -56,6 +56,8 @@ export interface Character {
    * 不进入角色卡 V2/V3 标准字段,仅存在于 extensions.arktavern.user_name_override。
    */
   readonly userName: string;
+  /** V3: 角色昵称(替代 name 用于 {{char}} 替换,可选) */
+  readonly nickname: string;
   /** 角色默认 Persona ID(空=未锁定,Phase 2A 引入) */
   readonly defaultPersonaId: string;
   /** 自定义排序权重(越小越靠前,v7 引入) */
@@ -93,6 +95,7 @@ export function createCharacter(
   extensions: Record<string, Object> = {},
   characterBookId: string = '',
   userName: string = '',
+  nickname: string = '',
   defaultPersonaId: string = '',
   sortOrder: number = 0
 ): Character {
@@ -116,6 +119,7 @@ export function createCharacter(
     extensions: extensions,
     characterBookId: characterBookId.trim(),
     userName: userName.trim(),
+    nickname: nickname.trim(),
     defaultPersonaId: defaultPersonaId.trim(),
     sortOrder: sortOrder,
     createdAt: now,
@@ -167,6 +171,9 @@ export function validateCharacter(character: Character): string | null {
   if (character.userName.length > MAX_NAME_LENGTH) {
     return '角色对你的称呼不能超过' + MAX_NAME_LENGTH + '个字符';
   }
+  if (character.nickname.length > MAX_NAME_LENGTH) {
+    return '角色昵称不能超过' + MAX_NAME_LENGTH + '个字符';
+  }
   if (character.alternateGreetings.length > MAX_ALTERNATE_GREETINGS) {
     return '备用开场白不能超过' + MAX_ALTERNATE_GREETINGS + '条';
   }
@@ -207,6 +214,7 @@ export interface CharacterUpdates {
   extensions?: Record<string, Object>;
   characterBookId?: string;
   userName?: string;
+  nickname?: string;
   defaultPersonaId?: string;
   sortOrder?: number;
 }
@@ -242,6 +250,7 @@ export function updateCharacter(
     characterBookId: updates.characterBookId !== undefined
       ? updates.characterBookId.trim() : character.characterBookId,
     userName: updates.userName !== undefined ? updates.userName.trim() : character.userName,
+    nickname: updates.nickname !== undefined ? updates.nickname.trim() : character.nickname,
     defaultPersonaId: updates.defaultPersonaId !== undefined ? updates.defaultPersonaId.trim() : character.defaultPersonaId,
     sortOrder: updates.sortOrder !== undefined ? updates.sortOrder : character.sortOrder,
     createdAt: character.createdAt,
@@ -269,6 +278,16 @@ export function buildDefaultCharacterSystemContent(character: Character): string
     parts.push('场景: ' + character.scenario);
   }
   return parts.join('\n');
+}
+
+export function resolveCharacterDisplayName(character: Character | null): string {
+  if (character === null) {
+    return '';
+  }
+  if (character.nickname.trim().length > 0) {
+    return character.nickname.trim();
+  }
+  return character.name;
 }
 
 /**

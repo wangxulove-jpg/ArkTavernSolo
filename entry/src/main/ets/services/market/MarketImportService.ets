@@ -501,6 +501,13 @@ function injectMarketMetadata(
     characterVersion: parsed.characterVersion,
     extensions: newExtensions,
     characterBook: parsed.characterBook,
-    userName: parsed.userName
+    userName: parsed.userName,
+    nickname: parsed.nickname,
+    groupOnlyGreetings: parsed.groupOnlyGreetings,
+    creatorNotesMultilingual: parsed.creatorNotesMultilingual,
+    source: parsed.source,
+    assets: parsed.assets,
+    creationDate: parsed.creationDate,
+    modificationDate: parsed.modificationDate
   };
 }

@@ -44,6 +44,8 @@ export interface ParsedCharacterBookEntry {
   caseSensitive: boolean;
   /** 原始 ID */
   id: number;
+  /** V3: 是否使用正则匹配(V3 必填,V2 可选) */
+  useRegex: boolean;
   /** 未知扩展字段 */
   extensions: Record<string, Object>;
 }
@@ -52,8 +54,30 @@ export interface ParsedCharacterBookEntry {
 export interface ParsedCharacterBook {
   /** 条目列表 */
   entries: ParsedCharacterBookEntry[];
+  /** V3: Lorebook 名称 */
+  name: string;
+  /** V3: Lorebook 描述 */
+  description: string;
+  /** V3: 扫描深度 */
+  scanDepth: number;
+  /** V3: token 预算 */
+  tokenBudget: number;
+  /** V3: 是否递归扫描 */
+  recursiveScanning: boolean;
   /** 未知扩展字段 */
   extensions: Record<string, Object>;
+}
+
+/** V3 角色资产条目 */
+export interface ParsedAsset {
+  /** 资产类型(icon/background/emotion/user_icon 等) */
+  type: string;
+  /** 资产 URI */
+  uri: string;
+  /** 资产名称 */
+  name: string;
+  /** 文件扩展名(小写,不含点号) */
+  ext: string;
 }
 
 /** 解析后的角色卡中间格式 */
@@ -100,6 +124,21 @@ export interface ParsedCharacterCard {
    * 留空时由 ChatService 按优先级回退到全局用户称呼。
    */
   userName: string;
+  /** ===== Tavern Card V3 扩展字段 ===== */
+  /** V3: 角色昵称(替代 name 用于 {{char}} 替换) */
+  nickname: string;
+  /** V3: 群聊专用开场白 */
+  groupOnlyGreetings: string[];
+  /** V3: 多语言创作者备注(ISO 639-1 key) */
+  creatorNotesMultilingual: Record<string, Object>;
+  /** V3: 来源 URL/ID 数组 */
+  source: string[];
+  /** V3: 角色资产列表 */
+  assets: ParsedAsset[];
+  /** V3: 创建日期(Unix 时间戳,秒) */
+  creationDate: number;
+  /** V3: 修改日期(Unix 时间戳,秒) */
+  modificationDate: number;
 }
 
 /** 解析结果:成功或失败 */
@@ -242,7 +281,14 @@ function parseArkTavernFormat(root: Record<string, Object>): ParseResult {
     characterVersion: truncateField(getStringField(charObj, 'characterVersion'), MAX_FIELD_LENGTH),
     extensions: extensions,
     characterBook: null,
-    userName: extractArkTavernUserName(extensions)
+    userName: extractArkTavernUserName(extensions),
+    nickname: '',
+    groupOnlyGreetings: [],
+    creatorNotesMultilingual: {},
+    source: [],
+    assets: [],
+    creationDate: 0,
+    modificationDate: 0
   });
 }
 
@@ -275,7 +321,14 @@ function parseV1FlatFormat(root: Record<string, Object>): ParseResult {
     characterVersion: '',
     extensions: {},
     characterBook: null,
-    userName: ''
+    userName: '',
+    nickname: '',
+    groupOnlyGreetings: [],
+    creatorNotesMultilingual: {},
+    source: [],
+    assets: [],
+    creationDate: 0,
+    modificationDate: 0
   });
 }
 
@@ -319,7 +372,16 @@ function parseCharaCardFormat(root: Record<string, Object>, spec: string): Parse
     characterVersion: truncateField(getStringField(dataObj, 'character_version'), MAX_FIELD_LENGTH),
     extensions: extensions,
     characterBook: characterBook,
-    userName: extractArkTavernUserName(extensions)
+    userName: extractArkTavernUserName(extensions),
+    nickname: truncateField(getStringField(dataObj, 'nickname'), MAX_FIELD_LENGTH),
+    groupOnlyGreetings: truncateStringArray(
+      getStringArrayField(dataObj, 'group_only_greetings'), MAX_ALTERNATE_GREETINGS
+    ),
+    creatorNotesMultilingual: getObjectField(dataObj, 'creator_notes_multilingual'),
+    source: getStringArrayField(dataObj, 'source'),
+    assets: parseAssets(dataObj['assets']),
+    creationDate: getNumberField(dataObj, 'creation_date', 0),
+    modificationDate: getNumberField(dataObj, 'modification_date', 0)
   });
 }
 
@@ -332,9 +394,22 @@ function parseCharacterBook(raw: Object | undefined): ParsedCharacterBook | null
     return null;
   }
   const bookObj: Record<string, Object> = raw as Record<string, Object>;
+  const bookName: string = truncateField(getStringField(bookObj, 'name'), MAX_FIELD_LENGTH);
+  const bookDescription: string = truncateField(getStringField(bookObj, 'description'), MAX_FIELD_LENGTH);
+  const scanDepth: number = getNumberField(bookObj, 'scan_depth', 0);
+  const tokenBudget: number = getNumberField(bookObj, 'token_budget', 0);
+  const recursiveScanning: boolean = getBooleanField(bookObj, 'recursive_scanning', false);
   const rawEntries: Object | undefined = bookObj['entries'];
   if (typeof rawEntries !== 'object' || rawEntries === null) {
-    return { entries: [], extensions: getObjectField(bookObj, 'extensions') };
+    return {
+      entries: [],
+      name: bookName,
+      description: bookDescription,
+      scanDepth: scanDepth,
+      tokenBudget: tokenBudget,
+      recursiveScanning: recursiveScanning,
+      extensions: getObjectField(bookObj, 'extensions')
+    };
   }
 
   // entries 可能是数组或对象(V2 中是对象,key 是数字字符串)
@@ -365,6 +440,11 @@ function parseCharacterBook(raw: Object | undefined): ParsedCharacterBook | null
 
   return {
     entries: entriesList,
+    name: bookName,
+    description: bookDescription,
+    scanDepth: scanDepth,
+    tokenBudget: tokenBudget,
+    recursiveScanning: recursiveScanning,
     extensions: getObjectField(bookObj, 'extensions')
   };
 }
@@ -402,6 +482,7 @@ function parseBookEntry(raw: Object | undefined, fallbackId: number): ParsedChar
     insertionOrder: getNumberField(obj, 'insertion_order', 0),
     caseSensitive: getBooleanField(obj, 'case_sensitive', false),
     id: entryId,
+    useRegex: getBooleanField(obj, 'use_regex', false),
     extensions: getObjectField(obj, 'extensions')
   };
 }
@@ -491,6 +572,35 @@ function truncateStringArray(arr: string[], maxCount: number): string[] {
     const trimmed: string = arr[i].trim();
     if (trimmed.length > 0) {
       result.push(truncateField(trimmed, MAX_FIELD_LENGTH));
+    }
+  }
+  return result;
+}
+
+function parseAssets(raw: Object | undefined): ParsedAsset[] {
+  if (raw === undefined || raw === null || !Array.isArray(raw)) {
+    return [];
+  }
+  const arr: Object[] = raw as Object[];
+  const result: ParsedAsset[] = [];
+  const limit: number = Math.min(arr.length, MAX_TAGS);
+  for (let i = 0; i < limit; i++) {
+    const item: Object = arr[i];
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+      continue;
+    }
+    const obj: Record<string, Object> = item as Record<string, Object>;
+    const assetType: string = getStringField(obj, 'type');
+    const uri: string = getStringField(obj, 'uri');
+    const assetName: string = getStringField(obj, 'name');
+    const ext: string = getStringField(obj, 'ext');
+    if (assetType.length > 0 || uri.length > 0) {
+      result.push({
+        type: truncateField(assetType, MAX_FIELD_LENGTH),
+        uri: truncateField(uri, MAX_FIELD_LENGTH),
+        name: truncateField(assetName, MAX_FIELD_LENGTH),
+        ext: truncateField(ext, 20)
+      });
     }
   }
   return result;

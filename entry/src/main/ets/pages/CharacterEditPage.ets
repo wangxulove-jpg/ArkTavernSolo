@@ -251,6 +251,18 @@ struct CharacterEditPage {
         )
 
         this.textFieldRow(
+          $r('app.string.character_edit_field_nickname'),
+          $r('app.string.character_edit_field_nickname_placeholder'),
+          false,
+          this.formState.nicknameInput,
+          (value: string) => {
+            const updated = copyFormState(this.formState);
+            updated.nicknameInput = value;
+            this.formState = updated;
+          }
+        )
+
+        this.textFieldRow(
           $r('app.string.character_edit_field_user_name'),
           $r('app.string.character_edit_field_user_name_placeholder'),
           false,

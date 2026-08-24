@@ -181,6 +181,7 @@ export class OpenAIStreamSession implements ChatStreamHandle {
 
   // 累积状态
   private accumulatedContent: string = '';
+  private accumulatedReasoning: string = '';
   private finishReason: string | undefined = undefined;
   private model: string | undefined = undefined;
   private providerRequestId: string | undefined = undefined;
@@ -453,6 +454,11 @@ export class OpenAIStreamSession implements ChatStreamHandle {
       this.accumulateToolCallDeltas(deltaResult.toolCallDeltas);
     }
 
+    // reasoning_content delta (思考模型如 DeepSeek-R1/QwQ)
+    if (deltaResult.reasoningContent !== undefined && deltaResult.reasoningContent.length > 0) {
+      this.accumulatedReasoning += deltaResult.reasoningContent;
+    }
+
     // content delta
     if (deltaResult.hasContent && deltaResult.content.length > 0) {
       this.accumulatedContent += deltaResult.content;
@@ -460,7 +466,20 @@ export class OpenAIStreamSession implements ChatStreamHandle {
         content: deltaResult.content,
         accumulatedContent: this.accumulatedContent,
         finishReason: deltaResult.finishReason,
-        sequence: this.sequence
+        sequence: this.sequence,
+        reasoningContent: deltaResult.reasoningContent
+      };
+      this.sequence++;
+      this.deltaCount++;
+      this.safeOnDelta(delta);
+    } else if (deltaResult.reasoningContent !== undefined && deltaResult.reasoningContent.length > 0) {
+      // 思考模型可能只有 reasoning_content 没有 content,仍然触发 onDelta
+      const delta: ChatDelta = {
+        content: '',
+        accumulatedContent: this.accumulatedContent,
+        finishReason: deltaResult.finishReason,
+        sequence: this.sequence,
+        reasoningContent: deltaResult.reasoningContent
       };
       this.sequence++;
       this.deltaCount++;
@@ -662,7 +681,8 @@ export class OpenAIStreamSession implements ChatStreamHandle {
       eventCount: this.eventCount,
       deltaCount: this.deltaCount,
       receivedDone: this.receivedDone,
-      toolCalls: toolCalls
+      toolCalls: toolCalls,
+      reasoningContent: this.accumulatedReasoning.length > 0 ? this.accumulatedReasoning : undefined
     };
   }
 

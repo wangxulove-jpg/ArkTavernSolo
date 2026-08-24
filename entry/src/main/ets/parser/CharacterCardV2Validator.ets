@@ -27,7 +27,8 @@
 import {
   ParsedCharacterCard,
   ParsedCharacterBook,
-  ParsedCharacterBookEntry
+  ParsedCharacterBookEntry,
+  ParsedAsset
 } from './CharacterCardJsonParser';
 import {
   AiValidationError,
@@ -88,11 +89,10 @@ export function validateV2CharacterCard(
   // 2. spec / spec_version
   const spec: string = getStringField(root, 'spec', '');
   if (spec !== 'chara_card_v2' && spec !== 'chara_card_v3') {
-    // 兼容 V3(spec 仍接受)
     errors.push({
       field: 'spec',
       code: 'invalid_value',
-      message: 'spec 必须为 "chara_card_v2",实际: "' + spec + '"'
+      message: 'spec 必须为 "chara_card_v2" 或 "chara_card_v3",实际: "' + spec + '"'
     });
   }
   const specVersion: string = getStringField(root, 'spec_version', '');
@@ -100,7 +100,7 @@ export function validateV2CharacterCard(
     errors.push({
       field: 'spec_version',
       code: 'invalid_value',
-      message: 'spec_version 必须为 "2.0",实际: "' + specVersion + '"'
+      message: 'spec_version 必须为 "2.0" 或 "3.0",实际: "' + specVersion + '"'
     });
   }
 
@@ -189,6 +189,19 @@ export function validateV2CharacterCard(
     data['character_book'], errors
   );
 
+  // 10. V3 字段(可选,不产生致命错误)
+  const nickname: string = getLimitedStringField(data, 'nickname', errors, 'data.nickname');
+  const groupOnlyGreetings: string[] = getStringArrayField(
+    data, 'group_only_greetings', errors, 'data.group_only_greetings'
+  );
+  const creatorNotesMultilingual: Record<string, Object> = getObjectField(
+    data, 'creator_notes_multilingual'
+  );
+  const sourceArr: string[] = getStringArrayField(data, 'source', errors, 'data.source');
+  const assets: ParsedAsset[] = parseAssetsField(data['assets'], errors);
+  const creationDate: number = getNumberField(data, 'creation_date', 0);
+  const modificationDate: number = getNumberField(data, 'modification_date', 0);
+
   // 致命错误(任一 type_error / missing 则拒绝)
   const hasFatal: boolean = errors.some((e: AiValidationError): boolean =>
     e.code === 'missing' || e.code === 'type_error' || e.code === 'json_parse_error'
@@ -224,7 +237,7 @@ export function validateV2CharacterCard(
     firstMessage: firstMes,
     systemPrompt: systemPrompt,
     avatarUri: '',
-    sourceFormat: 'chara_card_v2',
+    sourceFormat: spec === 'chara_card_v3' ? 'chara_card_v3' : 'chara_card_v2',
     mesExample: mesExample,
     creatorNotes: creatorNotes,
     postHistoryInstructions: postHistory,
@@ -234,7 +247,14 @@ export function validateV2CharacterCard(
     characterVersion: characterVersion.length === 0 ? AI_DEFAULT_CHARACTER_VERSION : characterVersion,
     extensions: extensions,
     characterBook: characterBook,
-    userName: ''
+    userName: '',
+    nickname: nickname,
+    groupOnlyGreetings: groupOnlyGreetings,
+    creatorNotesMultilingual: creatorNotesMultilingual,
+    source: sourceArr,
+    assets: assets,
+    creationDate: creationDate,
+    modificationDate: modificationDate
   };
 
   return { ok: true, card: card, errors: errors };
@@ -388,7 +408,15 @@ function parseCharacterBook(
   // entries(可选,必须为数组)
   const entriesRaw: Object | undefined = book['entries'];
   if (entriesRaw === undefined || entriesRaw === null) {
-    return { entries: [], extensions: bookExtensions };
+    return {
+      entries: [],
+      name: readString(book, 'name', ''),
+      description: readString(book, 'description', ''),
+      scanDepth: readNumber(book, 'scan_depth', 0),
+      tokenBudget: readNumber(book, 'token_budget', 0),
+      recursiveScanning: readBool(book, 'recursive_scanning', false),
+      extensions: bookExtensions
+    };
   }
   if (!Array.isArray(entriesRaw)) {
     errors.push({
@@ -396,7 +424,15 @@ function parseCharacterBook(
       code: 'type_error',
       message: 'character_book.entries 必须为数组'
     });
-    return { entries: [], extensions: bookExtensions };
+    return {
+      entries: [],
+      name: readString(book, 'name', ''),
+      description: readString(book, 'description', ''),
+      scanDepth: readNumber(book, 'scan_depth', 0),
+      tokenBudget: readNumber(book, 'token_budget', 0),
+      recursiveScanning: readBool(book, 'recursive_scanning', false),
+      extensions: bookExtensions
+    };
   }
   const entriesArr: Object[] = entriesRaw as Object[];
   if (entriesArr.length > MAX_BOOK_ENTRIES) {
@@ -414,7 +450,15 @@ function parseCharacterBook(
       entries.push(entry);
     }
   }
-  return { entries: entries, extensions: bookExtensions };
+  return {
+    entries: entries,
+    name: readString(book, 'name', ''),
+    description: readString(book, 'description', ''),
+    scanDepth: readNumber(book, 'scan_depth', 0),
+    tokenBudget: readNumber(book, 'token_budget', 0),
+    recursiveScanning: readBool(book, 'recursive_scanning', false),
+    extensions: bookExtensions
+  };
 }
 
 function parseBookEntry(raw: Object | undefined, fallbackId: number): ParsedCharacterBookEntry | null {
@@ -462,6 +506,7 @@ function parseBookEntry(raw: Object | undefined, fallbackId: number): ParsedChar
     insertionOrder: insertionOrder,
     caseSensitive: caseSensitive,
     id: id,
+    useRegex: readBool(e, 'use_regex', false),
     extensions: entryExtensions
   };
 }
@@ -534,6 +579,55 @@ function readStringArray(obj: Record<string, Object>, key: string): string[] {
       result.push(item as string);
     } else if (typeof item === 'number' || typeof item === 'boolean') {
       result.push(String(item));
+    }
+  }
+  return result;
+}
+
+function getObjectField(obj: Record<string, Object>, key: string): Record<string, Object> {
+  const v: Object | undefined = obj[key];
+  if (v !== undefined && v !== null && typeof v === 'object' && !Array.isArray(v)) {
+    return v as Record<string, Object>;
+  }
+  return {};
+}
+
+function getNumberField(obj: Record<string, Object>, key: string, defaultValue: number): number {
+  return readNumber(obj, key, defaultValue);
+}
+
+function parseAssetsField(raw: Object | undefined, errors: AiValidationError[]): ParsedAsset[] {
+  if (raw === undefined || raw === null) {
+    return [];
+  }
+  if (!Array.isArray(raw)) {
+    errors.push({
+      field: 'data.assets',
+      code: 'type_error',
+      message: 'assets 必须为数组'
+    });
+    return [];
+  }
+  const arr: Object[] = raw as Object[];
+  const result: ParsedAsset[] = [];
+  const limit: number = Math.min(arr.length, MAX_ARRAY_LENGTH);
+  for (let i: number = 0; i < limit; i++) {
+    const item: Object = arr[i];
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+      continue;
+    }
+    const obj: Record<string, Object> = item as Record<string, Object>;
+    const assetType: string = readString(obj, 'type', '');
+    const uri: string = readString(obj, 'uri', '');
+    const assetName: string = readString(obj, 'name', '');
+    const ext: string = readString(obj, 'ext', '');
+    if (assetType.length > 0 || uri.length > 0) {
+      result.push({
+        type: assetType,
+        uri: uri,
+        name: assetName,
+        ext: ext
+      });
     }
   }
   return result;

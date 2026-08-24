@@ -30,7 +30,8 @@
 import {
   Character,
   buildCharacterSystemContent,
-  buildDefaultCharacterSystemContent
+  buildDefaultCharacterSystemContent,
+  resolveCharacterDisplayName
 } from '../models/Character';
 import { Lorebook, LorebookEntry, LorebookPosition } from '../models/Lorebook';
 import { ChatMessage, createChatMessage } from '../models/ChatMessage';
@@ -667,7 +668,7 @@ export class PromptBuilder {
     userName: string,
     messages: ChatMessage[]
   ): MacroContext {
-    const characterName: string = character !== null ? character.name : '';
+    const characterName: string = resolveCharacterDisplayName(character);
     const builder: MacroContextBuilder = new MacroContextBuilder(characterName, userName);
     if (character !== null) {
       builder
