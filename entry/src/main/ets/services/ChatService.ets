@@ -1657,20 +1657,13 @@ export class ChatService {
       return;
     }
 
-    // 3. 判断同级或子级
-    //    同级条件:当前 Active Branch 非 Root 且 forkMessageId 等于本次 forkUserMessageId
-    //    (即当前 Branch 也是从同一个 User 消息创建的再生分支)
-    let parentBranchId: string;
-    if (!activeBranch.isRoot
-      && activeBranch.forkMessageId !== undefined
-      && activeBranch.forkMessageId === forkUserMessageId) {
-      // 同级:新 Branch 的 parent = 当前 Branch 的 parent
-      parentBranchId = activeBranch.parentBranchId !== undefined
-        ? activeBranch.parentBranchId : activeBranch.id;
-    } else {
-      // 子级:新 Branch 的 parent = 当前 Active Branch
-      parentBranchId = activeBranch.id;
-    }
+    // 3. 解析新 Branch 的 parent:
+    //    fork 点在 Active Branch 自有消息区间 → 子级(parent = Active Branch);
+    //    fork 点在复制前缀(回到祖先对话线)→ 挂到对应祖先,避免布局层级错位
+    const parentBranchId: string =
+      await this.branchPersistenceService.resolveForkParentBranchId(
+        chatId, activeBranch.id, forkUserMessageId
+      );
 
     await this.forkAndStreamFromUser(
       chatId, activeBranch.id, parentBranchId, forkUserMessageId, callbacks
@@ -4841,17 +4834,12 @@ export class ChatService {
       return;
     }
 
-    // 4. 判断同级或子级(复用 T-6.4B-1.2 规则)
-    //    同级条件:当前 Active Branch 非 Root 且 forkMessageId 等于本次 forkUserMessageId
-    let parentBranchId: string;
-    if (!activeBranch.isRoot
-      && activeBranch.forkMessageId !== undefined
-      && activeBranch.forkMessageId === forkUserMessageId) {
-      parentBranchId = activeBranch.parentBranchId !== undefined
-        ? activeBranch.parentBranchId : activeBranch.id;
-    } else {
-      parentBranchId = activeBranch.id;
-    }
+    // 4. 解析新 Branch 的 parent:
+    //    fork 点在 Active Branch 自有消息区间 → 子级;在复制前缀 → 挂到祖先
+    const parentBranchId: string =
+      await this.branchPersistenceService.resolveForkParentBranchId(
+        chatId, activeBranch.id, forkUserMessageId
+      );
 
     await this.forkAndStreamFromUser(
       chatId, activeBranch.id, parentBranchId, forkUserMessageId, callbacks
@@ -4914,17 +4902,12 @@ export class ChatService {
       return;
     }
 
-    // 2. 判断同级或子级(复用 T-6.4B-1.2 规则)
-    //    同级条件:当前 Active Branch 非 Root 且 forkMessageId 等于本次 userMessageId
-    let parentBranchId: string;
-    if (!activeBranch.isRoot
-      && activeBranch.forkMessageId !== undefined
-      && activeBranch.forkMessageId === userMessageId) {
-      parentBranchId = activeBranch.parentBranchId !== undefined
-        ? activeBranch.parentBranchId : activeBranch.id;
-    } else {
-      parentBranchId = activeBranch.id;
-    }
+    // 2. 解析新 Branch 的 parent:
+    //    fork 点在 Active Branch 自有消息区间 → 子级;在复制前缀 → 挂到祖先
+    const parentBranchId: string =
+      await this.branchPersistenceService.resolveForkParentBranchId(
+        chatId, activeBranch.id, userMessageId
+      );
 
     await this.forkAndStreamFromUser(
       chatId, activeBranch.id, parentBranchId, userMessageId, callbacks

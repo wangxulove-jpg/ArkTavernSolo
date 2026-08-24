@@ -34,7 +34,7 @@ import { BranchMapViewModel } from '../viewmodels/BranchMapViewModel';
 import { AppServices } from '../services/AppServices';
 import { BranchMapNode } from '../components/BranchMapNode';
 import { BranchMapDisplayInfo } from '../models/BranchMapDisplayInfo';
-import { BranchMapNodeLayout, BranchTreeEdge } from '../models/BranchMapNodeLayout';
+import { BranchMapNodeLayout, BranchTreeEdge, BranchTreeLayoutResult } from '../models/BranchMapNodeLayout';
 import { Logger } from '../utils/Logger';
 import { router } from '@kit.ArkUI';
 import { ThemePalette } from '../theme/ThemePalette';
@@ -192,7 +192,8 @@ struct BranchMapPage {
       Stack({ alignContent: Alignment.TopStart }) {
         // 内容层:保持原始画布尺寸,通过 scale + translate 实现缩放平移
         Stack({ alignContent: Alignment.TopStart }) {
-          // 连接线层
+          // 连接线层:Path 命令单位为 px(官方文档),节点布局坐标为 vp。
+          // 坐标换算在 buildEdgePathCmd 中通过 vp2px 显式完成,与节点层坐标系对齐。
           ForEach(this.viewModel.layout.edges,
             (edge: BranchTreeEdge) => {
               this.edgeConnection(edge)
@@ -289,9 +290,12 @@ struct BranchMapPage {
    */
   @Builder
   edgeConnection(edge: BranchTreeEdge) {
+    // Path 命令单位为 px(官方文档),节点布局坐标为 vp。
+    // Path 铺满画布,commands 由 buildEdgePathCmd 做 vp→px 显式换算,
+    // 确保连线锚点落在节点层的 vp 坐标网格上。
     Path()
-      .width(this.viewModel.layout !== undefined ? this.viewModel.layout.canvasWidth : 0)
-      .height(this.viewModel.layout !== undefined ? this.viewModel.layout.canvasHeight : 0)
+      .width(this.getEdgeLayerWidth())
+      .height(this.getEdgeLayerHeight())
       .position({ x: 0, y: 0 })
       .commands(this.buildEdgePathCmd(edge))
       .fillOpacity(0)
@@ -308,12 +312,68 @@ struct BranchMapPage {
       && this.viewModel.isOnActivePath(edge.childBranchId);
   }
 
+  /** 连线层画布宽度(Path 布局尺寸,单位 vp) */
+  private getEdgeLayerWidth(): number {
+    return this.viewModel.layout !== undefined ? this.viewModel.layout.canvasWidth : 0;
+  }
+
+  /** 连线层画布高度(Path 布局尺寸,单位 vp) */
+  private getEdgeLayerHeight(): number {
+    return this.viewModel.layout !== undefined ? this.viewModel.layout.canvasHeight : 0;
+  }
+
   private buildEdgePathCmd(edge: BranchTreeEdge): string {
-    const ctrlOffset: number = (edge.endY - edge.startY) * 0.4;
-    return 'M ' + edge.startX.toString() + ' ' + edge.startY.toString()
-      + ' C ' + edge.startX.toString() + ' ' + (edge.startY + ctrlOffset).toString()
-      + ' ' + edge.endX.toString() + ' ' + (edge.endY - ctrlOffset).toString()
-      + ' ' + edge.endX.toString() + ' ' + edge.endY.toString();
+    // Path 命令单位为 px,布局坐标为 vp:按屏幕密度显式换算后再生成命令,
+    // 避免 density>1 设备上连线整体缩小并偏移到左上。
+    const scale: number = this.getUIContext().vp2px(1);
+    const startX: number = edge.startX * scale;
+    const startY: number = edge.startY * scale;
+    const endX: number = edge.endX * scale;
+    const endY: number = edge.endY * scale;
+    const ctrlOffset: number = (edge.endY - edge.startY) * 0.4 * scale;
+    this.logEdgeAlignDebugOnce(edge, scale);
+    return 'M ' + startX.toString() + ' ' + startY.toString()
+      + ' C ' + startX.toString() + ' ' + (startY + ctrlOffset).toString()
+      + ' ' + endX.toString() + ' ' + (endY - ctrlOffset).toString()
+      + ' ' + endX.toString() + ' ' + endY.toString();
+  }
+
+  /** 对齐观测日志是否已输出(每次进入页面仅输出一次) */
+  private alignDebugLogged: boolean = false;
+
+  /**
+   * 一次性观测日志:输出首条连线锚点与父子节点锚点(vp)及 vp→px 换算比例。
+   * 用于区分"数据错位"(edge 与 node 坐标不一致)与"渲染单位错位"(pxScale≠密度)。
+   * 验证方式:hilog 过滤 BranchMapPage;正常时 edgeStart == parentBottomCenter,
+   * edgeEnd == childTopCenter,pxScale 与设备屏幕密度一致。
+   */
+  private logEdgeAlignDebugOnce(edge: BranchTreeEdge, pxScale: number): void {
+    if (this.alignDebugLogged) {
+      return;
+    }
+    this.alignDebugLogged = true;
+    const layout: BranchTreeLayoutResult | undefined = this.viewModel.layout;
+    if (layout === undefined) {
+      return;
+    }
+    const parentNode: BranchMapNodeLayout | undefined = layout.nodes.find(
+      (n: BranchMapNodeLayout): boolean => n.branchId === edge.parentBranchId
+    );
+    const childNode: BranchMapNodeLayout | undefined = layout.nodes.find(
+      (n: BranchMapNodeLayout): boolean => n.nodeId === edge.childNodeId
+    );
+    const parentAnchor: string = parentNode !== undefined
+      ? (parentNode.x + parentNode.width / 2).toString() + ',' + (parentNode.y + parentNode.height).toString()
+      : 'n/a';
+    const childAnchor: string = childNode !== undefined
+      ? (childNode.x + childNode.width / 2).toString() + ',' + childNode.y.toString()
+      : 'n/a';
+    Logger.debug(LOG_TAG,
+      'edge align check: edgeStart=' + edge.startX.toString() + ',' + edge.startY.toString()
+      + ' edgeEnd=' + edge.endX.toString() + ',' + edge.endY.toString()
+      + ' parentBottomCenter=' + parentAnchor
+      + ' childTopCenter=' + childAnchor
+      + ' pxScale=' + pxScale.toString());
   }
 
   // ===== 缩放与平移方法(T-6.4B-4) =====
@@ -508,7 +568,8 @@ struct BranchMapPage {
     .width(node.width)
     .height(node.height)
     .position({ x: node.x, y: node.y })
-    .opacity(this.viewModel.isOnActivePath(node.branchId) ? 1.0 : 0.7)
+    .opacity(this.viewModel.isOnActivePath(node.branchId) || this.viewModel.isSelected(node.branchId)
+      ? 1.0 : 0.7)
   }
 
   @Builder
@@ -617,6 +678,7 @@ struct BranchMapPage {
       currentMaxTurn: 0,
       forkUserPreview: '',
       firstDivergentAssistantPreview: '',
+      latestMessagePreview: '',
       messageCount: 0,
       isRoot: true,
       isActive: false,

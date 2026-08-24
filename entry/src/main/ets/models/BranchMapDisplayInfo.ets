@@ -46,6 +46,8 @@ export interface BranchMapDisplayInfo {
   readonly forkUserPreview: string;
   /** 分歧 Assistant Message 短预览(分支首条 Assistant,Root 为空字符串) */
   readonly firstDivergentAssistantPreview: string;
+  /** 该 Branch 最近一条消息的短预览(始终用于节点展示,保证分支消息随时可见) */
+  readonly latestMessagePreview: string;
   /** 该 Branch 中消息数量 */
   readonly messageCount: number;
   /** 是否为 Root */

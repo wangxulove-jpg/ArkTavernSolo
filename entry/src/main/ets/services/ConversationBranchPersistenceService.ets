@@ -309,6 +309,99 @@ export class ConversationBranchPersistenceService {
     return result;
   }
 
+  // ===== Fork Parent 解析 =====
+
+  /**
+   * 解析新 fork Branch 应挂载的 parent Branch ID。
+   *
+   * 背景:Branch 创建时会复制 parent 的 0..forkPosition 消息前缀,因此当前
+   * Active Branch 中包含其所有祖先的前缀消息。当用户"回到以前的对话"从更早
+   * 的消息 fork 时,新 Branch 语义上是从祖先分支的对话线分出,而非当前分支
+   * 的子级。若仍挂到当前分支,BranchTreeLayout 的"子节点至少低一层"约束会
+   * 把它压到当前分支下方,导致 Y 位置与 fork 轮次错位。
+   *
+   * 规则(沿祖先链自下而上):
+   * - fork 消息 position > 当前分支自身 forkMessageId 的 position
+   *   → fork 点在当前分支自有消息区间内 → parent = 当前分支(子级)
+   * - 否则(fork 点在复制前缀内,含相同 fork 消息的再次再生)→ 上移到其 parent
+   *   继续判断;Root 无复制前缀,为兜底 parent
+   *
+   * 该规则同时覆盖旧"同级再生"判断:fork 消息 === 当前分支 forkMessageId 时
+   * 会上移一级,与旧逻辑(parent = 当前分支 parent)结果一致。
+   *
+   * @param chatId 所属 Chat ID
+   * @param activeBranchId 当前 Active Branch ID(fork 消息所在链的起点)
+   * @param forkMessageId Fork 点 Message ID(User 或 Assistant)
+   * @returns 应作为新 Branch parent 的 Branch ID
+   */
+  async resolveForkParentBranchId(
+    chatId: string,
+    activeBranchId: string,
+    forkMessageId: string
+  ): Promise<string> {
+    if (chatId.length === 0) {
+      throw DatabaseError.invalidData('resolveForkParentBranchId: chatId empty');
+    }
+    if (activeBranchId.length === 0) {
+      throw DatabaseError.invalidData('resolveForkParentBranchId: activeBranchId empty');
+    }
+    if (forkMessageId.length === 0) {
+      throw DatabaseError.invalidData('resolveForkParentBranchId: forkMessageId empty');
+    }
+    const store: relationalStore.RdbStore = this.dbHelper.getStore();
+    return this.resolveForkParentBranchIdWithStore(store, chatId, activeBranchId, forkMessageId);
+  }
+
+  /**
+   * 在给定 store 上解析 fork parent(只读,可在事务内/外调用)。
+   * 数据异常(分支缺失/position 查不到)时返回当前候选,等同旧逻辑兜底。
+   */
+  private async resolveForkParentBranchIdWithStore(
+    store: relationalStore.RdbStore,
+    chatId: string,
+    activeBranchId: string,
+    forkMessageId: string
+  ): Promise<string> {
+    let currentId: string = activeBranchId;
+    let safety: number = 0;
+    while (safety < 100) {
+      safety++;
+      const branch: ConversationBranch | null =
+        await this.branchRepository.getBranchWithStore(store, currentId);
+      if (branch === null || branch.chatId !== chatId) {
+        return currentId;
+      }
+      if (branch.isRoot) {
+        return branch.id;
+      }
+      const currentForkMessageId: string | undefined = branch.forkMessageId;
+      if (currentForkMessageId === undefined || currentForkMessageId.length === 0) {
+        return branch.id;
+      }
+      const forkPos: number =
+        await this.branchRepository.getMessagePositionWithStore(store, branch.id, forkMessageId);
+      if (forkPos < 0) {
+        return branch.id;
+      }
+      const ownerForkPos: number =
+        await this.branchRepository.getMessagePositionWithStore(store, branch.id, currentForkMessageId);
+      if (ownerForkPos < 0) {
+        return branch.id;
+      }
+      if (forkPos > ownerForkPos) {
+        // fork 点在当前分支自有消息区间内 → 当前分支即 parent
+        return branch.id;
+      }
+      // fork 点在复制前缀内(或相同 fork 消息再生)→ 上移到 parent 继续判断
+      const parentId: string | undefined = branch.parentBranchId;
+      if (parentId === undefined || parentId.length === 0) {
+        return branch.id;
+      }
+      currentId = parentId;
+    }
+    return currentId;
+  }
+
   // ===== Fork Branch =====
 
   /**
@@ -407,10 +500,16 @@ export class ConversationBranchPersistenceService {
     if (forkPosition < 0) {
       throw DatabaseError.notFound('forkAtMessage: messageId not in sourceBranch');
     }
-    // 3. 创建 Child Branch
+    // 3. 解析 parent:回到历史消息 fork 时,fork 点可能在 source 的复制前缀内
+    //    (属于祖先分支的对话线),此时新 Branch 应挂到对应祖先而非 source。
+    //    links 复制来源仍为 source(消息就在 source 路径内)。
+    const parentBranchId: string = await this.resolveForkParentBranchIdWithStore(
+      store, chatId, sourceBranchId, messageId
+    );
+    // 3.1 创建 Child Branch(parent 可能为祖先分支)
     const childBranch: ConversationBranch =
       await this.branchRepository.createChildBranchWithStore(
-        store, chatId, sourceBranchId, messageId, ''
+        store, chatId, parentBranchId, messageId, ''
       );
     // 4. 复制 sourceBranch 中 position 0..forkPosition 的 Message Links
     await this.branchRepository.copyMessageLinksThroughPositionWithStore(
@@ -481,9 +580,10 @@ export class ConversationBranchPersistenceService {
    * - forkForRegeneration 用于"重新生成",只复制 0..forkUserPosition 的 links(不包括需要被替换的旧 Assistant)
    *   然后创建新的 Streaming Assistant Message 并 link 到新 Branch
    *
-   * 同级 Branch 判断由调用方决定 parentBranchId:
-   * - 相同 forkMessage 的再次重新生成 → parentBranchId = 当前 Branch.parentBranchId(同级)
-   * - 不同位置的新路线 → parentBranchId = 当前 Active Branch(下一层 Child)
+   * parentBranchId 由调用方通过 resolveForkParentBranchId 解析:
+   * - fork 点在 Active Branch 自有消息区间 → parentBranchId = Active Branch(下一层 Child)
+   * - fork 点在复制前缀(回到祖先对话线)→ parentBranchId = 对应祖先(与祖先的
+   *   既有子分支按 fork 轮次排列,含相同 fork 消息再生的同级场景)
    *
    * 事务步骤:
    * 1. 验证 source Branch、parent Branch 和 fork Message 属于当前 Chat
@@ -927,6 +1027,7 @@ export class ConversationBranchPersistenceService {
         await this.branchRepository.listMessageLinksWithStore(store, summary.id);
       let forkUserPreview: string = '';
       let firstDivergentAssistantPreview: string = '';
+      let latestMessagePreview: string = '';
       let forkTurnNumber: number = 0;
       if (summary.isRoot) {
         // Root: 找到 Branch 中第一条 Assistant 消息
@@ -991,6 +1092,30 @@ export class ConversationBranchPersistenceService {
         }
       }
 
+      // 计算最近一条消息预览(始终用于节点展示,保证分支消息随时可见)
+      if (links.length > 0) {
+        let lastPosition: number = -1;
+        let latestMsg: ChatMessage | null = null;
+        for (let j = 0; j < links.length; j++) {
+          if (links[j].position > lastPosition) {
+            lastPosition = links[j].position;
+          }
+        }
+        let latestMsgId: string = '';
+        for (let j = 0; j < links.length; j++) {
+          if (links[j].position === lastPosition) {
+            latestMsgId = links[j].messageId;
+            break;
+          }
+        }
+        if (latestMsgId.length > 0) {
+          latestMsg = await this.messageRepository.getById(latestMsgId);
+        }
+        if (latestMsg !== null) {
+          latestMessagePreview = buildAssistantPreview(latestMsg.content);
+        }
+      }
+
       result.push({
         summary: summary,
         branchId: summary.id,
@@ -1000,6 +1125,7 @@ export class ConversationBranchPersistenceService {
         currentMaxTurn: totalUserMessages,
         forkUserPreview: forkUserPreview,
         firstDivergentAssistantPreview: firstDivergentAssistantPreview,
+        latestMessagePreview: latestMessagePreview,
         messageCount: summary.messageCount,
         isRoot: summary.isRoot,
         isActive: summary.isActive,

@@ -48,9 +48,9 @@ import { BranchMapDisplayInfo } from '../models/BranchMapDisplayInfo';
 /** 节点固定宽度(vp) */
 const NODE_WIDTH: number = 176;
 /** 普通节点固定高度(vp) */
-const NODE_HEIGHT: number = 96;
+const NODE_HEIGHT: number = 118;
 /** 末端节点高度(vp,比普通节点矮) */
-const TERMINAL_NODE_HEIGHT: number = 72;
+const TERMINAL_NODE_HEIGHT: number = 88;
 /** 兄弟节点之间的水平间距(vp) */
 const SIBLING_GAP: number = 28;
 /** 垂直间距(vp):相邻可视层级之间的间距(取代旧 LEVEL_GAP=140) */
@@ -97,10 +97,12 @@ export function getCanvasPadding(): number {
 
 /**
  * 构建层级排序键:同一轮次中,分叉节点在前,末端节点在后。
+ * 按 forkTurnNumber(分叉轮次)而非 currentMaxTurn 排序,
+ * 保证同一轮次分叉的分支共享同一可视层(Y 轴与对话位置对应)。
  */
 function getLayerSortKey(info: BranchMapDisplayInfo): number {
   const typeOrder: number = info.isTerminal ? 1 : 0;
-  return info.currentMaxTurn * 2 + typeOrder;
+  return info.forkTurnNumber * 2 + typeOrder;
 }
 
 /**
@@ -345,29 +347,19 @@ export function computeBranchTreeLayout(
     currentLeftX += rootSubtreeWidth + SIBLING_GAP;
   }
 
-  // 5. 生成 edges(智能查找父节点,保证连线始终向下)
+  // 5. 生成 edges(连到直接父节点,保证连线与节点层级一一对应且始终向下)
   const edges: BranchTreeEdge[] = [];
   for (let i = 0; i < nodes.length; i++) {
     const nodeLayout: BranchMapNodeLayout = nodes[i];
     if (nodeLayout.parentBranchId.length === 0) {
       continue;
     }
-    let currentParentId: string = nodeLayout.parentBranchId;
-    let parentLayout: BranchMapNodeLayout | undefined = undefined;
-    let safety: number = 0;
-    while (currentParentId.length > 0 && safety < 100) {
-      safety++;
-      const candidate: BranchMapNodeLayout | undefined = layoutMap.get(currentParentId);
-      if (candidate === undefined) {
-        break;
-      }
-      if (candidate.forkTurnNumber < nodeLayout.forkTurnNumber) {
-        parentLayout = candidate;
-        break;
-      }
-      currentParentId = candidate.parentBranchId;
-    }
+    const parentLayout: BranchMapNodeLayout | undefined =
+      layoutMap.get(nodeLayout.parentBranchId);
     if (parentLayout === undefined) {
+      continue;
+    }
+    if (parentLayout.nodeId === nodeLayout.nodeId) {
       continue;
     }
     edges.push({

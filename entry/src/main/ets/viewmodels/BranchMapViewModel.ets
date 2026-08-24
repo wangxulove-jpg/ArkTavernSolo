@@ -283,6 +283,16 @@ export class BranchMapViewModel {
       return layout;
     }
 
+    // Active Branch 还有下级子分支时,用子分支链路展示"当前位置",
+    // 不再追加末端节点:否则末端节点会占据与下层子节点相同的槽位导致重叠。
+    const hasDescendant: boolean = layout.nodes.some(
+      (n: BranchMapNodeLayout): boolean =>
+        !n.isTerminal && n.parentBranchId === this.activeBranchId
+    );
+    if (hasDescendant) {
+      return layout;
+    }
+
     // 查找 Active Branch 在布局中的最后一个真实节点
     const branchNodes: BranchMapNodeLayout[] = layout.nodes.filter(
       (n: BranchMapNodeLayout): boolean => n.branchId === this.activeBranchId && !n.isTerminal

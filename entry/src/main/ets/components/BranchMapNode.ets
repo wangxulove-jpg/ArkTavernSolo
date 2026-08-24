@@ -46,15 +46,27 @@ export struct BranchMapNode {
     Stack({ alignContent: Alignment.TopEnd }) {
       // 节点主体
       Column() {
-        // 标题行
-        Text(this.computeBranchLabel())
-          .fontSize(13)
-          .fontWeight(this.isCurrent ? FontWeight.Bold : FontWeight.Medium)
-          .fontColor(this.computeTitleColor())
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .width('100%')
-          .textAlign(TextAlign.Start)
+        // 标题行:标题 + 状态徽标(当前 / 已选择 / 当前活跃)
+        Row() {
+          Text(this.computeBranchLabel())
+            .fontSize(13)
+            .fontWeight(this.isCurrent ? FontWeight.Bold : FontWeight.Medium)
+            .fontColor(this.computeTitleColor())
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+            .textAlign(TextAlign.Start)
+
+          if (this.isSelected) {
+            this.statusChip('已选择')
+          } else if (this.isCurrent && this.isTerminal) {
+            this.statusChip('当前位置')
+          } else if (this.isCurrent || this.isActive) {
+            this.statusChip('当前')
+          }
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
 
         // fork User 预览(非 Root 显示,末端节点不重复显示)
         if (!this.isTerminal && !this.displayInfo.isRoot && this.displayInfo.forkUserPreview.length > 0) {
@@ -63,24 +75,24 @@ export struct BranchMapNode {
             .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .margin({ top: 3 })
+            .margin({ top: 4 })
             .width('100%')
             .textAlign(TextAlign.Start)
         }
 
-        // 分歧 Assistant 预览(末端节点不重复显示)
-        if (!this.isTerminal) {
-          Text(this.computeAssistantPreview())
-            .fontSize(11)
-            .fontColor(this.displayInfo.firstDivergentAssistantPreview.length === 0
-              ? ThemePalette.textTertiaryColor(this.effectiveTheme)
-              : ThemePalette.textSecondaryColor(this.effectiveTheme))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .margin({ top: 2 })
-            .width('100%')
-            .textAlign(TextAlign.Start)
-        }
+        // 最近一条消息(始终显示,保证分支消息随时可见)
+        Text(this.displayInfo.latestMessagePreview.length > 0
+          ? '最新:' + this.displayInfo.latestMessagePreview
+          : '暂无消息')
+          .fontSize(11)
+          .fontColor(this.displayInfo.latestMessagePreview.length === 0
+            ? ThemePalette.textTertiaryColor(this.effectiveTheme)
+            : ThemePalette.textSecondaryColor(this.effectiveTheme))
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .margin({ top: 2 })
+          .width('100%')
+          .textAlign(TextAlign.Start)
 
         // 底部:消息数
         Row() {
@@ -134,6 +146,18 @@ export struct BranchMapNode {
     .height('100%')
   }
 
+  /** 状态徽标(当前 / 已选择 / 当前活跃) */
+  @Builder
+  statusChip(label: string) {
+    Text(label)
+      .fontSize(9)
+      .fontColor($r('app.color.app_on_accent'))
+      .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
+      .borderRadius(4)
+      .padding({ left: 4, right: 4, top: 1, bottom: 1 })
+      .margin({ left: 4 })
+  }
+
   /**
    * 计算节点标题文本:
    * - isCurrent + isTerminal: "第 N 轮"
@@ -166,21 +190,9 @@ export struct BranchMapNode {
   }
 
   /**
-   * 计算分歧 Assistant 预览文本。
-   * 空内容时显示"正在生成…"占位。
-   */
-  private computeAssistantPreview(): string {
-    const preview: string = this.displayInfo.firstDivergentAssistantPreview;
-    if (preview.length === 0) {
-      return '艾伦:正在生成…';
-    }
-    return '艾伦:' + preview;
-  }
-
-  /**
    * 计算节点背景色:
-   * - isCurrent: 强调色背景
-   * - isSelected: 浅强调色背景
+   * - isCurrent: 强调色表面
+   * - isSelected: 强调色表面(配合"已选择"徽标区分)
    * - Normal: 普通表面色
    */
   private computeBackgroundColor(): ResourceColor {
@@ -250,6 +262,7 @@ function createEmptyDisplayInfo(): BranchMapDisplayInfo {
     currentMaxTurn: 0,
     forkUserPreview: '',
     firstDivergentAssistantPreview: '',
+    latestMessagePreview: '',
     messageCount: 0,
     isRoot: true,
     isActive: false,
