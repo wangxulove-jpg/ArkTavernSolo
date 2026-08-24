@@ -359,10 +359,13 @@ export struct ChatSessionRootView {
     .padding({
       left: $r('app.float.app_spacing_20'),
       right: $r('app.float.app_spacing_20'),
-      // 顶部 padding = 状态栏高度 + 间距 8(避开状态栏,与其他 Tab 统一起点)
-      top: this.statusBarHeight + 8,
+      // 顶部 padding = 状态栏高度 + 间距 4(与对话设置等二级页 titleBar 保持一致)
+      top: this.statusBarHeight + 4,
       bottom: $r('app.float.app_spacing_8')
     })
+    // 顶栏背景色与二级页 titleBar 一致:surface1 色块延伸覆盖状态栏区域,
+    // 与内容区(pageBg)形成分层
+    .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
     .alignItems(VerticalAlign.Center)
   }
 
