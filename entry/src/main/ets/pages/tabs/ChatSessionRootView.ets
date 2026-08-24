@@ -42,12 +42,13 @@ export const PENDING_CHAT_ID_KEY: string = 'pendingChatId';
 /** AppStorage 中待应用的 characterId(配合 pendingChatId 切换到指定角色会话) */
 export const PENDING_CHARACTER_ID_KEY: string = 'pendingCharacterId';
 
-/** 左滑图标按钮参数 */
+/** 左滑网格按钮参数(2行×3列紧凑布局) */
 interface SwipeIconButtonParams {
   icon: Resource;
-  label: Resource;
+  label: Resource | string;
   bgColor: ResourceColor;
   fgColor: ResourceColor;
+  disabled: boolean;
   action: () => void;
 }
 
@@ -376,7 +377,7 @@ export struct ChatSessionRootView {
       this.sessionsEmptyState()
     } else {
       List() {
-        ForEach(this.sessions, (item: ChatSessionListItem) => {
+        ForEach(this.sessions, (item: ChatSessionListItem, index: number) => {
           ListItem() {
             this.sessionCard(item)
           }
@@ -385,7 +386,7 @@ export struct ChatSessionRootView {
           .swipeAction({
             end: {
               builder: (): void => {
-                this.swipeActionButtons(item)
+                this.swipeActionButtons(item, index)
               }
             }
           })
@@ -476,47 +477,77 @@ export struct ChatSessionRootView {
   }
 
 
-  /** 左滑操作按钮(图标 + 文字,垂直布局) */
+  /** 左滑操作区:2行×3列紧凑网格(上移/重命名/导出 | 下移/删除) */
   @Builder
-  swipeActionButtons(item: ChatSessionListItem) {
+  swipeActionButtons(item: ChatSessionListItem, index: number) {
     Row() {
-      // 导出
-      this.swipeIconButton({
-        icon: $r('sys.symbol.share'),
-        label: $r('app.string.session_action_export'),
-        bgColor: ThemePalette.surface2Color(this.effectiveTheme),
-        fgColor: ThemePalette.textPrimaryColor(this.effectiveTheme),
-        action: (): void => { this.exportTarget = item; }
-      })
+      Column() {
+        // 第一行:上移 / 重命名 / 导出
+        Row() {
+          this.swipeGridCell({
+            icon: $r('sys.symbol.arrow_up'),
+            label: '上移',
+            bgColor: ThemePalette.surface2Color(this.effectiveTheme),
+            fgColor: ThemePalette.textPrimaryColor(this.effectiveTheme),
+            disabled: index === 0,
+            action: (): void => { this.handleMoveUp(item.chat.id); }
+          })
+          this.swipeGridCell({
+            icon: $r('sys.symbol.square_and_pencil'),
+            label: $r('app.string.session_action_rename'),
+            bgColor: ThemePalette.accentColor(this.effectiveTheme),
+            fgColor: $r('app.color.app_on_accent'),
+            disabled: false,
+            action: (): void => { this.openRenameDialog(item); }
+          })
+          this.swipeGridCell({
+            icon: $r('sys.symbol.share'),
+            label: $r('app.string.session_action_export'),
+            bgColor: ThemePalette.surface2Color(this.effectiveTheme),
+            fgColor: ThemePalette.textPrimaryColor(this.effectiveTheme),
+            disabled: false,
+            action: (): void => { this.exportTarget = item; }
+          })
+        }
+        .layoutWeight(1)
+        .width('100%')
 
-      // 重命名
-      this.swipeIconButton({
-        icon: $r('sys.symbol.square_and_pencil'),
-        label: $r('app.string.session_action_rename'),
-        bgColor: ThemePalette.accentColor(this.effectiveTheme),
-        fgColor: $r('app.color.app_on_accent'),
-        action: (): void => { this.openRenameDialog(item); }
-      })
-
-      // 删除 - 危险操作
-      this.swipeIconButton({
-        icon: $r('sys.symbol.trash'),
-        label: $r('app.string.session_action_delete'),
-        bgColor: $r('app.color.app_danger'),
-        fgColor: $r('app.color.app_on_accent'),
-        action: (): void => { this.promptDelete(item); }
-      })
+        // 第二行:下移 / 删除
+        Row() {
+          this.swipeGridCell({
+            icon: $r('sys.symbol.arrow_down'),
+            label: '下移',
+            bgColor: ThemePalette.surface2Color(this.effectiveTheme),
+            fgColor: ThemePalette.textPrimaryColor(this.effectiveTheme),
+            disabled: index === this.sessions.length - 1,
+            action: (): void => { this.handleMoveDown(item.chat.id); }
+          })
+          this.swipeGridCell({
+            icon: $r('sys.symbol.trash'),
+            label: $r('app.string.session_action_delete'),
+            bgColor: $r('app.color.app_danger'),
+            fgColor: $r('app.color.app_on_accent'),
+            disabled: false,
+            action: (): void => { this.promptDelete(item); }
+          })
+        }
+        .layoutWeight(1)
+        .width('100%')
+      }
+      .width(204)
+      .height('100%')
+      .padding(2)
     }
     .height('100%')
   }
 
-  /** 左滑图标按钮(图标在上,文字在下,等宽分布) */
+  /** 左滑紧凑网格单元格(图标在上,文字在下,圆角矩形) */
   @Builder
-  swipeIconButton(params: SwipeIconButtonParams) {
+  swipeGridCell(params: SwipeIconButtonParams) {
     Button() {
       Column() {
         SymbolGlyph(params.icon)
-          .fontSize(20)
+          .fontSize(18)
           .fontColor([params.fgColor])
         Text(params.label)
           .fontSize(10)
@@ -530,12 +561,15 @@ export struct ChatSessionRootView {
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
     }
-    .type(ButtonType.Capsule)
+    .type(ButtonType.Normal)
     .backgroundColor(params.bgColor)
+    .borderRadius(10)
     .height('100%')
     .layoutWeight(1)
-    .padding({ top: 6, bottom: 6, left: 4, right: 4 })
-    .margin({ left: 2, right: 2 })
+    .margin({ left: 2, right: 2, top: 2, bottom: 2 })
+    .padding(0)
+    .enabled(!params.disabled)
+    .opacity(params.disabled ? 0.35 : 1.0)
     .onClick(() => {
       params.action();
     })

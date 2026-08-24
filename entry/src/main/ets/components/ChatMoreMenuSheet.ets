@@ -46,8 +46,6 @@ export struct ChatMoreMenuSheet {
   onGoPresetList: () => void = () => {};
   /** 查看分支图 */
   onGoBranchMap: () => void = () => {};
-  /** 打开会话列表 */
-  onOpenSessionList: () => void = () => {};
   /** 前往聊天背景设置 */
   onGoChatBackground: () => void = () => {};
   /** 前往对话记忆管理 */
@@ -136,11 +134,6 @@ export struct ChatMoreMenuSheet {
       }
 
       Divider().color(ThemePalette.dividerColor(this.effectiveTheme)).margin({ top: 8, bottom: 8 })
-
-      // 会话列表
-      this.menuRow('会话列表', false, false, (): void => {
-        this.onOpenSessionList();
-      })
 
       // 对话设置(背景 + 思考强度)
       this.menuRow('对话设置', this.busy, false, (): void => {
@@ -247,6 +240,7 @@ export struct ChatMoreMenuSheet {
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .layoutWeight(1)
+        .constraintSize({ minWidth: 0 })
       Text('›')
         .fontSize(20)
         .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))

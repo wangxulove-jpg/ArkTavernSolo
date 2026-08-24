@@ -1085,9 +1085,6 @@ struct ChatPage {
             onGoModelSettings: (): void => { this.goToModelSettings(); },
             onGoPresetList: (): void => { this.goToPresetList(); },
             onGoBranchMap: (): void => { this.navigateToBranchMap(); },
-            onOpenSessionList: (): void => {
-              this.viewModel!.openSessionList();
-            },
             onGoChatBackground: (): void => { this.navigateToChatBackgroundSettings(); },
             onGoMemory: (): void => { this.navigateToMemoryManagement(); },
             onGoContextBudget: (): void => { this.navigateToContextBudget(); },
@@ -3392,10 +3389,10 @@ struct ChatPage {
               Button('从角色卡提取')
                 .fontSize(13)
                 .height(34)
+                .padding({ left: 12, right: 12 })
                 .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
                 .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
                 .enabled(this.viewModel !== null && !this.viewModel!.isExtractingUserPersona)
-                .layoutWeight(1)
                 .onClick(() => {
                   if (this.viewModel !== null) {
                     this.viewModel!.extractUserFromCharacter();
@@ -3404,32 +3401,39 @@ struct ChatPage {
               Button('从对话总结')
                 .fontSize(13)
                 .height(34)
+                .padding({ left: 12, right: 12 })
                 .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
                 .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-                .enabled(this.viewModel !== null && !this.viewModel!.isSummarizingUserPersona)
-                .layoutWeight(1)
                 .margin({ left: 8 })
+                .enabled(this.viewModel !== null && !this.viewModel!.isSummarizingUserPersona)
                 .onClick(() => {
                   if (this.viewModel !== null) {
                     this.viewModel!.summarizeUserPersona();
                   }
                 })
+
+              Blank()
+
               if (this.viewModel !== null && this.viewModel!.userPersonaSummary.length > 0) {
-                Button('清除')
-                  .fontSize(13)
-                  .height(34)
-                  .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-                  .fontColor($r('app.color.app_danger'))
-                  .layoutWeight(0.6)
-                  .margin({ left: 8 })
-                  .onClick(() => {
-                    if (this.viewModel !== null) {
-                      this.viewModel!.clearUserPersonaSummary();
-                    }
-                  })
+                Button() {
+                  SymbolGlyph($r('sys.symbol.trash'))
+                    .fontSize(18)
+                    .fontColor([$r('app.color.app_danger')])
+                }
+                .type(ButtonType.Circle)
+                .width(34)
+                .height(34)
+                .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+                .margin({ left: 8 })
+                .onClick(() => {
+                  if (this.viewModel !== null) {
+                    this.viewModel!.clearUserPersonaSummary();
+                  }
+                })
               }
             }
             .width('100%')
+            .alignItems(VerticalAlign.Center)
 
             if (this.viewModel !== null &&
               (this.viewModel!.isExtractingUserPersona || this.viewModel!.isSummarizingUserPersona)) {
