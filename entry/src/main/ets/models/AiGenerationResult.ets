@@ -28,6 +28,21 @@ export enum AiGenerationStatus {
 }
 
 /**
+ * 角色卡 AI 优化模式(ARK-UI-LAYOUT-OPT-02 后扩展)。
+ *
+ * 决定"导入时使用 AI 优化内容"到底是:
+ * - Preserve(仅整理结构):保持角色设定不变,只整理字段归属、补全缺失字段、统一语言风格;
+ * - Rewrite(深度优化改写):在保持核心身份与世界观基调一致的前提下,重写并丰富角色定位、
+ *   描述、性格、场景等字段,使其更清晰、生动、完整。
+ */
+export enum CharacterOptimizeMode {
+  /** 仅整理结构,不改写内容 */
+  Preserve = 'preserve',
+  /** AI 深度优化改写,可在保持核心设定一致的前提下丰富内容 */
+  Rewrite = 'rewrite'
+}
+
+/**
  * 生成来源元数据(写入 extensions.arktavern.ai_generation)。
  */
 export interface AiGenerationMeta {

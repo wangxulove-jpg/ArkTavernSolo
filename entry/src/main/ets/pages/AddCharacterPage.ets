@@ -33,10 +33,14 @@ import { AppServices } from '../services/AppServices';
 import { picker } from '@kit.CoreFileKit';
 import { promptAction, router } from '@kit.ArkUI';
 import { ThemePalette } from '../theme/ThemePalette';
+import { CharacterOptimizeMode } from '../models/AiGenerationResult';
 
 const TAB_NEW: number = 0;
 const TAB_IMPORT: number = 1;
 const TAB_AI: number = 2;
+
+/** 触发"角色卡过大"提示的估算输入 token 阈值 */
+const LARGE_CARD_TOKEN_THRESHOLD: number = 10000;
 
 @Entry
 @Component
@@ -52,6 +56,8 @@ struct AddCharacterPage {
   @StorageProp('effectiveTheme') effectiveTheme: string = 'dark';
   /** 是否勾选"AI 优化内容"(PNG 导入时可选) */
   @State optimizePending: boolean = false;
+  /** AI 优化模式:Preserve=仅整理结构, Rewrite=深度优化改写 */
+  @State optimizeMode: CharacterOptimizeMode = CharacterOptimizeMode.Preserve;
   /** 是否显示 AI 优化后完整内容预览窗口 */
   @State showOptimizedPreview: boolean = false;
 
@@ -163,8 +169,30 @@ struct AddCharacterPage {
     if (this.viewModel === null || this.viewModel!.aiOptimizing) {
       return;
     }
+    // 同步当前选择的优化模式到 ViewModel
+    this.viewModel!.optimizeMode = this.optimizeMode;
     this.viewModel!.aiOptimizeError = '';
     this.viewModel!.optimizePreviewCard();
+  }
+
+  /** 切换 AI 优化模式 */
+  private selectOptimizeMode(mode: CharacterOptimizeMode): void {
+    this.optimizeMode = mode;
+    if (this.viewModel !== null && !this.viewModel!.aiOptimizing) {
+      // 切换模式时清除之前的优化结果与错误,需重新优化
+      this.viewModel!.aiOptimized = false;
+      this.viewModel!.aiOptimizeError = '';
+    }
+  }
+
+  /** 当前是否选中指定优化模式 */
+  private isOptimizeMode(mode: CharacterOptimizeMode): boolean {
+    return this.optimizeMode === mode;
+  }
+
+  /** 当前预览卡是否过大(可能超出 AI 单次输出上限) */
+  private isLargeCard(): boolean {
+    return this.viewModel !== null && this.viewModel!.previewCardInputTokens > LARGE_CARD_TOKEN_THRESHOLD;
   }
 
   /** 取消 AI 优化 */
@@ -772,7 +800,9 @@ struct AddCharacterPage {
             .fontSize(13)
             .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
 
-          Text($r('app.string.character_import_ai_optimize_desc'))
+          Text(this.isOptimizeMode(CharacterOptimizeMode.Rewrite)
+            ? $r('app.string.character_import_ai_optimize_mode_rewrite_desc')
+            : $r('app.string.character_import_ai_optimize_desc'))
             .fontSize(11)
             .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
             .maxLines(2)
@@ -787,6 +817,58 @@ struct AddCharacterPage {
       .alignItems(VerticalAlign.Center)
       .margin({ bottom: 8 })
 
+      // 角色卡过大提示
+      if (this.isLargeCard()) {
+        Row() {
+          Text($r('app.string.character_import_ai_optimize_large_warning'))
+            .fontSize(11)
+            .fontColor(ThemePalette.forTheme(this.effectiveTheme).warning)
+            .lineHeight(16)
+            .layoutWeight(1)
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Top)
+        .padding(8)
+        .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+        .borderRadius($r('app.float.app_radius_sm'))
+        .margin({ bottom: 8 })
+      }
+
+      // 优化模式选择:仅整理结构 / AI 深度改写
+      Row({ space: 8 }) {
+        Button($r('app.string.character_import_ai_optimize_mode_preserve'))
+          .fontSize(12)
+          .fontColor(this.isOptimizeMode(CharacterOptimizeMode.Preserve)
+            ? $r('app.color.app_on_accent')
+            : ThemePalette.textSecondaryColor(this.effectiveTheme))
+          .backgroundColor(this.isOptimizeMode(CharacterOptimizeMode.Preserve)
+            ? ThemePalette.accentColor(this.effectiveTheme)
+            : Color.Transparent)
+          .borderRadius($r('app.float.app_radius_sm'))
+          .height(30)
+          .layoutWeight(1)
+          .onClick(() => {
+            this.selectOptimizeMode(CharacterOptimizeMode.Preserve);
+          })
+
+        Button($r('app.string.character_import_ai_optimize_mode_rewrite'))
+          .fontSize(12)
+          .fontColor(this.isOptimizeMode(CharacterOptimizeMode.Rewrite)
+            ? $r('app.color.app_on_accent')
+            : ThemePalette.textSecondaryColor(this.effectiveTheme))
+          .backgroundColor(this.isOptimizeMode(CharacterOptimizeMode.Rewrite)
+            ? ThemePalette.accentColor(this.effectiveTheme)
+            : Color.Transparent)
+          .borderRadius($r('app.float.app_radius_sm'))
+          .height(30)
+          .layoutWeight(1)
+          .onClick(() => {
+            this.selectOptimizeMode(CharacterOptimizeMode.Rewrite);
+          })
+      }
+      .width('100%')
+      .margin({ bottom: 8 })
+
       // AI 优化进行中
       if (this.viewModel !== null && this.viewModel!.aiOptimizing) {
         Row() {
@@ -795,7 +877,9 @@ struct AddCharacterPage {
             .height(20)
             .color(ThemePalette.accentColor(this.effectiveTheme))
 
-          Text($r('app.string.character_import_ai_optimizing'))
+          Text(this.viewModel!.aiOptimizeProgressText.length > 0
+            ? this.viewModel!.aiOptimizeProgressText
+            : $r('app.string.character_import_ai_optimizing'))
             .fontSize(12)
             .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
             .margin({ left: 8 })

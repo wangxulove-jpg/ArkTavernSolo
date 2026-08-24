@@ -457,6 +457,22 @@
       "value": "根据角色卡内容,整理为规范的结构(不改变角色设定)"
     },
     {
+      "name": "character_import_ai_optimize_mode_rewrite_desc",
+      "value": "在保持核心设定一致的前提下,重写并丰富角色定位、描述、性格与场景"
+    },
+    {
+      "name": "character_import_ai_optimize_mode_preserve",
+      "value": "仅整理结构"
+    },
+    {
+      "name": "character_import_ai_optimize_mode_rewrite",
+      "value": "AI 深度改写"
+    },
+    {
+      "name": "character_import_ai_optimize_large_warning",
+      "value": "⚠ 角色卡内容较大，AI 优化/生成可能超出模型单次输出上限（已自动放开上限）。若仍失败，建议精简内容或分段生成。"
+    },
+    {
       "name": "character_import_ai_optimizing",
       "value": "AI 优化中…"
     },

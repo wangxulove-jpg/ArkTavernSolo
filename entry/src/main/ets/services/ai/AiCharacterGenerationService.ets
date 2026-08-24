@@ -46,19 +46,21 @@ import { Logger } from '../../utils/Logger';
 import { generateUuid } from '../../utils/Uuid';
 import {
   AiCharacterInput,
-  AiCharacterType,
-  createEmptyAiCharacterInput
+  AiCharacterType
 } from '../../models/AiCharacterInput';
 import {
   AiGenerationResult,
   AiGenerationStatus,
   AiGenerationMeta,
   AiValidationError,
-  AI_GENERATION_VERSION
+  AI_GENERATION_VERSION,
+  CharacterOptimizeMode
 } from '../../models/AiGenerationResult';
 import { validateV2CharacterCard } from '../../parser/CharacterCardV2Validator';
 import { extractJsonObject } from '../../parser/CharacterCardV2Fixer';
 import { ParsedCharacterCard } from '../../parser/CharacterCardJsonParser';
+import { getModelCapability } from '../../models/ModelCapabilities';
+import { estimateMessagesTokens } from '../TokenCounter';
 
 const LOG_TAG: string = 'AiCharGen';
 
@@ -66,8 +68,19 @@ const LOG_TAG: string = 'AiCharGen';
 const GENERATION_TEMPERATURE: number = 0.7;
 /** 生成 top_p */
 const GENERATION_TOP_P: number = 0.95;
-/** 生成最大 token 数(角色卡字段较多,需要较大空间) */
-const GENERATION_MAX_TOKENS: number = 8192;
+/**
+ * AI 角色卡生成的目标输出 token 上限(高于旧固定值 8192,以适应大型角色卡)。
+ * 实际生效值会再取 min(该目标, 模型能力上限, contextWindow - 输入 - 安全边际)。
+ */
+const GENERATION_TARGET_MAX_TOKENS: number = 32768;
+/** 输出上限的保底值(防止因上下文/能力导致预算过低) */
+const GENERATION_MIN_OUTPUT_TOKENS: number = 2048;
+/** 输出预留安全边际(占上下文窗口,避免输出挤占输入导致越界) */
+const GENERATION_OUTPUT_SAFETY_MARGIN: number = 1024;
+/** 能力表中未知模型时的输出上限兜底(比旧 8192 略有提升) */
+const DEFAULT_MAX_OUTPUT_TOKENS: number = 16384;
+/** 能力表中未知模型时的上下文窗口兜底 */
+const DEFAULT_CONTEXT_WINDOW: number = 32768;
 /**
  * 受控格式修复最大次数(G-AI-BUILDER-2-FIX)。
  *
@@ -141,6 +154,32 @@ export class AiCharacterGenerationService {
   }
 
   /**
+   * 计算本次生成/优化/字段重生成的输出 token 上限。
+   *
+   * 规则:取 min(目标上限 32768, 模型能力表中的输出上限, contextWindow - 输入 token - 安全边际),
+   * 且不低于保底值,从而既适应大型角色卡,又不越界。
+   *
+   * @param config 当前 ProviderConfig
+   * @param messages 本次请求的消息(用于估算输入 token)
+   * @returns 输出 token 上限(正整数)
+   */
+  private computeOutputMaxTokens(config: ProviderConfig, messages: ChatMessage[]): number {
+    const capability = getModelCapability(config.modelName);
+    const modelMaxOut: number = capability !== null
+      ? capability.maxOutputTokensLimit
+      : DEFAULT_MAX_OUTPUT_TOKENS;
+    const contextWindow: number = config.contextWindow !== undefined && config.contextWindow > 0
+      ? config.contextWindow
+      : (capability !== null ? capability.contextWindow : DEFAULT_CONTEXT_WINDOW);
+    const inputTokens: number = estimateMessagesTokens(messages);
+
+    const targetBudget: number = Math.min(GENERATION_TARGET_MAX_TOKENS, modelMaxOut);
+    const remaining: number = contextWindow - inputTokens - GENERATION_OUTPUT_SAFETY_MARGIN;
+    const budget: number = Math.min(targetBudget, remaining);
+    return Math.max(GENERATION_MIN_OUTPUT_TOKENS, budget);
+  }
+
+  /**
    * 流式生成 V2 角色卡。
    *
    * @param input 创意输入
@@ -159,6 +198,7 @@ export class AiCharacterGenerationService {
       aborted: false,
       done: false,
       accumulated: '',
+      truncated: false,
       meta: null,
       autoFixAttempts: 0,
       streamHandle: null,
@@ -222,6 +262,7 @@ export class AiCharacterGenerationService {
       aborted: false,
       done: false,
       accumulated: '',
+      truncated: false,
       meta: null,
       autoFixAttempts: 0,
       streamHandle: null,
@@ -259,16 +300,20 @@ export class AiCharacterGenerationService {
   /**
    * 优化现有角色卡(ARK-UI-LAYOUT-OPT-02 后新增功能)。
    *
-   * 语义:不改变角色卡的内容与设定,而是根据角色卡已有内容,
-   * 让 AI 将其重写为规范、完整的 Tavern Card V2 JSON 结构。
-   * 主要用于导入 PNG/JSON 角色卡时,内容字段不完整/结构混乱的整理。
+   * 语义:
+   * - Preserve 模式:不改变角色卡的内容与设定,而是根据角色卡已有内容,
+   *   让 AI 将其重写为规范、完整的 Tavern Card V2 JSON 结构。主要用于导入
+   *   PNG/JSON 角色卡时,内容字段不完整/结构混乱的整理。
+   * - Rewrite 模式:在保持角色核心身份与世界观基调一致的前提下,让 AI 重写
+   *   并丰富角色定位、描述、性格、场景等字段,使其更清晰、生动、完整。
    *
    * 约束:
-   * - 保持角色名称、设定、性格、场景等核心内容一致,不重新创作
+   * - 保持角色核心设定一致,不重新创作与设定矛盾的内容
    * - 只整理字段归属、补全缺失字段(空字段补空串/空数组)、统一语言风格
    * - 不修改头像 / 世界书已有条目内容
    *
    * @param card 现有角色卡(来自导入解析)
+   * @param mode AI 优化模式(Preserve=仅整理结构, Rewrite=深度优化改写)
    * @param useCurrentModel true=跟随当前 ProviderConfig;false=使用指定 configId
    * @param configId 指定 ProviderConfig ID
    * @param callbacks 流式回调
@@ -276,6 +321,7 @@ export class AiCharacterGenerationService {
    */
   optimizeCharacterCard(
     card: ParsedCharacterCard,
+    mode: CharacterOptimizeMode,
     useCurrentModel: boolean,
     configId: string,
     callbacks: AiGenerationCallbacks
@@ -284,13 +330,14 @@ export class AiCharacterGenerationService {
       aborted: false,
       done: false,
       accumulated: '',
+      truncated: false,
       meta: null,
       autoFixAttempts: 0,
       streamHandle: null,
       abortChecker: null
     };
 
-    this.executeOptimize(card, useCurrentModel, configId, state, callbacks).then(
+    this.executeOptimize(card, mode, useCurrentModel, configId, state, callbacks).then(
       (): void => { /* 正常完成 */ },
       (err: Object): void => {
         if (state.done) {
@@ -331,6 +378,7 @@ export class AiCharacterGenerationService {
    */
   private async executeOptimize(
     card: ParsedCharacterCard,
+    mode: CharacterOptimizeMode,
     useCurrentModel: boolean,
     configId: string,
     state: GenerationState,
@@ -371,11 +419,11 @@ export class AiCharacterGenerationService {
     state.meta = meta;
 
     // 构造优化消息(保持内容,重写为规范 V2 JSON)
-    const messages: ChatMessage[] = buildOptimizeMessages(card);
+    const messages: ChatMessage[] = buildOptimizeMessages(card, mode);
     const options: ChatRequestOptions = {
       temperature: GENERATION_TEMPERATURE,
       topP: GENERATION_TOP_P,
-      maxTokens: GENERATION_MAX_TOKENS,
+      maxTokens: this.computeOutputMaxTokens(config, messages),
       stream: true
     };
 
@@ -394,10 +442,21 @@ export class AiCharacterGenerationService {
       ));
       return;
     }
+    if (state.truncated) {
+      state.done = true;
+      callbacks.onComplete(createFailed(
+        '', [], 0, false, meta,
+        '优化失败:角色卡内容过大,超出模型单次输出上限,建议精简内容或分段生成'
+      ));
+      return;
+    }
 
-    // 校验 + 自动修复(复用生成路径)
+    // 校验 + 自动修复(复用生成路径,自动修复复用与首次请求相同的优化提示词 + 原始卡内容,
+    // 避免自动修复时用"生成助手"提示词重生成一张全新角色卡)
     const finalResult: AiGenerationResult = await this.validateAndAutoFix(
-      rawResponse, meta, state, callbacks, messages, options, createEmptyAiCharacterInput()
+      rawResponse, meta, state, callbacks, messages, options,
+      buildOptimizeSystemPrompt(card, mode),
+      JSON.stringify(buildOptimizeCardContent(card), null, 2)
     );
     state.done = true;
     callbacks.onComplete(finalResult);
@@ -455,7 +514,7 @@ export class AiCharacterGenerationService {
     const options: ChatRequestOptions = {
       temperature: GENERATION_TEMPERATURE,
       topP: GENERATION_TOP_P,
-      maxTokens: GENERATION_MAX_TOKENS,
+      maxTokens: this.computeOutputMaxTokens(config, messages),
       stream: true
     };
 
@@ -476,10 +535,19 @@ export class AiCharacterGenerationService {
       callbacks.onComplete(result);
       return;
     }
+    if (state.truncated) {
+      state.done = true;
+      const result: AiGenerationResult = createFailed(
+        '', [], 0, false, meta,
+        '生成失败:角色卡内容过大,超出模型单次输出上限,建议精简内容或分段生成'
+      );
+      callbacks.onComplete(result);
+      return;
+    }
 
     // 4. 校验 + 自动修复
     const finalResult: AiGenerationResult = await this.validateAndAutoFix(
-      rawResponse, meta, state, callbacks, messages, options, input
+      rawResponse, meta, state, callbacks, messages, options, buildSystemPrompt(input), ''
     );
     state.done = true;
     callbacks.onComplete(finalResult);
@@ -506,7 +574,7 @@ export class AiCharacterGenerationService {
     const options: ChatRequestOptions = {
       temperature: GENERATION_TEMPERATURE,
       topP: GENERATION_TOP_P,
-      maxTokens: GENERATION_MAX_TOKENS,
+      maxTokens: this.computeOutputMaxTokens(config, messages),
       stream: true
     };
 
@@ -614,6 +682,8 @@ export class AiCharacterGenerationService {
           }
         },
         onComplete: (result: ChatStreamResult): void => {
+          // 检测是否因超长被截断(finish_reason === "length"),供上层给出"卡片过大"提示
+          state.truncated = result.finishReason !== undefined && result.finishReason === 'length';
           // 优先使用 result.content(已聚合),否则用累积值
           // 如果 content 和累积值都为空,尝试使用 reasoningContent(思考模型回退)
           let finalContent: string = result.content !== undefined && result.content.length > 0
@@ -692,7 +762,8 @@ export class AiCharacterGenerationService {
     callbacks: AiGenerationCallbacks | null,
     originalMessages: ChatMessage[],
     options: ChatRequestOptions,
-    input: AiCharacterInput
+    autoFixSystemPrompt: string,
+    autoFixContext: string
   ): Promise<AiGenerationResult> {
     // 1. 清理 Markdown + 提取 JSON
     const cleaned: string = extractJsonObject(rawResponse);
@@ -719,7 +790,7 @@ export class AiCharacterGenerationService {
       Logger.warn(LOG_TAG, 'repair attempt=' + String(state.autoFixAttempts)
         + ' errors=' + String(lastErrors.length));
 
-      const fixMessages: ChatMessage[] = buildAutoFixMessages(currentRaw, lastErrors, input);
+      const fixMessages: ChatMessage[] = buildAutoFixMessages(currentRaw, lastErrors, autoFixSystemPrompt, autoFixContext);
       const fixResponse: string = await this.streamMessages(
         fixMessages, options, state, callbacks, '格式修复失败'
       );
@@ -762,6 +833,8 @@ interface GenerationState {
   aborted: boolean;
   done: boolean;
   accumulated: string;
+  /** 上次流式响应是否因超长被截断(finish_reason === "length") */
+  truncated: boolean;
   meta: AiGenerationMeta | null;
   autoFixAttempts: number;
   streamHandle: ChatStreamHandle | null;
@@ -834,14 +907,18 @@ function buildGenerationMessages(input: AiCharacterInput): ChatMessage[] {
 
 /**
  * 构造自动修复请求的消息。
+ *
+ * @param originalJson 上一次输出的 JSON(可能有错误)
+ * @param errors 校验错误列表
+ * @param systemPrompt 与首次请求一致的 system prompt(生成用 buildSystemPrompt,优化用优化提示词)
+ * @param contextText 附加上下文(优化时传入原始角色卡内容,以保持设定不变;生成为空串)
  */
 function buildAutoFixMessages(
   originalJson: string,
   errors: AiValidationError[],
-  input: AiCharacterInput
+  systemPrompt: string,
+  contextText: string
 ): ChatMessage[] {
-  const systemPrompt: string = buildSystemPrompt(input);
-
   // 把错误格式化为简短描述
   const errorList: string[] = [];
   for (let i: number = 0; i < errors.length; i++) {
@@ -850,12 +927,18 @@ function buildAutoFixMessages(
   }
   const errorsText: string = errorList.join('\n');
 
+  const contextBlock: string = contextText.length > 0
+    ? '\n\n【原始角色卡内容(以此为准,保持角色设定不变)】:\n' + contextText
+    : '';
+
   const userPrompt: string = '上一次生成的 JSON 校验失败,错误如下:\n\n'
     + errorsText
     + '\n\n原始 JSON(可能有错误,请基于此修正):\n'
     + originalJson
-    + '\n\n请只输出修正后的完整 Tavern Card V2 JSON,不要输出其他任何文字、解释、Markdown 代码块标记。'
-    + '必须包含 spec="chara_card_v2"、spec_version="2.0" 和 data 对象。';
+    + contextBlock
+    + '\n\n请只修正 JSON 的格式与字段结构,保持角色设定不变,不要改写角色内容或重新设计角色。'
+    + '只输出修正后的完整 Tavern Card V3 JSON,不要输出其他任何文字、解释、Markdown 代码块标记。'
+    + '必须包含 spec="chara_card_v3"、spec_version="3.0" 和 data 对象。';
 
   return [
     createChatMessage('ai-fix-sys-' + generateUuid(), ChatRole.System, systemPrompt, Date.now()),
@@ -912,30 +995,116 @@ function buildFieldRegenMessages(
 /**
  * 构造角色卡优化请求的消息(ARK-UI-LAYOUT-OPT-02)。
  *
- * 语义:保持现有角色卡内容,让 AI 重写为规范、完整的 Tavern Card V2 JSON 结构。
- * 不改变角色设定,不重新创作,只整理字段归属与补全缺失字段。
+ * 根据 mode 分支:
+ * - Preserve(仅整理结构):保持现有角色卡内容,让 AI 重写为规范、完整的 Tavern Card V3 JSON 结构。
+ *   不改变角色设定,不重新创作,只整理字段归属与补全缺失字段。
+ * - Rewrite(深度优化改写):在保持角色核心身份与世界观基调一致的前提下,让 AI 重写并丰富
+ *   角色定位、描述、性格、场景等字段,使其更清晰、生动、完整。
  */
-function buildOptimizeMessages(card: ParsedCharacterCard): ChatMessage[] {
-  const systemPrompt: string = '你是 Tavern Card V3 角色卡整理助手。'
-    + '用户会给你一个现有角色卡的内容,你需要**保持角色设定不变**,将其整理为规范、完整的 Tavern Card V3 JSON。'
-    + '\n\n核心原则:'
-    + '\n- **不重新创作**:保留角色名称、昵称、描述、性格、场景、开场白等原有内容与设定,不添加原创设定'
-    + '\n- **不删减有效信息**:将原有内容按字段语义归类到正确字段,不丢失已有设定'
-    + '\n- **结构匹配**:根据内容判断它属于 description / personality / scenario / first_mes / system_prompt / nickname 等哪个字段'
-    + '\n- **补全结构**:缺失字段填空字符串或空数组,但不得虚构内容填充必填字段(name 除外,保留原值)'
-    + '\n- **语言风格统一**:仅做轻度润色与标点/换行整理,保持原有语言'
+function buildOptimizeMessages(card: ParsedCharacterCard, mode: CharacterOptimizeMode): ChatMessage[] {
+  const isRewrite: boolean = mode === CharacterOptimizeMode.Rewrite;
+  const systemPrompt: string = buildOptimizeSystemPrompt(card, mode);
+
+  const cardContent: Record<string, Object> = buildOptimizeCardContent(card);
+  const serializedContent: string = JSON.stringify(cardContent, null, 2);
+
+  const userPrompt: string = isRewrite
+    ? '以下是需要深度优化的现有角色卡内容:\n\n'
+      + serializedContent
+      + '\n\n请在保持角色核心身份与世界观基调一致的前提下,对以上角色内容进行深度优化与改写,'
+      + '丰富角色定位、描述、性格、场景、开场白等字段,使其更清晰、生动、完整;'
+      + '若某字段内容薄弱,请补充更充实的描述,不要留空。'
+      + '只输出优化后的完整 Tavern Card V3 JSON,不要输出任何其他文字或 Markdown 代码块。'
+    : '以下是需要整理的现有角色卡内容:\n\n'
+      + serializedContent
+      + '\n\n请理解以上角色的完整设定,将其**忠实拆分并归类**到 Tavern Card V3 的正确字段中'
+      + '(description / personality / scenario / first_mes / system_prompt / mes_example 等)。'
+      + '注意:当内容集中在单个字段(如 description)时,须将其中的设定、规则、对话风格、示例对话等'
+      + '合理归类到对应字段,而不是简单堆回 description。'
+      + '\n只输出 JSON,不要输出任何其他文字或 Markdown 代码块。';
+
+  return [
+    createChatMessage('ai-opt-sys-' + generateUuid(), ChatRole.System, systemPrompt, Date.now()),
+    createChatMessage('ai-opt-usr-' + generateUuid(), ChatRole.User, userPrompt, Date.now())
+  ];
+}
+
+/**
+ * 构造角色卡优化请求的 system prompt(按 mode 分支,供首次请求与自动修复复用)。
+ */
+function buildOptimizeSystemPrompt(card: ParsedCharacterCard, mode: CharacterOptimizeMode): string {
+  return mode === CharacterOptimizeMode.Rewrite
+    ? buildRewriteOptimizeSystemPrompt()
+    : buildTidyOptimizeSystemPrompt();
+}
+
+/**
+ * 仅整理结构模式的 system prompt:保持设定不变,只整理字段归属与补全缺失字段。
+ */
+function buildTidyOptimizeSystemPrompt(): string {
+  return '你是 Tavern Card V3 角色卡结构整理助手。'
+    + '用户会给你一个现有角色卡的内容(可能内容集中在单个字段如 description)。'
+    + '你需要**忠实理解并拆分**这份内容,将其**保留原意地归类**到规范、完整的 Tavern Card V3 JSON 的正确字段,'
+    + '而**绝不能改写或重新设计这个角色**。'
+    + '\n\n最高优先级(必须遵守):'
+    + '\n- **不得改名**:name / nickname 必须等于原卡的角色名/昵称,禁止改成其它名字'
+    + '\n- **不得换角色**:角色的人名、身份、来历、世界观、人格必须完全来自原卡已有文本,严禁虚构新角色或新身份'
+    + '\n- **不得新增原创设定**:只可把原文已有的信息归类到字段,禁止补充原文没有的能力、身份、背景、性格、关系'
+    + '\n- **不得丢信息**:原卡的所有有效内容必须保留在某个字段中,禁止丢弃或省略'
+    + '\n\n字段归类参考:'
+    + '\n- 角色扮演的系统指令、规则、禁止项、输出要求、扮演指南、元指令 → system_prompt'
+    + '\n- 示例对话、对话范例 → mes_example'
+    + '\n- 性格、说话风格、口癖、语气 → personality'
+    + '\n- 人名、身份、来历、外貌、基本设定、世界观背景 → description'
+    + '\n- 角色与用户的相遇场景、初始情境、世界观 → scenario'
+    + '\n- 角色首次说的话 → first_mes'
+    + '\n- 无法确定归属的内容 → 保留在 description,不要丢弃'
+    + '\n\n语言风格:'
+    + '\n- 仅做轻度润色与标点/换行整理,保持原有语言'
     + '\n- 不要修改头像、不要修改角色书已有条目内容'
     + '\n\n输出要求:'
     + '\n- **只输出**标准 Tavern Card V3 JSON,不要输出 Markdown 代码块标记、解释、标题或其他任何文字'
     + '\n- JSON 必须可被 JSON.parse 直接解析'
     + '\n- 必须包含 spec="chara_card_v3"、spec_version="3.0" 和 data 对象'
-    + '\n\nJSON 结构要求(所有字段必填,数组字段即使为空也必须是空数组,extensions 即使为空也必须是空对象):'
+    + buildOptimizeJsonStructure();
+}
+
+/**
+ * 深度优化改写模式的 system prompt:保持核心身份一致的前提下,重写并丰富内容。
+ */
+function buildRewriteOptimizeSystemPrompt(): string {
+  return '你是 Tavern Card V3 角色卡深度优化助手。'
+    + '用户会给你一个现有角色卡的内容,你需要在**保持角色核心身份与世界观基调一致**的前提下,'
+    + '对角色卡进行深度优化与改写,让内容更丰满、更自然、更有辨识度。'
+    + '\n\n核心原则:'
+    + '\n- **忠于核心身份**:保留角色名称(nickname 可保留或微调)、身份定位、世界观基调与核心性格设定,不改变角色本质,不做与设定矛盾的改动'
+    + '\n- **不得改名/换角**:name 必须保持原卡角色名,禁止改成其它名字,禁止把角色替换成另一个身份'
+    + '\n- **深度优化内容**:重写并丰富 description(角色身份/定位、经历、外貌、行为习惯)、'
+    + 'personality(性格,不可只是关键词堆积,要清晰说明说话方式与性格特点)、'
+    + 'scenario(场景设定)、first_mes(开场白)、system_prompt(帮助稳定扮演)等字段,使其更清晰、生动、有层次'
+    + '\n- **结构匹配**:确保内容落在正确字段,避免错位'
+    + '\n- **语言风格统一**:整体润色,语言更自然流畅'
+    + '\n- **补全结构**:缺失字段需补全;若某字段内容薄弱,应填充更充实的描述,而不是留空或堆砌关键词'
+    + '\n- **不虚构冲突**:只可丰富已有设定的细节,不要新增与角色设定矛盾的能力、身份或背景'
+    + '\n- 不要修改头像、不要修改角色书已有条目内容'
+    + '\n\n输出要求:'
+    + '\n- **只输出**标准 Tavern Card V3 JSON,不要输出 Markdown 代码块标记、解释、标题或其他任何文字'
+    + '\n- JSON 必须可被 JSON.parse 直接解析'
+    + '\n- 必须包含 spec="chara_card_v3"、spec_version="3.0" 和 data 对象'
+    + buildOptimizeJsonStructure();
+}
+
+/**
+ * Tavern Card V3 角色卡的 JSON 结构要求(两种优化模式共用)。
+ */
+function buildOptimizeJsonStructure(): string {
+  return '\n\nJSON 结构要求(所有字段必填,数组字段即使为空也必须是空数组,extensions 即使为空也必须是空对象):'
     + '\n{'
     + '\n  "spec": "chara_card_v3",'
     + '\n  "spec_version": "3.0",'
     + '\n  "data": {'
     + '\n    "name": "角色名称(保持原值)",'
-    + '\n    "nickname": "角色昵称/别名(保持原值,没有则留空)",'
+    + '\n    "nickname": "角色昵称/别名(没有则留空)",'
     + '\n    "description": "角色身份、经历、外貌和行为习惯的描述",'
     + '\n    "personality": "性格描述",'
     + '\n    "scenario": "场景设定",'
@@ -952,8 +1121,12 @@ function buildOptimizeMessages(card: ParsedCharacterCard): ChatMessage[] {
     + '\n    "extensions": {}'
     + '\n  }'
     + '\n}';
+}
 
-  // 构造现有卡片内容(序列化为紧凑 JSON,便于模型读取)
+/**
+ * 将现有角色卡序列化为紧凑对象,供优化请求读取。
+ */
+function buildOptimizeCardContent(card: ParsedCharacterCard): Record<string, Object> {
   const cardContent: Record<string, Object> = {};
   cardContent['name'] = card.name;
   cardContent['nickname'] = card.nickname;
@@ -974,16 +1147,7 @@ function buildOptimizeMessages(card: ParsedCharacterCard): ChatMessage[] {
   if (card.creator.length > 0) {
     cardContent['creator'] = card.creator;
   }
-
-  const userPrompt: string = '以下是需要整理的现有角色卡内容:\n\n'
-    + JSON.stringify(cardContent, null, 2)
-    + '\n\n请保持以上角色设定与内容不变,将其整理为规范、完整的 Tavern Card V3 JSON。'
-    + '只输出 JSON,不要输出任何其他文字或 Markdown 代码块。';
-
-  return [
-    createChatMessage('ai-opt-sys-' + generateUuid(), ChatRole.System, systemPrompt, Date.now()),
-    createChatMessage('ai-opt-usr-' + generateUuid(), ChatRole.User, userPrompt, Date.now())
-  ];
+  return cardContent;
 }
 
 /**

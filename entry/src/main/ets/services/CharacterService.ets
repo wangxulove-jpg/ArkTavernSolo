@@ -35,6 +35,7 @@ import {
   ParsedCharacterBook,
   ParsedCharacterBookEntry
 } from '../parser/CharacterCardJsonParser';
+import { applyDescriptionSplit } from '../parser/CharacterDescriptionSplitter';
 import { writeCharacterToJson, writeCharacterToV2Json, writeCharacterToV3Json } from '../parser/CharacterCardJsonWriter';
 import { parsePngCharacterCard, PngParseResult } from '../parser/PngCharacterCardParser';
 import {
@@ -291,9 +292,15 @@ export class CharacterService {
   /**
    * 解析角色卡 JSON(不保存)。
    * 用于导入前预览。
+   * 解析后用代码拆分器把「内容集中在 description」的结构化卡智能拆到各字段(字段非空保留原值)。
    */
   parseCharacterJson(jsonString: string): ParseResult {
-    return parseCharacterJson(jsonString);
+    const result = parseCharacterJson(jsonString);
+    if (result.success && result.card !== null) {
+      const splitCard: ParsedCharacterCard = applyDescriptionSplit(result.card);
+      return ParseResult.ok(splitCard);
+    }
+    return result;
   }
 
   /**

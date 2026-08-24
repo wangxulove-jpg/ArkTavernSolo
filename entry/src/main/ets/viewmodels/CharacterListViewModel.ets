@@ -7,15 +7,52 @@
 
 import { Character } from '../models/Character';
 import { CharacterService } from '../services/CharacterService';
-import { ParsedCharacterCard } from '../parser/CharacterCardJsonParser';
+import { ParsedCharacterCard, ParsedCharacterBook, ParsedCharacterBookEntry } from '../parser/CharacterCardJsonParser';
 import { PngParseResult } from '../parser/PngCharacterCardParser';
 import { Logger } from '../utils/Logger';
 
 import { AiCharacterGenerationService, AiGenerationHandle } from '../services/ai/AiCharacterGenerationService';
-import { AiGenerationResult, AiGenerationStatus } from '../models/AiGenerationResult';
+import { AiGenerationResult, AiGenerationStatus, CharacterOptimizeMode } from '../models/AiGenerationResult';
 import { AppServices } from '../services/AppServices';
+import { estimateTextTokens } from '../services/TokenCounter';
 
 const LOG_TAG: string = 'CharacterListViewModel';
+
+/** 估算一张解析后角色卡的全部文本 token(用于超大卡提示)。 */
+function estimateParsedCardTokens(card: ParsedCharacterCard): number {
+  let total: number = 0;
+  total += estimateTextTokens(card.name);
+  total += estimateTextTokens(card.description);
+  total += estimateTextTokens(card.personality);
+  total += estimateTextTokens(card.scenario);
+  total += estimateTextTokens(card.firstMessage);
+  total += estimateTextTokens(card.systemPrompt);
+  total += estimateTextTokens(card.mesExample);
+  total += estimateTextTokens(card.creatorNotes);
+  total += estimateTextTokens(card.postHistoryInstructions);
+  total += estimateTextTokens(card.userName);
+  total += estimateTextTokens(card.nickname);
+  total += estimateTextTokens(card.creator);
+  total += estimateTextTokens(card.characterVersion);
+  for (let i: number = 0; i < card.alternateGreetings.length; i++) {
+    total += estimateTextTokens(card.alternateGreetings[i]);
+  }
+  for (let i: number = 0; i < card.tags.length; i++) {
+    total += estimateTextTokens(card.tags[i]);
+  }
+  const book: ParsedCharacterBook | null = card.characterBook;
+  if (book !== null) {
+    total += estimateTextTokens(book.name);
+    total += estimateTextTokens(book.description);
+    for (let i: number = 0; i < book.entries.length; i++) {
+      const entry: ParsedCharacterBookEntry = book.entries[i];
+      total += estimateTextTokens(entry.name);
+      total += estimateTextTokens(entry.content);
+      total += estimateTextTokens(entry.comment);
+    }
+  }
+  return total;
+}
 
 @Observed
 export class CharacterListViewModel {
@@ -39,6 +76,8 @@ export class CharacterListViewModel {
   /** 导入预览 */
   showImportPreview: boolean = false;
   previewCard: ParsedCharacterCard | null = null;
+  /** 当前预览卡全部文本的估算 token(用于"超大卡"提示) */
+  previewCardInputTokens: number = 0;
   importJsonBuffer: string = '';
   importing: boolean = false;
   importError: string = '';
@@ -50,6 +89,10 @@ export class CharacterListViewModel {
   aiOptimizeError: string = '';
   /** AI 优化是否已成功完成(供 UI 显示"查看优化结果"入口) */
   aiOptimized: boolean = false;
+  /** AI 优化实时进度文本(阶段 + 已生成字数) */
+  aiOptimizeProgressText: string = '';
+  /** AI 优化模式:Preserve=仅整理结构, Rewrite=深度优化改写 */
+  optimizeMode: CharacterOptimizeMode = CharacterOptimizeMode.Preserve;
   /** 导出 */
   exporting: boolean = false;
   exportError: string = '';
@@ -232,6 +275,7 @@ export class CharacterListViewModel {
         return;
       }
       this.previewCard = result.card;
+      this.previewCardInputTokens = estimateParsedCardTokens(result.card);
       this.importJsonBuffer = jsonString;
       this.showImportPreview = true;
     } catch (e) {
@@ -299,6 +343,7 @@ export class CharacterListViewModel {
         creationDate: jsonResult.card.creationDate,
         modificationDate: jsonResult.card.modificationDate
       };
+      this.previewCardInputTokens = estimateParsedCardTokens(this.previewCard);
       this.previewPngUri = uri;
       this.isPngImport = true;
       this.showImportPreview = true;
@@ -312,7 +357,8 @@ export class CharacterListViewModel {
 
   /**
    * 使用 AI 优化预览中的角色卡内容(ARK-UI-LAYOUT-OPT-02)。
-   * 不改变角色设定,由 AI 根据内容重写为规范 V2 JSON 结构。
+   * - Preserve:不改变角色设定,由 AI 根据内容重写为规范 V2 JSON 结构。
+   * - Rewrite:在保持核心设定一致的前提下,深度优化改写角色定位、描述、性格、场景。
    * 成功后替换 previewCard,头像/世界书保持原样。
    */
   async optimizePreviewCard(): Promise<void> {
@@ -327,55 +373,65 @@ export class CharacterListViewModel {
     this.aiOptimizing = true;
     this.aiOptimizeError = '';
     this.aiOptimized = false;
+    this.aiOptimizeProgressText = '正在准备…';
     try {
       const card: ParsedCharacterCard = this.previewCard;
       this.optimizeHandle = this.generationService.optimizeCharacterCard(
         card,
+        this.optimizeMode,
         true,
         '',
         {
-          onDelta: (_content: string): void => {
-            // 优化过程不需要展示进度,静默
+          onStart: (): void => {
+            this.aiOptimizeProgressText = '正在请求模型…';
+          },
+          onDelta: (content: string): void => {
+            // 流式过程中实时更新已生成字数,让用户知道进行到哪里
+            this.aiOptimizeProgressText = '正在生成优化内容…（已生成 ' + content.length + ' 字）';
           },
           onComplete: (result: AiGenerationResult): void => {
             if (result.status === AiGenerationStatus.Success && result.card !== null) {
-              // 保留头像 URI 与来源格式
+              // 保留头像 URI 与来源格式;
+              // 为避免 AI 返回空字段导致原始内容丢失,文本/数组字段仅在优化结果非空时采用,空则回退到原卡(修复数据丢失)
               const optimized: ParsedCharacterCard = result.card;
               const merged: ParsedCharacterCard = {
                 name: optimized.name.length > 0 ? optimized.name : card.name,
-                description: optimized.description,
-                personality: optimized.personality,
-                scenario: optimized.scenario,
-                firstMessage: optimized.firstMessage,
-                systemPrompt: optimized.systemPrompt,
+                description: optimized.description.length > 0 ? optimized.description : card.description,
+                personality: optimized.personality.length > 0 ? optimized.personality : card.personality,
+                scenario: optimized.scenario.length > 0 ? optimized.scenario : card.scenario,
+                firstMessage: optimized.firstMessage.length > 0 ? optimized.firstMessage : card.firstMessage,
+                systemPrompt: optimized.systemPrompt.length > 0 ? optimized.systemPrompt : card.systemPrompt,
                 avatarUri: card.avatarUri,
                 sourceFormat: card.sourceFormat,
-                mesExample: optimized.mesExample,
-                creatorNotes: optimized.creatorNotes,
-                postHistoryInstructions: optimized.postHistoryInstructions,
-                alternateGreetings: optimized.alternateGreetings,
-                tags: optimized.tags,
-                creator: optimized.creator,
-                characterVersion: optimized.characterVersion,
+                mesExample: optimized.mesExample.length > 0 ? optimized.mesExample : card.mesExample,
+                creatorNotes: optimized.creatorNotes.length > 0 ? optimized.creatorNotes : card.creatorNotes,
+                postHistoryInstructions: optimized.postHistoryInstructions.length > 0 ? optimized.postHistoryInstructions : card.postHistoryInstructions,
+                alternateGreetings: optimized.alternateGreetings.length > 0 ? optimized.alternateGreetings : card.alternateGreetings,
+                tags: optimized.tags.length > 0 ? optimized.tags : card.tags,
+                creator: optimized.creator.length > 0 ? optimized.creator : card.creator,
+                characterVersion: optimized.characterVersion.length > 0 ? optimized.characterVersion : card.characterVersion,
                 extensions: optimized.extensions,
-                characterBook: optimized.characterBook,
-                userName: optimized.userName,
-                nickname: optimized.nickname,
-                groupOnlyGreetings: optimized.groupOnlyGreetings,
+                characterBook: optimized.characterBook !== null ? optimized.characterBook : card.characterBook,
+                userName: optimized.userName.length > 0 ? optimized.userName : card.userName,
+                nickname: optimized.nickname.length > 0 ? optimized.nickname : card.nickname,
+                groupOnlyGreetings: optimized.groupOnlyGreetings.length > 0 ? optimized.groupOnlyGreetings : card.groupOnlyGreetings,
                 creatorNotesMultilingual: optimized.creatorNotesMultilingual,
-                source: optimized.source,
-                assets: optimized.assets,
+                source: optimized.source.length > 0 ? optimized.source : card.source,
+                assets: optimized.assets.length > 0 ? optimized.assets : card.assets,
                 creationDate: optimized.creationDate,
                 modificationDate: optimized.modificationDate
               };
               this.previewCard = merged;
+              this.previewCardInputTokens = estimateParsedCardTokens(merged);
               this.aiOptimizing = false;
               this.aiOptimized = true;
+              this.aiOptimizeProgressText = '优化完成';
             } else {
               this.aiOptimizing = false;
               this.aiOptimizeError = result.errorMessage.length > 0
                 ? result.errorMessage
                 : 'AI 优化失败,请重试';
+              this.aiOptimizeProgressText = '';
             }
           }
         }
@@ -394,6 +450,7 @@ export class CharacterListViewModel {
     }
     this.optimizeHandle = null;
     this.aiOptimizing = false;
+    this.aiOptimizeProgressText = '';
   }
 
   /** 懒创建 AI 生成服务 */
@@ -452,6 +509,7 @@ export class CharacterListViewModel {
     this.aiOptimizing = false;
     this.aiOptimized = false;
     this.aiOptimizeError = '';
+    this.aiOptimizeProgressText = '';
     this.optimizeHandle = null;
   }
 
