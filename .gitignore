@@ -12,9 +12,10 @@
 /.appanalyzer
 .cache/
 .deveco/
-build_solo_*.log
+*.log
 screenshots/
 docs/AGENT/
 docs/*.md
+AGENT.md
 spec/
 tools/
