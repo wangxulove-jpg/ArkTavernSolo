@@ -61,6 +61,8 @@ const KEY_DRAFT_CONFIG_ID: string = 'ai_draft_config_id';
 export const PENDING_AI_CARD_KEY: string = 'pendingAiCard';
 /** AppStorage 中临时传递原始创意输入的键(给 Preview 页面用于重新生成) */
 export const PENDING_AI_INPUT_KEY: string = 'pendingAiInput';
+/** AppStorage 中临时传递角色卡图片来源(PNG 文件 URI)的键(改造流程用卡图当封面) */
+export const PENDING_AI_PNG_URI_KEY: string = 'pendingAiPngUri';
 
 /**
  * 生成状态。
@@ -243,6 +245,8 @@ export class AiCharacterMakerViewModel {
           // 持久化生成的卡片到 AppStorage(供 Preview 页面读取)
           AppStorage.setOrCreate<ParsedCharacterCard | null>(PENDING_AI_CARD_KEY, result.card);
           AppStorage.setOrCreate<AiCharacterInput | null>(PENDING_AI_INPUT_KEY, input);
+          // 从零生成无来源图,清空卡图槽位,避免残留
+          AppStorage.setOrCreate<string>(PENDING_AI_PNG_URI_KEY, '');
           if (this.onCompleteCallback !== null) {
             this.onCompleteCallback(result);
           }

@@ -60,6 +60,18 @@ export interface Character {
   readonly nickname: string;
   /** 角色默认 Persona ID(空=未锁定,Phase 2A 引入) */
   readonly defaultPersonaId: string;
+  /** V3: 群聊专用开场白 */
+  readonly groupOnlyGreetings: string[];
+  /** V3: 多语言创作者备注(ISO 639-1 key 映射到字符串) */
+  readonly creatorNotesMultilingual: Record<string, Object>;
+  /** V3: 来源 URL/ID 数组 */
+  readonly source: string[];
+  /** V3: 角色资产列表 */
+  readonly assets: CharacterAsset[];
+  /** V3: 创建日期(Unix 时间戳,秒) */
+  readonly creationDate: number;
+  /** V3: 修改日期(Unix 时间戳,秒) */
+  readonly modificationDate: number;
   /** 自定义排序权重(越小越靠前,v7 引入) */
   readonly sortOrder: number;
   /** 创建时间戳(毫秒) */
@@ -68,8 +80,30 @@ export interface Character {
   readonly updatedAt: number;
 }
 
+/** V3 角色资产条目 */
+export interface CharacterAsset {
+  /** 资产类型(icon/background/emotion/user_icon 等) */
+  readonly type: string;
+  /** 资产 URI */
+  readonly uri: string;
+  /** 资产名称 */
+  readonly name: string;
+  /** 文件扩展名(小写,不含点号) */
+  readonly ext: string;
+}
+
+/** V3 独有字段(作为 createCharacter 的可选补充,避免拉长既有位置参数) */
+export interface V3CharacterFields {
+  groupOnlyGreetings?: string[];
+  creatorNotesMultilingual?: Record<string, Object>;
+  source?: string[];
+  assets?: CharacterAsset[];
+  creationDate?: number;
+  modificationDate?: number;
+}
+
 const MAX_NAME_LENGTH: number = 100;
-const MAX_FIELD_LENGTH: number = 5000;
+const MAX_FIELD_LENGTH: number = 100000;
 const MAX_ALTERNATE_GREETINGS: number = 20;
 const MAX_TAGS: number = 30;
 
@@ -97,7 +131,8 @@ export function createCharacter(
   userName: string = '',
   nickname: string = '',
   defaultPersonaId: string = '',
-  sortOrder: number = 0
+  sortOrder: number = 0,
+  v3: V3CharacterFields = {}
 ): Character {
   const now: number = Date.now();
   return {
@@ -121,6 +156,12 @@ export function createCharacter(
     userName: userName.trim(),
     nickname: nickname.trim(),
     defaultPersonaId: defaultPersonaId.trim(),
+    groupOnlyGreetings: v3.groupOnlyGreetings !== undefined ? v3.groupOnlyGreetings : [],
+    creatorNotesMultilingual: v3.creatorNotesMultilingual !== undefined ? v3.creatorNotesMultilingual : {},
+    source: v3.source !== undefined ? v3.source : [],
+    assets: v3.assets !== undefined ? v3.assets : [],
+    creationDate: v3.creationDate !== undefined ? v3.creationDate : 0,
+    modificationDate: v3.modificationDate !== undefined ? v3.modificationDate : 0,
     sortOrder: sortOrder,
     createdAt: now,
     updatedAt: now
@@ -216,6 +257,12 @@ export interface CharacterUpdates {
   userName?: string;
   nickname?: string;
   defaultPersonaId?: string;
+  groupOnlyGreetings?: string[];
+  creatorNotesMultilingual?: Record<string, Object>;
+  source?: string[];
+  assets?: CharacterAsset[];
+  creationDate?: number;
+  modificationDate?: number;
   sortOrder?: number;
 }
 
@@ -252,6 +299,14 @@ export function updateCharacter(
     userName: updates.userName !== undefined ? updates.userName.trim() : character.userName,
     nickname: updates.nickname !== undefined ? updates.nickname.trim() : character.nickname,
     defaultPersonaId: updates.defaultPersonaId !== undefined ? updates.defaultPersonaId.trim() : character.defaultPersonaId,
+    groupOnlyGreetings: updates.groupOnlyGreetings !== undefined
+      ? updates.groupOnlyGreetings : character.groupOnlyGreetings,
+    creatorNotesMultilingual: updates.creatorNotesMultilingual !== undefined
+      ? updates.creatorNotesMultilingual : character.creatorNotesMultilingual,
+    source: updates.source !== undefined ? updates.source : character.source,
+    assets: updates.assets !== undefined ? updates.assets : character.assets,
+    creationDate: updates.creationDate !== undefined ? updates.creationDate : character.creationDate,
+    modificationDate: updates.modificationDate !== undefined ? updates.modificationDate : character.modificationDate,
     sortOrder: updates.sortOrder !== undefined ? updates.sortOrder : character.sortOrder,
     createdAt: character.createdAt,
     updatedAt: Date.now()

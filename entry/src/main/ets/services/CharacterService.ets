@@ -48,6 +48,36 @@ import { convertUriToPngBytes, isPngBytes } from '../utils/ImageConverter';
 
 const LOG_TAG: string = 'CharacterService';
 
+/** 单个 extensions 字段序列化长度上限(字节)。超过即视为无用大 blob,导入时丢弃。 */
+const EXTENSION_VALUE_SIZE_CAP: number = 200 * 1024;
+
+/**
+ * 清洗解析后角色卡的 extensions:
+ * 丢弃超大 blob(如 SillyTavern 的 regex_scripts 等本 App 不使用的脚本),
+ * 仅保留小字段与应用需要的元数据(如 market 的 arktavern 信息)。
+ * 避免超大角色卡的单行数据超过 RDB 共享块 2MB 上限,导致编辑/详情加载失败
+ * (表现为"角色不存在或已被删除")。
+ */
+function sanitizeExtensions(extensions: Record<string, Object>): Record<string, Object> {
+  if (extensions === null || extensions === undefined) {
+    return {};
+  }
+  const keys: string[] = Object.keys(extensions);
+  if (keys.length === 0) {
+    return {};
+  }
+  const result: Record<string, Object> = {};
+  for (let i = 0; i < keys.length; i++) {
+    const key: string = keys[i];
+    const value: Object = extensions[key];
+    const serialized: string = JSON.stringify(value);
+    if (serialized.length <= EXTENSION_VALUE_SIZE_CAP) {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
 /** PNG 导入解析结果 */
 export interface PngImportResult {
   result: PngParseResult;
@@ -91,6 +121,15 @@ export class CharacterService {
   async list(): Promise<Character[]> {
     this.requireInit();
     return await this.repository.list();
+  }
+
+  /**
+   * 轻量角色列表:仅含列表展示字段,规避超大角色卡导致的 RDB 2MB 共享块超限。
+   * 需要完整字段请用 getById。
+   */
+  async listSummaries(): Promise<Character[]> {
+    this.requireInit();
+    return await this.repository.listSummaries();
   }
 
   async getById(id: string): Promise<Character | null> {
@@ -228,20 +267,23 @@ export class CharacterService {
 
   async remove(id: string): Promise<void> {
     this.requireInit();
-    const existing: Character | null = await this.repository.getById(id);
-    if (existing === null) {
-      // 幂等:不存在视为已删除
-      return;
+    // 轻量读取角色专属世界书 ID(不读整行超大文本,规避 RDB 2MB 共享块超限,
+    // 超大角色卡也能正常删除);角色不存在时返回空串。
+    let bookId: string = '';
+    try {
+      bookId = await this.repository.getCharacterBookId(id);
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'remove: read character_book_id failed, skip book cleanup: ' + String(e));
     }
     // 1. 删除关联的角色专属世界书(如果存在)
-    if (existing.characterBookId.length > 0 && this.lorebookRepository !== null) {
+    if (bookId.length > 0 && this.lorebookRepository !== null) {
       try {
-        await this.lorebookRepository.remove(existing.characterBookId);
+        await this.lorebookRepository.remove(bookId);
       } catch (e) {
         Logger.warn(LOG_TAG, 'remove: character_book delete failed: ' + String(e));
       }
     }
-    // 2. 删除 RDB Character
+    // 2. 删除 RDB Character(按 id,幂等)
     await this.repository.remove(id);
     // 3. 若是当前角色,清空选择
     const currentId: string | null = await this.selectionStore.getCurrentCharacterId();
@@ -334,12 +376,20 @@ export class CharacterService {
       parsed.tags,
       parsed.creator,
       parsed.characterVersion,
-      parsed.extensions,
+      sanitizeExtensions(parsed.extensions),
       characterBookId,
       parsed.userName,
       parsed.nickname,
       '',
-      sortOrder
+      sortOrder,
+      {
+        groupOnlyGreetings: parsed.groupOnlyGreetings,
+        creatorNotesMultilingual: parsed.creatorNotesMultilingual,
+        source: parsed.source,
+        assets: parsed.assets,
+        creationDate: parsed.creationDate,
+        modificationDate: parsed.modificationDate
+      }
     );
     const error: string | null = validateCharacter(character);
     if (error !== null) {
@@ -701,12 +751,20 @@ export class CharacterService {
       parsed.tags,
       parsed.creator,
       parsed.characterVersion,
-      parsed.extensions,
+      sanitizeExtensions(parsed.extensions),
       characterBookId,
       parsed.userName,
       parsed.nickname,
       '',
-      sortOrder
+      sortOrder,
+      {
+        groupOnlyGreetings: parsed.groupOnlyGreetings,
+        creatorNotesMultilingual: parsed.creatorNotesMultilingual,
+        source: parsed.source,
+        assets: parsed.assets,
+        creationDate: parsed.creationDate,
+        modificationDate: parsed.modificationDate
+      }
     );
     const error: string | null = validateCharacter(character);
     if (error !== null) {
@@ -1022,6 +1080,12 @@ function cloneCharacterWithNewId(character: Character, newId: string): Character
     userName: character.userName,
     nickname: character.nickname,
     defaultPersonaId: character.defaultPersonaId,
+    groupOnlyGreetings: character.groupOnlyGreetings,
+    creatorNotesMultilingual: character.creatorNotesMultilingual,
+    source: character.source,
+    assets: character.assets,
+    creationDate: character.creationDate,
+    modificationDate: character.modificationDate,
     sortOrder: character.sortOrder,
     createdAt: character.createdAt,
     updatedAt: character.updatedAt

@@ -374,6 +374,161 @@ export class AiCharacterGenerationService {
   }
 
   /**
+   * 基于已有角色卡+用户修改建议重新生成一张新的完整 V3 角色卡。
+   *
+   * 语义:
+   * - 把原卡内容作为**背景信息**提供给模型
+   * - 只按用户给出的修改建议调整对应内容;未提及的字段保持原样
+   * - 输出一张新的完整 Tavern Card V3 JSON(与生成/优化路径同级别的校验+自动修复)
+   *
+   * @param card 原始角色卡(来自导入解析)
+   * @param suggestions 用户的自由修改建议
+   * @param useCurrentModel true=跟随当前 ProviderConfig;false=使用指定 configId
+   * @param configId 指定 ProviderConfig ID
+   * @param callbacks 流式回调
+   * @returns 生成句柄(用于取消)
+   */
+  reviseCharacterCard(
+    card: ParsedCharacterCard,
+    suggestions: string,
+    useCurrentModel: boolean,
+    configId: string,
+    callbacks: AiGenerationCallbacks
+  ): AiGenerationHandle {
+    const state: GenerationState = {
+      aborted: false,
+      done: false,
+      accumulated: '',
+      truncated: false,
+      meta: null,
+      autoFixAttempts: 0,
+      streamHandle: null,
+      abortChecker: null
+    };
+
+    this.executeRevise(card, suggestions, useCurrentModel, configId, state, callbacks).then(
+      (): void => { /* 正常完成 */ },
+      (err: Object): void => {
+        if (state.done) {
+          return;
+        }
+        state.done = true;
+        Logger.error(LOG_TAG, 'revise unexpected error: ' + String(err));
+        const result: AiGenerationResult = createFailed(
+          state.accumulated,
+          [],
+          state.autoFixAttempts,
+          false,
+          state.meta,
+          '重新生成失败: ' + String(err)
+        );
+        try {
+          callbacks.onComplete(result);
+        } catch (e) {
+          Logger.error(LOG_TAG, 'onComplete throw: ' + String(e));
+        }
+      }
+    );
+
+    const handle: AiGenerationHandle = new AiGenerationHandleImpl(
+      (): void => {
+        if (state.done) {
+          return;
+        }
+        state.aborted = true;
+      },
+      (): boolean => state.done
+    );
+    return handle;
+  }
+
+  /**
+   * 执行“基于原卡+修改建议重新生成”(内部实现)。
+   */
+  private async executeRevise(
+    card: ParsedCharacterCard,
+    suggestions: string,
+    useCurrentModel: boolean,
+    configId: string,
+    state: GenerationState,
+    callbacks: AiGenerationCallbacks
+  ): Promise<void> {
+    const config: ProviderConfig | null = useCurrentModel
+      ? await this.modelService.getCurrentConfig()
+      : await this.modelService.getConfig(configId);
+    if (config === null) {
+      state.done = true;
+      callbacks.onComplete(createFailed(
+        '', [], 0, false, null, '未找到可用的 Provider 配置,请先在模型设置中配置'
+      ));
+      return;
+    }
+    if (config.modelName.trim().length === 0) {
+      state.done = true;
+      callbacks.onComplete(createFailed(
+        '', [], 0, false, null, '当前 Provider 配置未指定模型名称'
+      ));
+      return;
+    }
+    const hasKey: boolean = await this.modelService.hasApiKey(config.id);
+    if (!hasKey) {
+      state.done = true;
+      callbacks.onComplete(createFailed(
+        '', [], 0, false, null, '当前 Provider 配置未设置 API Key'
+      ));
+      return;
+    }
+
+    const meta: AiGenerationMeta = {
+      providerId: config.id,
+      modelId: config.modelName,
+      generatedAt: Date.now(),
+      generationVersion: AI_GENERATION_VERSION
+    };
+    state.meta = meta;
+
+    const messages: ChatMessage[] = buildReviseMessages(card, suggestions);
+    const options: ChatRequestOptions = {
+      temperature: GENERATION_TEMPERATURE,
+      topP: GENERATION_TOP_P,
+      maxTokens: this.computeOutputMaxTokens(config, messages),
+      stream: true
+    };
+
+    const rawResponse: string = await this.streamMessages(
+      messages, options, state, callbacks, '重新生成失败'
+    );
+    if (state.aborted) {
+      state.done = true;
+      callbacks.onComplete(createCancelledResult(rawResponse));
+      return;
+    }
+    if (rawResponse.length === 0) {
+      state.done = true;
+      callbacks.onComplete(createFailed(
+        '', [], 0, false, meta, '重新生成失败:模型返回空响应'
+      ));
+      return;
+    }
+    if (state.truncated) {
+      state.done = true;
+      callbacks.onComplete(createFailed(
+        '', [], 0, false, meta,
+        '重新生成失败:角色卡内容过大,超出模型单次输出上限,建议精简内容或分段生成'
+      ));
+      return;
+    }
+
+    const finalResult: AiGenerationResult = await this.validateAndAutoFix(
+      rawResponse, meta, state, callbacks, messages, options,
+      buildReviseSystemPrompt(),
+      JSON.stringify(buildOptimizeCardContent(card), null, 2)
+    );
+    state.done = true;
+    callbacks.onComplete(finalResult);
+  }
+
+  /**
    * 执行角色卡优化(内部实现)。
    */
   private async executeOptimize(
@@ -990,6 +1145,55 @@ function buildFieldRegenMessages(
     createChatMessage('ai-field-sys-' + generateUuid(), ChatRole.System, systemPrompt, Date.now()),
     createChatMessage('ai-field-usr-' + generateUuid(), ChatRole.User, userPrompt, Date.now())
   ];
+}
+
+/**
+ * 构造“基于原卡+修改建议重新生成”的请求消息。
+ *
+ * 语义:原卡内容作为背景信息;只按用户建议修改对应内容,未提及字段保持原样;
+ * 输出一张新的完整 Tavern Card V3 JSON。
+ */
+function buildReviseMessages(card: ParsedCharacterCard, suggestions: string): ChatMessage[] {
+  const systemPrompt: string = buildReviseSystemPrompt();
+  const cardContent: Record<string, Object> = buildOptimizeCardContent(card);
+  const serializedContent: string = JSON.stringify(cardContent, null, 2);
+  const trimmedSuggestions: string = suggestions.trim();
+
+  const userPrompt: string = '以下是原始角色卡内容(作为背景信息):\n\n'
+    + serializedContent
+    + '\n\n【用户的修改建议】:\n'
+    + (trimmedSuggestions.length > 0 ? trimmedSuggestions : '(无)')
+    + '\n\n请以原卡为蓝本,依据以上修改建议重新生成一张新的完整 Tavern Card V3 角色卡。要求:'
+    + '\n- 以修改建议为准进行调整;建议要求补全/丰富/替换时,可充实空缺或薄弱的字段、替换不合适或占位性的开场白'
+    + '\n- 未提及的合理内容尽量保留,不做与建议无关的多余删改'
+    + '\n- 不得改名/换角(除非建议明确要求改角色名)'
+    + '\n- 保持角色核心身份与世界观基调一致,不引入与建议无关的冲突设定'
+    + '\n- 只输出完整 JSON,不要输出任何其他文字或 Markdown 代码块。';
+
+  return [
+    createChatMessage('ai-rev-sys-' + generateUuid(), ChatRole.System, systemPrompt, Date.now()),
+    createChatMessage('ai-rev-usr-' + generateUuid(), ChatRole.User, userPrompt, Date.now())
+  ];
+}
+
+/**
+ * “基于原卡+修改建议重新生成”的 system prompt(供首次请求与自动修复复用)。
+ */
+function buildReviseSystemPrompt(): string {
+  return '你是 Tavern Card V3 角色卡修改助手。'
+    + '用户会给你一张已有的角色卡作为背景信息,并提出修改建议。'
+    + '你需要以原卡为蓝本,依据修改建议调整对应内容;'
+    + '建议要求补全缺失字段、生成合适开场白或清理脚本类文本时,可相应充实或调整,'
+    + '未提及的合理内容尽量保留,然后输出一张新的完整 Tavern Card V3 角色卡。'
+    + '\n\n最高优先级(必须遵守):'
+    + '\n- 以修改建议为准,不擅自做与建议无关的多余改动'
+    + '\n- 除非建议明确要求改名,否则 name / nickname 保持原值'
+    + '\n- 保持角色核心身份与世界观基调一致,不得更换角色身份或引入与建议无关的冲突设定'
+    + '\n\n输出要求:'
+    + '\n- **只输出**标准 Tavern Card V3 JSON,不要输出 Markdown 代码块标记、解释、标题或其他任何文字'
+    + '\n- JSON 必须可被 JSON.parse 直接解析'
+    + '\n- 必须包含 spec="chara_card_v3"、spec_version="3.0" 和 data 对象'
+    + buildOptimizeJsonStructure();
 }
 
 /**

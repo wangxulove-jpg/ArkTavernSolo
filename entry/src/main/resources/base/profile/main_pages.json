@@ -18,6 +18,7 @@
     "pages/MarketDetailPage",
     "pages/AiCharacterMakerPage",
     "pages/AiCharacterPreviewPage",
+    "pages/AiCardRevisePage",
     "pages/PersonaListPage",
     "pages/PersonaEditPage",
     "pages/SyncSettingsPage",

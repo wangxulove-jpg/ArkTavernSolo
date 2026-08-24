@@ -1259,3 +1259,64 @@ class V37ToV38Migration implements DatabaseMigration {
     }
   }
 }
+
+/**
+ * extensions_json 单个字段加密上限(字节)。
+ * 超过即视为无用大 blob(如 SillyTavern regex_scripts),此类单字段会让 RDB 单行
+ * 超过共享块 2MB 上限,导致角色列表/编辑等全字段读取失败。清洗时直接置空。
+ */
+const EXTENSIONS_JSON_SIZE_CAP: number = 1024 * 1024;
+
+/**
+ * 创建 v38→v39 数据迁移(清洗存量超大 extensions_json)。
+ *
+ * 将 extensions_json 超过 EXTENSIONS_JSON_SIZE_CAP(1MB)的角色行中该列重置为 '{}',
+ * 移除无用大 blob,使超大角色卡(如《凡人修仙传》含 2.9MB regex_scripts)回到 2MB
+ * 共享块限制以内,修复"编辑/详情显示角色不存在或已被删除"。
+ * 正常角色的 extensions_json 均远小于 1MB,不受影响。
+ */
+export function createV38ToV39Migration(): DatabaseMigration {
+  return new V38ToV39Migration();
+}
+
+class V38ToV39Migration implements DatabaseMigration {
+  readonly fromVersion: number = 38;
+  readonly toVersion: number = 39;
+
+  async migrate(store: relationalStore.RdbStore): Promise<void> {
+    const sql: string =
+      `UPDATE characters SET extensions_json = '{}' ` +
+      `WHERE length(extensions_json) > ${EXTENSIONS_JSON_SIZE_CAP}`;
+    await store.executeSql(sql);
+  }
+}
+
+/** V40: 为 characters 追加 V3 独有字段列(ALTER TABLE) */
+const V39_TO_V40_DDL_STATEMENTS: string[] = [
+  `ALTER TABLE characters ADD COLUMN group_only_greetings_json TEXT NOT NULL DEFAULT '[]'`,
+  `ALTER TABLE characters ADD COLUMN creator_notes_multilingual_json TEXT NOT NULL DEFAULT '{}'`,
+  `ALTER TABLE characters ADD COLUMN source_json TEXT NOT NULL DEFAULT '[]'`,
+  `ALTER TABLE characters ADD COLUMN assets_json TEXT NOT NULL DEFAULT '[]'`,
+  `ALTER TABLE characters ADD COLUMN creation_date INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE characters ADD COLUMN modification_date INTEGER NOT NULL DEFAULT 0`
+];
+
+/**
+ * 创建 v39→v40 schema 迁移(补 V3 独有字段列)。
+ * 加大型角色卡在导入/编辑/导出时不丢失 group_only_greetings / creator_notes_multilingual /
+ * source / assets / creation_date / modification_date。
+ */
+export function createV39ToV40Migration(): DatabaseMigration {
+  return new V39ToV40Migration();
+}
+
+class V39ToV40Migration implements DatabaseMigration {
+  readonly fromVersion: number = 39;
+  readonly toVersion: number = 40;
+
+  async migrate(store: relationalStore.RdbStore): Promise<void> {
+    for (let i = 0; i < V39_TO_V40_DDL_STATEMENTS.length; i++) {
+      await store.executeSql(V39_TO_V40_DDL_STATEMENTS[i]);
+    }
+  }
+}

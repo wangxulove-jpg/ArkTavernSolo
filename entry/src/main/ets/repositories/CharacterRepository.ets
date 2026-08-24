@@ -23,7 +23,7 @@
 
 import { relationalStore } from '@kit.ArkData';
 import { DbHelper } from '../database/DbHelper';
-import { Character } from '../models/Character';
+import { Character, CharacterAsset } from '../models/Character';
 import { DatabaseError } from '../models/DatabaseError';
 import {
   TABLE_CHARACTERS,
@@ -49,7 +49,13 @@ import {
   COLUMN_SORT_ORDER,
   COLUMN_USER_NAME,
   COLUMN_CHARACTER_DEFAULT_PERSONA_ID,
-  COLUMN_NICKNAME
+  COLUMN_NICKNAME,
+  COLUMN_GROUP_ONLY_GREETINGS_JSON,
+  COLUMN_CREATOR_NOTES_MULTILINGUAL_JSON,
+  COLUMN_SOURCE_JSON,
+  COLUMN_ASSETS_JSON,
+  COLUMN_CREATION_DATE,
+  COLUMN_MODIFICATION_DATE
 } from '../database/DatabaseConstants';
 import {
   isValidTimestamp,
@@ -99,7 +105,76 @@ function characterToBucket(character: Character): relationalStore.ValuesBucket {
   bucket[COLUMN_USER_NAME] = character.userName;
   bucket[COLUMN_NICKNAME] = character.nickname;
   bucket[COLUMN_CHARACTER_DEFAULT_PERSONA_ID] = character.defaultPersonaId;
+  bucket[COLUMN_GROUP_ONLY_GREETINGS_JSON] = JSON.stringify(character.groupOnlyGreetings);
+  bucket[COLUMN_CREATOR_NOTES_MULTILINGUAL_JSON] = JSON.stringify(character.creatorNotesMultilingual);
+  bucket[COLUMN_SOURCE_JSON] = JSON.stringify(character.source);
+  bucket[COLUMN_ASSETS_JSON] = JSON.stringify(character.assets);
+  bucket[COLUMN_CREATION_DATE] = character.creationDate;
+  bucket[COLUMN_MODIFICATION_DATE] = character.modificationDate;
   return bucket;
+}
+
+/**
+ * 列表展示所需的轻量列投影。
+ * 排除超大文本列(first_message / system_prompt / mes_example / creator_notes /
+ * post_history_instructions / alternate_greetings / extensions / character_book 等),
+ * 避免单行(或多行累计)大于 RDB 共享块 2MB 上限导致整张列表查询失败
+ * (导入超大角色卡后首页角色列表为空)。需要完整字段请用 getById。
+ */
+const CHARACTER_SUMMARY_COLUMNS: string = [
+  COLUMN_ID,
+  COLUMN_NAME,
+  COLUMN_DESCRIPTION,
+  COLUMN_PERSONALITY,
+  COLUMN_SCENARIO,
+  COLUMN_AVATAR_URI,
+  COLUMN_CREATED_AT,
+  COLUMN_UPDATED_AT,
+  COLUMN_TAGS_JSON,
+  COLUMN_CREATOR,
+  COLUMN_SORT_ORDER
+].join(', ');
+
+/**
+ * 从列表 ResultSet 当前行读取 Character 摘要。
+ * 仅读取轻量列,重字段一律置为默认值/空;id/name/created_at/updated_at 必选。
+ */
+function characterSummaryFromRow(rs: relationalStore.ResultSet): Character {
+  const id: string = rs.getString(rs.getColumnIndex(COLUMN_ID));
+  const name: string = rs.getString(rs.getColumnIndex(COLUMN_NAME));
+  const createdAt: number = rs.getLong(rs.getColumnIndex(COLUMN_CREATED_AT));
+  const updatedAt: number = rs.getLong(rs.getColumnIndex(COLUMN_UPDATED_AT));
+  return {
+    id: id,
+    name: name,
+    description: readStringColumnSafe(rs, COLUMN_DESCRIPTION, ''),
+    personality: readStringColumnSafe(rs, COLUMN_PERSONALITY, ''),
+    scenario: readStringColumnSafe(rs, COLUMN_SCENARIO, ''),
+    firstMessage: '',
+    systemPrompt: '',
+    avatarUri: readStringColumnSafe(rs, COLUMN_AVATAR_URI, ''),
+    mesExample: '',
+    creatorNotes: '',
+    postHistoryInstructions: '',
+    alternateGreetings: [],
+    tags: readStringArrayColumnSafe(rs, COLUMN_TAGS_JSON),
+    creator: readStringColumnSafe(rs, COLUMN_CREATOR, ''),
+    characterVersion: '',
+    extensions: {},
+    characterBookId: '',
+    userName: '',
+    nickname: '',
+    defaultPersonaId: '',
+    groupOnlyGreetings: [],
+    creatorNotesMultilingual: {},
+    source: [],
+    assets: [],
+    creationDate: 0,
+    modificationDate: 0,
+    sortOrder: readLongColumnSafe(rs, COLUMN_SORT_ORDER, 0),
+    createdAt: createdAt,
+    updatedAt: updatedAt
+  };
 }
 
 /**
@@ -145,6 +220,14 @@ function characterFromRow(rs: relationalStore.ResultSet): Character {
   const userName: string = readStringColumnSafe(rs, COLUMN_USER_NAME, '');
   const nickname: string = readStringColumnSafe(rs, COLUMN_NICKNAME, '');
   const defaultPersonaId: string = readStringColumnSafe(rs, COLUMN_CHARACTER_DEFAULT_PERSONA_ID, '');
+  // ===== V3 扩展字段(v40 引入,向后兼容) =====
+  const groupOnlyGreetings: string[] = readStringArrayColumnSafe(rs, COLUMN_GROUP_ONLY_GREETINGS_JSON);
+  const creatorNotesMultilingual: Record<string, Object> =
+    readObjectColumnSafe(rs, COLUMN_CREATOR_NOTES_MULTILINGUAL_JSON);
+  const source: string[] = readStringArrayColumnSafe(rs, COLUMN_SOURCE_JSON);
+  const assets: CharacterAsset[] = readCharacterAssetsColumnSafe(rs, COLUMN_ASSETS_JSON);
+  const creationDate: number = readLongColumnSafe(rs, COLUMN_CREATION_DATE, 0);
+  const modificationDate: number = readLongColumnSafe(rs, COLUMN_MODIFICATION_DATE, 0);
 
   return {
     id: id,
@@ -167,6 +250,12 @@ function characterFromRow(rs: relationalStore.ResultSet): Character {
     userName: userName,
     nickname: nickname,
     defaultPersonaId: defaultPersonaId,
+    groupOnlyGreetings: groupOnlyGreetings,
+    creatorNotesMultilingual: creatorNotesMultilingual,
+    source: source,
+    assets: assets,
+    creationDate: creationDate,
+    modificationDate: modificationDate,
     sortOrder: sortOrder,
     createdAt: createdAt,
     updatedAt: updatedAt
@@ -258,6 +347,50 @@ function readObjectColumnSafe(rs: relationalStore.ResultSet, columnName: string)
     return parsed as Record<string, Object>;
   } catch (e) {
     return {};
+  }
+}
+
+/**
+ * 安全读取角色资产数组列(JSON 字符串数组)。
+ * 列不存在、解析失败或元素非法时跳过非法项。
+ */
+function readCharacterAssetsColumnSafe(rs: relationalStore.ResultSet, columnName: string): CharacterAsset[] {
+  const col: number = rs.getColumnIndex(columnName);
+  if (col < 0) {
+    return [];
+  }
+  try {
+    const raw: string = rs.getString(col);
+    if (raw === null || raw === undefined || raw.length === 0) {
+      return [];
+    }
+    const parsed: Object = JSON.parse(raw) as Object;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    const arr: Object[] = parsed as Object[];
+    const result: CharacterAsset[] = [];
+    for (let i = 0; i < arr.length; i++) {
+      const item: Object = arr[i];
+      if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+        continue;
+      }
+      const obj: Record<string, Object> = item as Record<string, Object>;
+      const type: Object | undefined = obj['type'];
+      const uri: Object | undefined = obj['uri'];
+      if (typeof type !== 'string' && typeof uri !== 'string') {
+        continue;
+      }
+      result.push({
+        type: typeof type === 'string' ? type : '',
+        uri: typeof uri === 'string' ? uri : '',
+        name: typeof obj['name'] === 'string' ? obj['name'] as string : '',
+        ext: typeof obj['ext'] === 'string' ? obj['ext'] as string : ''
+      });
+    }
+    return result;
+  } catch (e) {
+    return [];
   }
 }
 
@@ -373,6 +506,31 @@ export class CharacterRepository {
     }
   }
 
+  /**
+   * 轻量列表查询:仅查询列表展示所需的列,不读取超大文本字段。
+   * 与 list() 排序一致(sort_order → created_at → updated_at → id)。
+   * 规避 RDB 共享块 2MB 上限:导入超大角色卡后仍能正常展示角色列表。
+   * 返回的 Character 中 firstMessage / systemPrompt / mesExample 等字段为空,
+   * 需要完整字段请使用 getById。
+   */
+  async listSummaries(): Promise<Character[]> {
+    const store: relationalStore.RdbStore = this.dbHelper.getStore();
+    const sql: string =
+      `SELECT ${CHARACTER_SUMMARY_COLUMNS} FROM ${TABLE_CHARACTERS} ` +
+      `ORDER BY ${COLUMN_SORT_ORDER} ASC, ${COLUMN_CREATED_AT} ASC, ` +
+      `${COLUMN_UPDATED_AT} ASC, ${COLUMN_ID} ASC`;
+    const rs: relationalStore.ResultSet = await store.querySql(sql);
+    try {
+      const characters: Character[] = [];
+      while (rs.goToNextRow()) {
+        characters.push(characterSummaryFromRow(rs));
+      }
+      return characters;
+    } finally {
+      rs.close();
+    }
+  }
+
   async update(character: Character): Promise<void> {
     this.validateCharacter(character);
     const store: relationalStore.RdbStore = this.dbHelper.getStore();
@@ -398,6 +556,12 @@ export class CharacterRepository {
     bucket[COLUMN_USER_NAME] = character.userName;
     bucket[COLUMN_NICKNAME] = character.nickname;
     bucket[COLUMN_CHARACTER_DEFAULT_PERSONA_ID] = character.defaultPersonaId;
+    bucket[COLUMN_GROUP_ONLY_GREETINGS_JSON] = JSON.stringify(character.groupOnlyGreetings);
+    bucket[COLUMN_CREATOR_NOTES_MULTILINGUAL_JSON] = JSON.stringify(character.creatorNotesMultilingual);
+    bucket[COLUMN_SOURCE_JSON] = JSON.stringify(character.source);
+    bucket[COLUMN_ASSETS_JSON] = JSON.stringify(character.assets);
+    bucket[COLUMN_CREATION_DATE] = character.creationDate;
+    bucket[COLUMN_MODIFICATION_DATE] = character.modificationDate;
 
     const predicates: relationalStore.RdbPredicates =
       new relationalStore.RdbPredicates(TABLE_CHARACTERS);
@@ -426,6 +590,29 @@ export class CharacterRepository {
       await store.delete(predicates);
     } catch (err) {
       throw DatabaseError.queryFailed(`character.remove: ${extractCauseMessage(err)}`);
+    }
+  }
+
+  /**
+   * 轻量读取角色的 character_book_id(用于删除角色时级联删除其专属世界书)。
+   * 只查询单个小字段,不读取整行超大文本,超大角色卡也能正常删除。
+   * 角色不存在时返回空字符串。
+   */
+  async getCharacterBookId(id: string): Promise<string> {
+    if (id.length === 0) {
+      return '';
+    }
+    const store: relationalStore.RdbStore = this.dbHelper.getStore();
+    const sql: string =
+      `SELECT ${COLUMN_CHARACTER_BOOK_ID} FROM ${TABLE_CHARACTERS} WHERE ${COLUMN_ID} = ?`;
+    const rs: relationalStore.ResultSet = await store.querySql(sql, [id]);
+    try {
+      if (!rs.goToNextRow()) {
+        return '';
+      }
+      return readStringColumnSafe(rs, COLUMN_CHARACTER_BOOK_ID, '');
+    } finally {
+      rs.close();
     }
   }
 

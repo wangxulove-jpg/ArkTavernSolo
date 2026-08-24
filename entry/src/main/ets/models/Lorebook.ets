@@ -7,7 +7,7 @@
  * 约束:
  * - name 必填,最长 100 字符
  * - entry name 必填,最长 100 字符
- * - entry content 必填,最长 5000 字符
+ * - entry content 必填,最长 100000 字符
  * - keys 至少一个有效关键词,constant 条目除外
  * - 不加入向量匹配、正则表达式、递归扫描、概率触发
  */
@@ -55,8 +55,8 @@ export interface Lorebook {
 }
 
 const MAX_NAME_LENGTH: number = 100;
-const MAX_ENTRY_CONTENT_LENGTH: number = 5000;
-const MAX_DESCRIPTION_LENGTH: number = 500;
+const MAX_ENTRY_CONTENT_LENGTH: number = 100000;
+const MAX_DESCRIPTION_LENGTH: number = 100000;
 
 /**
  * 创建世界书条目。

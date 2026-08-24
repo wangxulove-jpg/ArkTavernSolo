@@ -109,7 +109,7 @@ export class CharacterListViewModel {
     this.loading = true;
     this.errorMessage = '';
     try {
-      this.characters = await this.service.list();
+      this.characters = await this.service.listSummaries();
       this.currentCharacterId = await this.service.getCurrentCharacterId();
     } catch (e) {
       this.errorMessage = '加载角色列表失败';

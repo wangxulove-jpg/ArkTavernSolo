@@ -225,9 +225,14 @@ export function writeCharacterToV3Json(character: Character): string {
     creator: character.creator,
     character_version: character.characterVersion,
     extensions: buildExportExtensions(character),
-    group_only_greetings: [],
-    creation_date: Math.floor(character.createdAt / 1000),
-    modification_date: Math.floor(character.updatedAt / 1000)
+    group_only_greetings: character.groupOnlyGreetings,
+    creator_notes_multilingual: character.creatorNotesMultilingual,
+    source: character.source,
+    assets: character.assets,
+    creation_date: character.creationDate > 0
+      ? character.creationDate : Math.floor(character.createdAt / 1000),
+    modification_date: character.modificationDate > 0
+      ? character.modificationDate : Math.floor(character.updatedAt / 1000)
   };
   if (character.nickname.trim().length > 0) {
     data.nickname = character.nickname;

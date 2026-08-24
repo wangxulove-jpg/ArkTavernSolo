@@ -94,6 +94,11 @@ struct AddCharacterPage {
     router.pushUrl({ url: 'pages/AiCharacterMakerPage' });
   }
 
+  /** 跳转到“导入已有卡·AI 改造”页面 */
+  private startCardRevise(): void {
+    router.pushUrl({ url: 'pages/AiCardRevisePage' });
+  }
+
   /** 打开系统文件选择器(PNG / JSON) */
   private async openImportPicker(): Promise<void> {
     if (this.viewModel === null) {
@@ -423,6 +428,19 @@ struct AddCharacterPage {
         .margin({ top: 32 })
         .onClick(() => {
           this.startAiMaker();
+        })
+
+      Button('导入已有卡 · AI 改造')
+        .fontSize($r('app.float.app_font_body'))
+        .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+        .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+        .border({ width: 1, color: ThemePalette.accentColor(this.effectiveTheme) })
+        .borderRadius($r('app.float.app_radius_md'))
+        .height(48)
+        .width('80%')
+        .margin({ top: 12 })
+        .onClick(() => {
+          this.startCardRevise();
         })
     }
     .width('100%')

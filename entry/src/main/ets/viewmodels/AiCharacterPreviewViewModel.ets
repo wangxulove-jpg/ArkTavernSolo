@@ -36,7 +36,7 @@ import {
   ParsedCharacterBookEntry
 } from '../parser/CharacterCardJsonParser';
 import { AiCharacterInput } from '../models/AiCharacterInput';
-import { PENDING_AI_CARD_KEY, PENDING_AI_INPUT_KEY } from './AiCharacterMakerViewModel';
+import { PENDING_AI_CARD_KEY, PENDING_AI_INPUT_KEY, PENDING_AI_PNG_URI_KEY } from './AiCharacterMakerViewModel';
 
 const LOG_TAG: string = 'AiCharPreviewVM';
 
@@ -102,6 +102,8 @@ export class AiCharacterPreviewViewModel {
   fieldRegenError: string = '';
   /** 已保存的角色 ID(保存成功后设置,用于后续导出) */
   savedCharacterId: string = '';
+  /** 角色卡图片来源(PNG 文件 URI,非空时保存会把该图作为封面) */
+  pngSourceUri: string = '';
   /** 原始响应文本(供"查看原始响应") */
   rawResponse: string = '';
   /** 原始创意输入(供"重新生成整张卡"回退使用) */
@@ -139,6 +141,9 @@ export class AiCharacterPreviewViewModel {
     const inputValue: AiCharacterInput | null | undefined =
       AppStorage.get<AiCharacterInput | null>(PENDING_AI_INPUT_KEY);
     const input: AiCharacterInput | null = inputValue === undefined ? null : inputValue;
+    const pngUriValue: string | null | undefined =
+      AppStorage.get<string | null>(PENDING_AI_PNG_URI_KEY);
+    this.pngSourceUri = pngUriValue === undefined || pngUriValue === null ? '' : pngUriValue;
 
     if (card === null) {
       this.errorMessage = '未找到待预览的角色卡';
@@ -240,7 +245,10 @@ export class AiCharacterPreviewViewModel {
     try {
       // 从可编辑字段重建 ParsedCharacterCard
       const cardToSave: ParsedCharacterCard = this.buildCardFromForm();
-      const saved: Character = await this.characterService.importFromParsed(cardToSave);
+      // 有来源 PNG 图时,复用 confirmPngImport:以该卡图作为封面 + 保存角色
+      const saved: Character = this.pngSourceUri.length > 0
+        ? await this.characterService.confirmPngImport(cardToSave, this.pngSourceUri)
+        : await this.characterService.importFromParsed(cardToSave);
       this.savedCharacterId = saved.id;
 
       // 通知角色列表刷新
@@ -250,6 +258,7 @@ export class AiCharacterPreviewViewModel {
       // 清理 AppStorage 中的临时传递槽位
       AppStorage.setOrCreate<ParsedCharacterCard | null>(PENDING_AI_CARD_KEY, null);
       AppStorage.setOrCreate<AiCharacterInput | null>(PENDING_AI_INPUT_KEY, null);
+      AppStorage.setOrCreate<string>(PENDING_AI_PNG_URI_KEY, '');
 
       this.isSaving = false;
       return true;

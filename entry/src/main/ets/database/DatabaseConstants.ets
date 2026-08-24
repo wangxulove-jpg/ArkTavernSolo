@@ -6,7 +6,7 @@
  */
 
 export const DATABASE_NAME: string = 'arktavern_solo.db';
-export const DATABASE_VERSION: number = 38;
+export const DATABASE_VERSION: number = 40;
 
 export const TABLE_CHARACTERS: string = 'characters';
 export const TABLE_CHATS: string = 'chats';
@@ -46,6 +46,18 @@ export const COLUMN_USER_NAME: string = 'user_name';
 export const COLUMN_CHAT_USER_NAME_OVERRIDE: string = 'user_name_override';
 /** 角色状态配置 JSON(v34 引入,存 ChatStatusState 序列化字符串) */
 export const COLUMN_CHAT_STATUS_CONFIG_JSON: string = 'status_config_json';
+/** V3 群聊开场白 JSON(v40 引入) */
+export const COLUMN_GROUP_ONLY_GREETINGS_JSON: string = 'group_only_greetings_json';
+/** V3 多语言创作者备注 JSON(v40 引入) */
+export const COLUMN_CREATOR_NOTES_MULTILINGUAL_JSON: string = 'creator_notes_multilingual_json';
+/** V3 来源 URL/ID 数组 JSON(v40 引入) */
+export const COLUMN_SOURCE_JSON: string = 'source_json';
+/** V3 角色资产 JSON(v40 引入) */
+export const COLUMN_ASSETS_JSON: string = 'assets_json';
+/** V3 创建日期(Unix 秒,v40 引入) */
+export const COLUMN_CREATION_DATE: string = 'creation_date';
+/** V3 修改日期(Unix 秒,v40 引入) */
+export const COLUMN_MODIFICATION_DATE: string = 'modification_date';
 
 export const COLUMN_CHARACTER_ID: string = 'character_id';
 export const COLUMN_TITLE: string = 'title';
