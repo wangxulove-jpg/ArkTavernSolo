@@ -15,3 +15,6 @@
 build_solo_*.log
 screenshots/
 docs/AGENT/
+docs/*.md
+spec/
+tools/
