@@ -10,3 +10,8 @@
 /.clang-tidy
 **/.test
 /.appanalyzer
+.cache/
+.deveco/
+build_solo_*.log
+screenshots/
+docs/AGENT/
