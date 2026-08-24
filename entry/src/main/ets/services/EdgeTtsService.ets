@@ -40,6 +40,7 @@ export class EdgeTtsService {
   private requestId: string = '';
   private onSpeakCompleteCallback: (() => void) | null = null;
   private onSpeakStartCallback: (() => void) | null = null;
+  private onSpeakErrorCallback: ((msg: string) => void) | null = null;
   private synthesisComplete: boolean = false;
   private availableVoices: EdgeVoiceInfo[] = [];
   private voicesLoaded: boolean = false;
@@ -222,7 +223,7 @@ export class EdgeTtsService {
       '&ConnectionId=' + connectionId;
   }
 
-  async speak(text: string, onComplete?: () => void, onStart?: () => void): Promise<void> {
+  async speak(text: string, onComplete?: () => void, onStart?: () => void, onError?: (msg: string) => void): Promise<void> {
     if (this._readMode === TtsReadMode.Off) {
       return;
     }
@@ -236,6 +237,7 @@ export class EdgeTtsService {
 
     this.onSpeakCompleteCallback = onComplete ?? null;
     this.onSpeakStartCallback = onStart ?? null;
+    this.onSpeakErrorCallback = onError ?? null;
     this.audioChunks = [];
     this.synthesisComplete = false;
     this.requestId = this.generateRequestId();
@@ -253,7 +255,7 @@ export class EdgeTtsService {
         this.onWsMessage(value);
       });
       this.ws.on('close', (_err: BusinessError, _value: webSocket.CloseResult) => {
-        this.onWsClose();
+        this.onWsClose(_value);
       });
       this.ws.on('error', (err: BusinessError) => {
         // A code of 200 means the server answered the WebSocket upgrade with a
@@ -267,6 +269,11 @@ export class EdgeTtsService {
             'Check that the request carries a correct Origin + muid Cookie and NO Sec-WebSocket-Protocol.');
         } else if (err.code === 403) {
           Logger.error(LOG_TAG, 'Handshake got HTTP 403: Sec-MS-GEC was rejected. Check device clock (must be within 5 min of server) and the GEC algorithm.');
+        }
+        if (this.onSpeakErrorCallback !== null && err.code !== 200 && err.code !== 403) {
+          this.onSpeakErrorCallback!('连接失败，请检查网络后重试（' + String(err.code) + '）');
+        } else if (this.onSpeakErrorCallback !== null) {
+          this.onSpeakErrorCallback!('Edge TTS 连接被拒绝（' + String(err.code) + '）');
         }
         this._isSpeaking = false;
         if (this.onSpeakCompleteCallback !== null) {
@@ -306,6 +313,9 @@ export class EdgeTtsService {
       await this.ws.connect(wssUrl, connectOptions);
     } catch (e) {
       Logger.error(LOG_TAG, 'speak connect failed: ' + (e instanceof Error ? e.message : String(e)));
+      if (this.onSpeakErrorCallback !== null) {
+        this.onSpeakErrorCallback!('Edge 连接失败：' + (e instanceof Error ? e.message : String(e)));
+      }
       this._isSpeaking = false;
       if (this.onSpeakCompleteCallback !== null) {
         this.onSpeakCompleteCallback!();
@@ -378,7 +388,15 @@ export class EdgeTtsService {
     this.playAudioChunks();
   }
 
-  private onWsClose(): void {
+  private onWsClose(value: webSocket.CloseResult | null): void {
+    // A non-normal close code (e.g. 1007 Unsupported voice) means the server
+    // rejected the voice — surface it instead of silently completing with no
+    // audio.
+    const code: number = value !== null ? value.code : 1000;
+    const reason: string = value !== null ? (value.reason || '') : '';
+    if (code !== 1000 && reason.length > 0) {
+      this.handleSpeakError(code, reason);
+    }
     Logger.info(LOG_TAG, 'WebSocket closed');
     this.ws = null;
     if (!this.synthesisComplete && this._isSpeaking) {
@@ -386,6 +404,17 @@ export class EdgeTtsService {
       if (this.onSpeakCompleteCallback !== null) {
         this.onSpeakCompleteCallback!();
       }
+    }
+  }
+
+  private handleSpeakError(code: number, reason: string): void {
+    Logger.error(LOG_TAG, 'TTS error: code=' + String(code) + ' reason=' + reason);
+    if (this.onSpeakErrorCallback !== null) {
+      let msg: string = reason;
+      if (reason.includes('Unsupported voice')) {
+        msg = '音色不存在或不可用，请换一个音色（' + reason.replace('Unsupported voice ', '') + '）';
+      }
+      this.onSpeakErrorCallback!(msg);
     }
   }
 
@@ -418,6 +447,9 @@ export class EdgeTtsService {
   private async playAudioChunks(): Promise<void> {
     if (this.audioChunks.length === 0) {
       Logger.error(LOG_TAG, 'playAudioChunks: no audio data received');
+      if (this.onSpeakErrorCallback !== null) {
+        this.onSpeakErrorCallback!('没有收到语音数据，音色可能不可用，请换一个试试');
+      }
       this._isSpeaking = false;
       if (this.onSpeakCompleteCallback !== null) {
         this.onSpeakCompleteCallback!();
