@@ -49,6 +49,10 @@ const MAX_NAME_LENGTH: number = 32;
 @Component
 struct ModelConfigEditPage {
   @State viewModel: ModelSettingsViewModel | null = null;
+  /** 服务商选择 Sheet 开关(页面 @State,驱动 bindSheet 显示) */
+  @State providerSheetOpen: boolean = false;
+  /** 模型选择 Sheet 开关(页面 @State,驱动 bindSheet 显示) */
+  @State modelSheetOpen: boolean = false;
   /** 顶部状态栏避让高度(由 EntryAbility 写入 AppStorage) */
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   /** 底部导航栏/手势条避让高度(由 EntryAbility 写入 AppStorage) */
@@ -166,27 +170,27 @@ struct ModelConfigEditPage {
     .width('100%')
     .height('100%')
     .backgroundColor(ThemePalette.pageBackgroundColor(this.effectiveTheme))
-    .bindSheet(this.viewModel!.modelSheetOpen, this.modelSheetBuilder, {
+    .bindSheet(this.modelSheetOpen, this.modelSheetBuilder, {
       height: SheetSize.MEDIUM,
       mode: SheetMode.EMBEDDED,
       dragBar: false,
       showClose: false,
       backgroundColor: ThemePalette.surface1Color(this.effectiveTheme),
       onDisappear: () => {
-        this.viewModel!.closeModelSheet();
+        this.modelSheetOpen = false;
       }
     })
     }
     .width('100%')
     .height('100%')
-    .bindSheet(this.viewModel!.providerSheetOpen, this.providerSheetBuilder, {
+    .bindSheet(this.providerSheetOpen, this.providerSheetBuilder, {
       height: SheetSize.MEDIUM,
       mode: SheetMode.EMBEDDED,
       dragBar: false,
       showClose: false,
       backgroundColor: ThemePalette.surface1Color(this.effectiveTheme),
       onDisappear: () => {
-        this.viewModel!.closeProviderSheet();
+        this.providerSheetOpen = false;
       }
     })
   }
@@ -227,7 +231,7 @@ struct ModelConfigEditPage {
           this.selectableRow(
             () => this.providerDisplayName(),
             () => {
-              this.viewModel!.openProviderSheet();
+              this.providerSheetOpen = true;
             }
           )
         }
@@ -283,32 +287,25 @@ struct ModelConfigEditPage {
         FormSection() {
           this.fieldLabel($r('app.string.model_settings_model'))
           Row() {
-            if (this.viewModel!.isPresetMode || this.viewModel!.modelListReady) {
-              Column() {
-                Text(this.modelDisplayName())
-                  .fontSize($r('app.float.app_font_body'))
-                  .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-              }
-              .layoutWeight(1)
-              .onClick(() => {
-                this.viewModel!.openModelSheet();
-              })
-            } else {
-              TextInput({
-                text: this.viewModel!.modelName,
-                placeholder: 'gpt-4o'
-              })
-                .width('100%')
-                .height(48)
+            // 内容区始终填充文字(为空时显示占位),保证可点击区域始终存在
+            Column() {
+              Text(this.modelDisplayName().length > 0
+                ? this.modelDisplayName()
+                : $r('app.string.model_settings_model_placeholder'))
                 .fontSize($r('app.float.app_font_body'))
-                .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-                .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-                .borderRadius($r('app.float.app_radius_sm'))
-                .padding({ left: 12, right: 12 })
-                .onChange((v: string) => {
-                  this.viewModel!.modelName = v;
-                })
+                .fontColor(this.modelDisplayName().length > 0
+                  ? ThemePalette.textPrimaryColor(this.effectiveTheme)
+                  : ThemePalette.textTertiaryColor(this.effectiveTheme))
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
             }
+            .layoutWeight(1)
+            .height('100%')
+            .justifyContent(FlexAlign.Center)
+            .alignItems(HorizontalAlign.Start)
+            .onClick(() => {
+              this.modelSheetOpen = true;
+            })
             if (this.viewModel!.isFetchingModels) {
               LoadingProgress()
                 .width(24)
@@ -579,7 +576,7 @@ struct ModelConfigEditPage {
           .fontSize(22)
           .fontColor([ThemePalette.textSecondaryColor(this.effectiveTheme)])
           .onClick(() => {
-            this.viewModel!.closeProviderSheet();
+            this.providerSheetOpen = false;
           })
       }
       .width('100%')
@@ -619,6 +616,7 @@ struct ModelConfigEditPage {
               ? $r('app.color.app_accent_surface') : ThemePalette.surface1Color(this.effectiveTheme))
             .borderRadius($r('app.float.app_radius_sm'))
             .onClick(() => {
+              this.providerSheetOpen = false;
               this.viewModel!.selectProviderFromSheet(option.type);
             })
           }
@@ -662,7 +660,7 @@ struct ModelConfigEditPage {
           .fontSize(22)
           .fontColor([ThemePalette.textSecondaryColor(this.effectiveTheme)])
           .onClick(() => {
-            this.viewModel!.closeModelSheet();
+            this.modelSheetOpen = false;
           })
       }
       .width('100%')
@@ -676,6 +674,24 @@ struct ModelConfigEditPage {
           .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
           .padding({ left: 16, right: 16 })
       }
+
+      // 手动输入模型名(自定义 URL 无预设列表时可在此直接填)
+      TextInput({
+        text: this.viewModel!.modelName,
+        placeholder: 'model-name(可手动输入)'
+      })
+        .width('100%')
+        .height(48)
+        .fontSize($r('app.float.app_font_body'))
+        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+        .borderRadius($r('app.float.app_radius_sm'))
+        .padding({ left: 12, right: 12 })
+        .margin({ left: 16, right: 16 })
+        .onChange((v: string) => {
+          this.viewModel!.modelName = v;
+          this.viewModel!.syncModelIndexFromName(v);
+        })
 
       if (this.viewModel!.displayedModels.length > 0) {
         List({ space: 4 }) {
@@ -717,6 +733,7 @@ struct ModelConfigEditPage {
                 ? $r('app.color.app_accent_surface') : ThemePalette.surface1Color(this.effectiveTheme))
               .borderRadius($r('app.float.app_radius_sm'))
               .onClick(() => {
+                this.modelSheetOpen = false;
                 this.viewModel!.selectModelFromSheet(index);
               })
             }

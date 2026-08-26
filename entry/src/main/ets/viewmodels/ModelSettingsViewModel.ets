@@ -425,11 +425,8 @@ export class ModelSettingsViewModel {
     this.onProviderTypeChange(type);
   }
 
-  /** 打开模型选择 Sheet */
+  /** 打开模型选择 Sheet(列表为空时也打开,sheet 内可手动输入或获取) */
   openModelSheet(): void {
-    if (this.displayedModels.length === 0) {
-      return;
-    }
     this.modelSheetOpen = true;
   }
 
@@ -516,17 +513,6 @@ export class ModelSettingsViewModel {
     }
   }
 
-  private syncModelIndexFromName(modelName: string): void {
-    const models: ModelOption[] = this.displayedModels;
-    for (let i = 0; i < models.length; i++) {
-      if (models[i].id === modelName) {
-        this.selectedModelIndex = i;
-        return;
-      }
-    }
-    this.selectedModelIndex = -1;
-  }
-
   /**
    * 根据 Provider 类型应用预设。
    */
@@ -571,6 +557,18 @@ export class ModelSettingsViewModel {
         this.name = models[index].displayName;
       }
     }
+  }
+
+  /** 手动修改 modelName 后调用:若与列表某个模型匹配则同步选中,否则清除选中索引 */
+  syncModelIndexFromName(modelName: string): void {
+    const models: ModelOption[] = this.displayedModels;
+    for (let i = 0; i < models.length; i++) {
+      if (models[i].id === modelName) {
+        this.selectedModelIndex = i;
+        return;
+      }
+    }
+    this.selectedModelIndex = -1;
   }
 
   private async saveNew(): Promise<void> {

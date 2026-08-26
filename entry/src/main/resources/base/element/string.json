@@ -161,6 +161,10 @@
       "value": "模型"
     },
     {
+      "name": "model_settings_model_placeholder",
+      "value": "点击选择模型"
+    },
+    {
       "name": "model_settings_api_key",
       "value": "API Key"
     },
