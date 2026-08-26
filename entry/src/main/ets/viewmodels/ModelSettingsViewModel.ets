@@ -94,6 +94,11 @@ export class ModelSettingsViewModel {
   isFetchingModels: boolean = false;
   /** 模型获取状态消息 */
   fetchModelsMessage: string = '';
+  /**
+   * 是否已具备可选择的模型列表(自定义模式下由获取模型结果决定)。
+   * 使用直接字段而非 getter,确保 UI 能及时重建并显示可点击的选择行。
+   */
+  modelListReady: boolean = false;
   /** 动态获取的模型列表来源 */
   private dynamicModelsSource: 'api' | 'preset' | null = null;
   /** 实际展示的模型列表 */
@@ -105,10 +110,6 @@ export class ModelSettingsViewModel {
       return this.activePreset.availableModels;
     }
     return [];
-  }
-  /** 是否有可展示的模型列表(预设或动态获取) */
-  get hasModelList(): boolean {
-    return this.displayedModels.length > 0;
   }
   /** 动态获取的来源 */
   get modelsSource(): string {
@@ -386,11 +387,13 @@ export class ModelSettingsViewModel {
       }
       this.dynamicModels = options;
       this.dynamicModelsSource = result.source;
+      this.modelListReady = options.length > 0;
       this.fetchModelsMessage = '已获取 ' + options.length.toString() + ' 个模型';
       this.syncModelIndexFromName(this.modelName);
     } catch (e) {
       this.dynamicModels = null;
       this.dynamicModelsSource = null;
+      this.modelListReady = false;
       this.fetchModelsMessage = this.toUserMessage(e, '获取模型列表失败');
     } finally {
       this.isFetchingModels = false;
@@ -502,6 +505,7 @@ export class ModelSettingsViewModel {
     this.enabled = config.enabled;
     this.dynamicModels = null;
     this.dynamicModelsSource = null;
+    this.modelListReady = false;
     this.fetchModelsMessage = '';
     const preset: ProviderPreset | null = getPreset(config.type);
     this.activePreset = preset;
@@ -531,6 +535,7 @@ export class ModelSettingsViewModel {
     this.activePreset = preset;
     this.dynamicModels = null;
     this.dynamicModelsSource = null;
+    this.modelListReady = false;
     this.fetchModelsMessage = '';
 
     if (preset !== null) {

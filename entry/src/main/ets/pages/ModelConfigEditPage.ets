@@ -283,7 +283,7 @@ struct ModelConfigEditPage {
         FormSection() {
           this.fieldLabel($r('app.string.model_settings_model'))
           Row() {
-            if (this.viewModel!.isPresetMode || this.viewModel!.hasModelList) {
+            if (this.viewModel!.isPresetMode || this.viewModel!.modelListReady) {
               Column() {
                 Text(this.modelDisplayName())
                   .fontSize($r('app.float.app_font_body'))
