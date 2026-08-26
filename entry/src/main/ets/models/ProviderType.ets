@@ -31,5 +31,15 @@ export enum ProviderType {
   /** OpenCode Go (OpenCode Zen Go 订阅网关) */
   OpenCodeGo = 'OpenCodeGo',
   /** 硅基流动 SiliconFlow (OpenAI 兼容推理云) */
-  SiliconFlow = 'SiliconFlow'
+  SiliconFlow = 'SiliconFlow',
+  /** 智谱 GLM (BigModel 开放平台) */
+  Zhipu = 'Zhipu',
+  /** 通义千问 Qwen (阿里云 DashScope 兼容模式) */
+  Qwen = 'Qwen',
+  /** 月之暗面 Kimi (Moonshot) */
+  Kimi = 'Kimi',
+  /** 火山方舟 Ark (字节跳动,托管控) */
+  Volcengine = 'Volcengine',
+  /** MiniMax */
+  MiniMax = 'MiniMax'
 }

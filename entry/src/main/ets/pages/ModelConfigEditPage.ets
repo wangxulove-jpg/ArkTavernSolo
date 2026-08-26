@@ -35,6 +35,11 @@ const PROVIDER_OPTIONS: ProviderOption[] = [
   { type: ProviderType.MiMo, displayName: 'MiMo', description: '小米 MiMo V2.5 系列,官方 API' },
   { type: ProviderType.SiliconFlow, displayName: '硅基流动', description: 'SiliconFlow 推理云,多种开源模型,OpenAI 兼容' },
   { type: ProviderType.OpenCodeGo, displayName: 'OpenCode Go', description: 'OpenCode Zen Go 订阅网关,OpenAI 兼容' },
+  { type: ProviderType.Zhipu, displayName: '智谱 GLM', description: '智谱 BigModel 开放平台,GLM 系列,OpenAI 兼容' },
+  { type: ProviderType.Qwen, displayName: '通义千问', description: '阿里云 DashScope 兼容模式,Qwen 系列,OpenAI 兼容' },
+  { type: ProviderType.Kimi, displayName: '月之暗面', description: 'Moonshot Kimi 系列,OpenAI 兼容' },
+  { type: ProviderType.Volcengine, displayName: '火山方舟', description: '字节跳动 Ark 托管控,豆包/DeepSeek,OpenAI 兼容' },
+  { type: ProviderType.MiniMax, displayName: 'MiniMax', description: 'MiniMax 推理模型,OpenAI 兼容' },
   { type: ProviderType.OpenAICompatible, displayName: 'OpenAI Compatible', description: '通用 OpenAI 兼容接口,自定义 Base URL 与模型' }
 ];
 

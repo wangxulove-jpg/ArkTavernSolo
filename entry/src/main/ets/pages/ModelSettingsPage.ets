@@ -400,6 +400,16 @@ struct ModelSettingsPage {
         return 'OpenCode Go';
       case ProviderType.SiliconFlow:
         return 'SiliconFlow';
+      case ProviderType.Zhipu:
+        return '智谱 GLM';
+      case ProviderType.Qwen:
+        return '通义千问';
+      case ProviderType.Kimi:
+        return '月之暗面';
+      case ProviderType.Volcengine:
+        return '火山方舟';
+      case ProviderType.MiniMax:
+        return 'MiniMax';
       default:
         return 'Unknown';
     }

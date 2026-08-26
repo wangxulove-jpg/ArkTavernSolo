@@ -85,7 +85,12 @@ export function isOpenAICompatibleType(type: ProviderType): boolean {
     || type === ProviderType.MiMo
     || type === ProviderType.OpenRouter
     || type === ProviderType.OpenCodeGo
-    || type === ProviderType.SiliconFlow;
+    || type === ProviderType.SiliconFlow
+    || type === ProviderType.Zhipu
+    || type === ProviderType.Qwen
+    || type === ProviderType.Kimi
+    || type === ProviderType.Volcengine
+    || type === ProviderType.MiniMax;
 }
 
 /**

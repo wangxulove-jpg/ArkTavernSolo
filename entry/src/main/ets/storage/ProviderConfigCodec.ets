@@ -113,7 +113,12 @@ export function isValidProviderTypeValue(value: string): boolean {
     value === ProviderType.Claude ||
     value === ProviderType.Gemini ||
     value === ProviderType.OpenCodeGo ||
-    value === ProviderType.SiliconFlow;
+    value === ProviderType.SiliconFlow ||
+    value === ProviderType.Zhipu ||
+    value === ProviderType.Qwen ||
+    value === ProviderType.Kimi ||
+    value === ProviderType.Volcengine ||
+    value === ProviderType.MiniMax;
 }
 
 /** 将 ProviderType 字符串值转换为枚举(调用前应先用 isValidProviderTypeValue 校验) */
@@ -137,6 +142,16 @@ function parseProviderType(value: string): ProviderType {
       return ProviderType.OpenCodeGo;
     case ProviderType.SiliconFlow:
       return ProviderType.SiliconFlow;
+    case ProviderType.Zhipu:
+      return ProviderType.Zhipu;
+    case ProviderType.Qwen:
+      return ProviderType.Qwen;
+    case ProviderType.Kimi:
+      return ProviderType.Kimi;
+    case ProviderType.Volcengine:
+      return ProviderType.Volcengine;
+    case ProviderType.MiniMax:
+      return ProviderType.MiniMax;
     default:
       // 不应到达此处,调用方应先校验
       return ProviderType.OpenAICompatible;

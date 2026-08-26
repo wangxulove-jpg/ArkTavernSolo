@@ -254,11 +254,139 @@ const SILICONFLOW_PRESET: ProviderPreset = {
   defaultModel: SILICONFLOW_MODELS[0]
 };
 
+// ===== 智谱 GLM =====
+
+const ZHIPU_MODELS: ModelOption[] = [
+  {
+    id: 'glm-5.2',
+    displayName: 'GLM-5.2',
+    description: '智谱旗舰推理(约 1M 上下文)'
+  },
+  {
+    id: 'glm-5.1',
+    displayName: 'GLM-5.1',
+    description: '智谱推理模型(200K 上下文)'
+  }
+];
+
+const ZHIPU_PRESET: ProviderPreset = {
+  providerType: ProviderType.Zhipu,
+  displayName: '智谱 GLM',
+  // 以 /chat/completions 结尾,OpenAiUrlBuilder 不再追加 /v1
+  defaultBaseUrl: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+  availableModels: ZHIPU_MODELS,
+  defaultModel: ZHIPU_MODELS[0]
+};
+
+// ===== 通义千问 Qwen =====
+
+const QWEN_MODELS: ModelOption[] = [
+  {
+    id: 'qwen3.6-plus',
+    displayName: 'Qwen3.6 Plus',
+    description: '通义千问旗舰(约 1M 上下文)'
+  },
+  {
+    id: 'qwen-max-latest',
+    displayName: 'Qwen Max',
+    description: '通义千问 Max 最新(约 1M 上下文)'
+  }
+];
+
+const QWEN_PRESET: ProviderPreset = {
+  providerType: ProviderType.Qwen,
+  displayName: '通义千问',
+  defaultBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+  availableModels: QWEN_MODELS,
+  defaultModel: QWEN_MODELS[0]
+};
+
+// ===== 月之暗面 Kimi =====
+
+const KIMI_MODELS: ModelOption[] = [
+  {
+    id: 'kimi-k3',
+    displayName: 'Kimi K3',
+    description: '月之暗面旗舰(约 1M 上下文,2 倍用量)'
+  },
+  {
+    id: 'kimi-k2.6',
+    displayName: 'Kimi K2.6',
+    description: '月之暗面推理(256K 上下文)'
+  },
+  {
+    id: 'kimi-k2.7-code',
+    displayName: 'Kimi K2.7 Code',
+    description: '月之暗面代码向(262K 上下文)'
+  }
+];
+
+const KIMI_PRESET: ProviderPreset = {
+  providerType: ProviderType.Kimi,
+  displayName: '月之暗面',
+  defaultBaseUrl: 'https://api.moonshot.cn/v1/chat/completions',
+  availableModels: KIMI_MODELS,
+  defaultModel: KIMI_MODELS[0]
+};
+
+// ===== 火山方舟 Ark =====
+
+const VOLCENGINE_MODELS: ModelOption[] = [
+  {
+    id: 'doubao-seed-1.6',
+    displayName: '豆包 Seed 1.6',
+    description: '字节旗舰多模态(约 1M 上下文)'
+  },
+  {
+    id: 'deepseek-v3.2',
+    displayName: 'DeepSeek V3.2',
+    description: '火山方舟托管的 DeepSeek(160K 上下文)'
+  }
+];
+
+const VOLCENGINE_PRESET: ProviderPreset = {
+  providerType: ProviderType.Volcengine,
+  displayName: '火山方舟',
+  defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
+  availableModels: VOLCENGINE_MODELS,
+  defaultModel: VOLCENGINE_MODELS[0]
+};
+
+// ===== MiniMax =====
+
+const MINIMAX_MODELS: ModelOption[] = [
+  {
+    id: 'MiniMax-M2.7',
+    displayName: 'MiniMax M2.7',
+    description: 'MiniMax 旗舰推理(约 1M 上下文)'
+  },
+  {
+    id: 'MiniMax-M2.5',
+    displayName: 'MiniMax M2.5',
+    description: 'MiniMax 推理(192K 上下文)'
+  }
+];
+
+const MINIMAX_PRESET: ProviderPreset = {
+  providerType: ProviderType.MiniMax,
+  displayName: 'MiniMax',
+  // 官方 OpenAI 兼容域名是 api.minimaxi.com(国内)/api.minimax.io(国际),以 /v1 结尾,
+  // OpenAiUrlBuilder 会自动追加 /chat/completions。
+  defaultBaseUrl: 'https://api.minimaxi.com/v1',
+  availableModels: MINIMAX_MODELS,
+  defaultModel: MINIMAX_MODELS[0]
+};
+
 // ===== 全部预设列表 =====
 
 const ALL_PRESETS: ProviderPreset[] = [
   DEEPSEEK_PRESET,
   MIMO_PRESET,
   OPENCODE_GO_PRESET,
-  SILICONFLOW_PRESET
+  SILICONFLOW_PRESET,
+  ZHIPU_PRESET,
+  QWEN_PRESET,
+  KIMI_PRESET,
+  VOLCENGINE_PRESET,
+  MINIMAX_PRESET
 ];

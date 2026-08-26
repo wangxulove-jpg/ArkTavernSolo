@@ -149,6 +149,17 @@ export function buildModelsUrl(baseUrl: string): UrlBuildResult {
     return { success: true, url: cleaned, error: '' };
   }
 
+  // 预设厂商的 Base URL 常以 /chat/completions 结尾(为聊天请求服务)。
+  // 获取模型列表时把这些地址的 /chat/completions 后缀直接替换为 /models。
+  // 例: https://host/v1/chat/completions → https://host/v1/models
+  //     https://host/api/paas/v4/chat/completions → https://host/api/paas/v4/models
+  // 若仍按追加 /v1 处理,会错误拼成 "/chat/completions/v1/models",请求失败
+  // 而回退到预设精简列表,导致"模型不全"。
+  if (cleaned.endsWith(CHAT_COMPLETIONS_SUFFIX)) {
+    const apiBase: string = cleaned.substring(0, cleaned.length - CHAT_COMPLETIONS_SUFFIX.length);
+    return { success: true, url: apiBase + MODELS_SUFFIX, error: '' };
+  }
+
   if (cleaned.endsWith(V1_SUFFIX)) {
     return { success: true, url: cleaned + MODELS_SUFFIX, error: '' };
   }

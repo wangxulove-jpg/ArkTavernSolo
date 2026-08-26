@@ -480,7 +480,12 @@ export class ModelSettingsViewModel {
       || type === ProviderType.MiMo
       || type === ProviderType.OpenRouter
       || type === ProviderType.OpenCodeGo
-      || type === ProviderType.SiliconFlow;
+      || type === ProviderType.SiliconFlow
+      || type === ProviderType.Zhipu
+      || type === ProviderType.Qwen
+      || type === ProviderType.Kimi
+      || type === ProviderType.Volcengine
+      || type === ProviderType.MiniMax;
   }
 
   // ===== 内部方法 =====
