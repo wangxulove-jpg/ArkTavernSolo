@@ -26,7 +26,9 @@
  */
 
 import { Character } from '../models/Character';
+import { Lorebook } from '../models/Lorebook';
 import { CharacterService } from '../services/CharacterService';
+import { LorebookService } from '../services/LorebookService';
 import { Logger } from '../utils/Logger';
 
 const LOG_TAG: string = 'CharacterEditViewModel';
@@ -189,12 +191,17 @@ export class CharacterEditViewModel {
   editingCharacterId: string = '';
 
   private readonly characterService: CharacterService;
+  private readonly lorebookService: LorebookService;
   private disposed: boolean = false;
   /** 加载到的原始角色(用于脏检测;新建模式为 null) */
   private originalCharacter: Character | null = null;
 
-  constructor(characterService: CharacterService) {
+  constructor(
+    characterService: CharacterService,
+    lorebookService: LorebookService
+  ) {
     this.characterService = characterService;
+    this.lorebookService = lorebookService;
   }
 
   /**
@@ -315,6 +322,79 @@ export class CharacterEditViewModel {
     );
     this.originalCharacter = updated;
     return updated.avatarUri;
+  }
+
+  /**
+   * 解析当前角色绑定的世界书名称。
+   * 未绑定或世界书不存在时返回空字符串(不抛错)。
+   */
+  async getBoundBookName(): Promise<string> {
+    if (this.disposed) {
+      return '';
+    }
+    const bookId: string = this.originalCharacter !== null
+      ? this.originalCharacter.characterBookId : '';
+    if (bookId.length === 0) {
+      return '';
+    }
+    try {
+      const book: Lorebook | null = await this.lorebookService.getById(bookId);
+      return book !== null ? book.name : '';
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'getBoundBookName failed: ' + String(e));
+      return '';
+    }
+  }
+
+  /**
+   * 将角色绑定到指定世界书(通过 character_book_id)。
+   * 仅编辑模式可用;世界书必须存在。
+   * 保存后刷新 originalCharacter,供 getFormState() 返回新 characterBookId。
+   */
+  async bindLorebook(bookId: string): Promise<void> {
+    if (this.disposed) {
+      throw new Error('ViewModel disposed');
+    }
+    if (!this.isEditing || this.editingCharacterId.length === 0) {
+      throw new Error('新建模式下不能绑定世界书,请先保存角色');
+    }
+    const book: Lorebook | null = await this.lorebookService.getById(bookId);
+    if (book === null) {
+      throw new Error('世界书不存在或已被删除');
+    }
+    const updated: Character = await this.characterService.update(
+      this.editingCharacterId, { characterBookId: bookId }
+    );
+    this.originalCharacter = updated;
+  }
+
+  /**
+   * 解除角色与当前角色专属世界书的绑定。
+   * 仅编辑模式可用。
+   */
+  async unbindLorebook(): Promise<void> {
+    if (this.disposed) {
+      throw new Error('ViewModel disposed');
+    }
+    if (!this.isEditing || this.editingCharacterId.length === 0) {
+      return;
+    }
+    const updated: Character = await this.characterService.update(
+      this.editingCharacterId, { characterBookId: '' }
+    );
+    this.originalCharacter = updated;
+  }
+
+  /** 判断当前角色是否绑定着世界书 */
+  hasBoundLorebook(): boolean {
+    return this.originalCharacter !== null
+      && this.originalCharacter.characterBookId.length > 0;
+  }
+
+  /** 获取当前绑定的世界书 ID(未绑定时返回空串) */
+  getBoundBookId(): string {
+    return this.originalCharacter !== null
+      ? this.originalCharacter.characterBookId : '';
   }
 
   /**

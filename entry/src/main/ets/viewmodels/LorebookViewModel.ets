@@ -12,6 +12,8 @@ import {
   LorebookEntryUpdates
 } from '../models/Lorebook';
 import { LorebookService } from '../services/LorebookService';
+import { CharacterService } from '../services/CharacterService';
+import { CharacterBookRef } from '../repositories/CharacterRepository';
 import { Logger } from '../utils/Logger';
 
 const LOG_TAG: string = 'LorebookViewModel';
@@ -22,6 +24,8 @@ export class LorebookViewModel {
   currentLorebookId: string | null = null;
   loading: boolean = false;
   errorMessage: string = '';
+  /** 世界书 id → 绑定的角色引用(id + name),供世界书页面展示绑定关系 */
+  boundCharacterMap: Record<string, CharacterBookRef[]> = {};
 
   /** 数据变更回调,用于页面将 @State 变量同步到 ViewModel */
   onDataUpdate: (() => void) | null = null;
@@ -55,9 +59,11 @@ export class LorebookViewModel {
   deleteTargetEntryLorebookId: string = '';
 
   private readonly service: LorebookService;
+  private readonly characterService: CharacterService;
 
-  constructor(service: LorebookService) {
+  constructor(service: LorebookService, characterService: CharacterService) {
     this.service = service;
+    this.characterService = characterService;
   }
 
   async load(): Promise<void> {
@@ -66,12 +72,51 @@ export class LorebookViewModel {
     try {
       this.lorebooks = await this.service.list();
       this.currentLorebookId = await this.service.getCurrentLorebookId();
+      await this.refreshBoundCharacters();
       this.notifyDataUpdate();
     } catch (e) {
       this.errorMessage = '加载世界书列表失败';
       Logger.error(LOG_TAG, 'load failed: ' + String(e));
     } finally {
       this.loading = false;
+    }
+  }
+
+  /** 重建"世界书 → 绑定角色"映射(轻量查询所有世界书的反向绑定) */
+  private async refreshBoundCharacters(): Promise<void> {
+    const map: Record<string, CharacterBookRef[]> = {};
+    for (let i = 0; i < this.lorebooks.length; i++) {
+      const bookId: string = this.lorebooks[i].id;
+      try {
+        map[bookId] = await this.characterService.getCharactersBoundToBook(bookId);
+      } catch (e) {
+        Logger.warn(LOG_TAG, 'refreshBoundCharacters failed for ' + bookId + ': ' + String(e));
+        map[bookId] = [];
+      }
+    }
+    this.boundCharacterMap = map;
+  }
+
+  /** 获取某世界书绑定的角色引用列表 */
+  getBoundCharacters(bookId: string): CharacterBookRef[] {
+    return this.boundCharacterMap[bookId] ?? [];
+  }
+
+  /** 是否存在绑定到该世界书的角色 */
+  hasBoundCharacters(bookId: string): boolean {
+    return this.getBoundCharacters(bookId).length > 0;
+  }
+
+  /** 解除角色与某世界书的绑定 */
+  async unbindCharacter(bookId: string, characterId: string): Promise<void> {
+    this.errorMessage = '';
+    try {
+      await this.characterService.update(characterId, { characterBookId: '' });
+      await this.refreshBoundCharacters();
+      this.notifyDataUpdate();
+    } catch (e) {
+      this.errorMessage = '解除绑定失败: ' + String(e);
+      Logger.error(LOG_TAG, 'unbindCharacter failed: ' + String(e));
     }
   }
 

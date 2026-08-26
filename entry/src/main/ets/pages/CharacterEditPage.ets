@@ -24,6 +24,7 @@ import { picker } from '@kit.CoreFileKit';
 import { ThemePalette } from '../theme/ThemePalette';
 import { Persona } from '../models/Persona';
 import { PersonaService } from '../services/PersonaService';
+import { Lorebook } from '../models/Lorebook';
 
 const TAB_CHARACTER: number = 0;
 const TAB_CONVERSATION: number = 1;
@@ -45,6 +46,12 @@ struct CharacterEditPage {
   @State editingGreetingDraft: string = '';
   /** 可选身份列表(供默认身份下拉选择) */
   @State personaOptions: Persona[] = [];
+  /** 绑定世界书:已绑定世界书名称(用于展示,空表示未绑定或加载中) */
+  @State boundBookName: string = '';
+  /** 绑定世界书:可选世界书列表(供选择弹窗) */
+  @State bookPickerOptions: Lorebook[] = [];
+  /** 绑定世界书:选择弹窗是否显示 */
+  @State showBookPicker: boolean = false;
   /** 顶部状态栏避让高度(由 EntryAbility 写入 AppStorage) */
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   /** 底部导航栏/手势条避让高度 */
@@ -53,7 +60,8 @@ struct CharacterEditPage {
   @StorageProp('effectiveTheme') effectiveTheme: string = 'dark';
 
   private viewModel: CharacterEditViewModel = new CharacterEditViewModel(
-    AppServices.getCharacterService()
+    AppServices.getCharacterService(),
+    AppServices.getLorebookService()
   );
   private readyHandled: boolean = false;
 
@@ -103,6 +111,10 @@ struct CharacterEditPage {
         if (this.showDiscardDialog) {
           this.discardDialog()
         }
+
+        if (this.showBookPicker) {
+          this.bookPickerDialog()
+        }
       }
       .width('100%')
       .height('100%')
@@ -140,10 +152,25 @@ struct CharacterEditPage {
       this.formState = this.viewModel.getFormState();
       // 加载身份列表供下拉选择
       await this.loadPersonaOptions();
+      await this.loadWorldBookBindState();
       this.isLoading = false;
     } catch (e) {
       this.errorMessage = (e as Error).message ?? '加载失败';
       this.isLoading = false;
+    }
+  }
+
+  /** 加载角色绑定世界书信息与可选世界书列表 */
+  private async loadWorldBookBindState(): Promise<void> {
+    try {
+      this.boundBookName = await this.viewModel.getBoundBookName();
+    } catch (_e) {
+      this.boundBookName = '';
+    }
+    try {
+      this.bookPickerOptions = await AppServices.getLorebookService().list();
+    } catch (_e) {
+      this.bookPickerOptions = [];
     }
   }
 
@@ -761,7 +788,7 @@ struct CharacterEditPage {
     });
   }
 
-  /** 角色专属世界书区域:只读展示关联 ID */
+  /** 角色专属世界书区域:展示绑定世界书名称,支持选择绑定 / 解除绑定 */
   @Builder
   characterBookSection() {
     Column() {
@@ -770,13 +797,23 @@ struct CharacterEditPage {
           .fontSize($r('app.float.app_font_subtitle'))
           .fontWeight(FontWeight.Medium)
           .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        if (this.viewModel.hasBoundLorebook()) {
+          Text($r('app.string.character_book_bound_badge'))
+            .fontSize(11)
+            .fontColor($r('app.color.app_on_accent'))
+            .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
+            .borderRadius(8)
+            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+            .margin({ left: 8 })
+        }
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
       .margin({ bottom: 8 })
 
-      if (this.formState.characterBookIdInput.length > 0) {
-        Text(this.formState.characterBookIdInput)
+      if (this.viewModel.hasBoundLorebook()) {
+        Text(this.boundBookName.length > 0
+          ? this.boundBookName : this.formState.characterBookIdInput)
           .fontSize($r('app.float.app_font_body'))
           .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
           .width('100%')
@@ -795,6 +832,36 @@ struct CharacterEditPage {
           .borderRadius($r('app.float.app_radius_md'))
           .textAlign(TextAlign.Center)
       }
+
+      Row() {
+        Button($r('app.string.character_edit_character_book_bind'))
+          .fontSize(13)
+          .backgroundColor(Color.Transparent)
+          .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+          .height(32)
+          .padding({ left: 10, right: 10 })
+          .enabled(this.viewModel.isEditing)
+          .onClick(() => {
+            if (this.viewModel.isEditing) {
+              this.showBookPicker = true;
+            }
+          })
+        if (this.viewModel.hasBoundLorebook()) {
+          Button($r('app.string.character_edit_character_book_unbind'))
+            .fontSize(13)
+            .backgroundColor(Color.Transparent)
+            .fontColor($r('app.color.app_danger'))
+            .height(32)
+            .padding({ left: 10, right: 10 })
+            .margin({ left: 4 })
+            .onClick(() => {
+              this.handleUnbindLorebook();
+            })
+        }
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.Start)
+      .margin({ top: 4 })
 
       Text($r('app.string.character_edit_character_book_hint'))
         .fontSize($r('app.float.app_font_caption'))
@@ -1085,6 +1152,94 @@ struct CharacterEditPage {
     .width('100%').height('100%').backgroundColor('rgba(0,0,0,0.5)')
   }
 
+  /** 绑定世界书选择弹窗:列出可选世界书,点击即绑定 */
+  @Builder
+  bookPickerDialog() {
+    Stack() {
+      Column() {
+        Column() {
+          Row() {
+            Text($r('app.string.character_book_picker_title'))
+              .fontSize(16)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+              .layoutWeight(1)
+            Text($r('app.string.dialog_close'))
+              .fontSize(14)
+              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+              .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+              .onClick(() => { this.showBookPicker = false; })
+          }
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
+          .margin({ bottom: 12 })
+
+          if (this.bookPickerOptions.length === 0) {
+            Text($r('app.string.character_book_picker_empty'))
+              .fontSize(13)
+              .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+              .width('100%')
+              .textAlign(TextAlign.Center)
+              .padding(20)
+          } else {
+            Scroll() {
+              Column() {
+                ForEach(this.bookPickerOptions, (book: Lorebook) => {
+                  Row() {
+                    Text((this.formState.characterBookIdInput === book.id ? '✓ ' : '') + book.name)
+                      .fontSize(14)
+                      .fontColor(this.formState.characterBookIdInput === book.id
+                        ? ThemePalette.accentColor(this.effectiveTheme)
+                        : ThemePalette.textPrimaryColor(this.effectiveTheme))
+                      .maxLines(1)
+                      .textOverflow({ overflow: TextOverflow.Ellipsis })
+                      .layoutWeight(1)
+                    if (!book.enabled) {
+                      Text($r('app.string.lorebook_disabled'))
+                        .fontSize(11)
+                        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+                    }
+                  }
+                  .width('100%')
+                  .padding({ left: 12, right: 12, top: 12, bottom: 12 })
+                  .margin({ bottom: 6 })
+                  .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+                  .borderRadius($r('app.float.app_radius_md'))
+                  .onClick(() => {
+                    this.handleBindLorebook(book.id);
+                  })
+                }, (book: Lorebook) => book.id)
+              }
+              .width('100%')
+            }
+            .height('70%')
+            .scrollBar(BarState.Auto)
+            .align(Alignment.Top)
+            .width('100%')
+          }
+
+          Button($r('app.string.dialog_cancel'))
+            .fontSize(14)
+            .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
+            .fontColor($r('app.color.app_on_accent'))
+            .height(40)
+            .width('100%')
+            .borderRadius(20)
+            .margin({ top: 12 })
+            .onClick(() => { this.showBookPicker = false; })
+        }
+        .width('85%')
+        .padding(20)
+        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+        .borderRadius(16)
+      }
+      .width('100%').height('100%')
+      .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
+    }
+    .width('100%').height('100%').backgroundColor('rgba(0,0,0,0.5)')
+    .onClick(() => { this.showBookPicker = false; })
+  }
+
   // ===== 标签操作 =====
   private addTagFromDraft(): void {
     const trimmed: string = this.tagInputDraft.trim();
@@ -1205,6 +1360,46 @@ struct CharacterEditPage {
   }
 
   // ===== 业务逻辑 =====
+
+  /** 将当前角色绑定到指定世界书,并刷新表单与展示 */
+  private async handleBindLorebook(bookId: string): Promise<void> {
+    if (this.isSaving || this.isLoading) {
+      return;
+    }
+    this.showBookPicker = false;
+    this.isSaving = true;
+    try {
+      await this.viewModel.bindLorebook(bookId);
+      this.formState = this.viewModel.getFormState();
+      this.boundBookName = await this.viewModel.getBoundBookName();
+      this.errorMessage = '';
+      this.bumpListVersion();
+    } catch (e) {
+      this.errorMessage = (e as Error).message ?? '绑定世界书失败';
+    } finally {
+      this.isSaving = false;
+    }
+  }
+
+  /** 解除当前角色的世界书绑定,并刷新表单与展示 */
+  private async handleUnbindLorebook(): Promise<void> {
+    if (this.isSaving || this.isLoading) {
+      return;
+    }
+    this.isSaving = true;
+    try {
+      await this.viewModel.unbindLorebook();
+      this.formState = this.viewModel.getFormState();
+      this.boundBookName = '';
+      this.errorMessage = '';
+      this.bumpListVersion();
+    } catch (e) {
+      this.errorMessage = (e as Error).message ?? '解除绑定失败';
+    } finally {
+      this.isSaving = false;
+    }
+  }
+
   private isDirty(): boolean {
     if (this.isLoading || this.isSaving) {
       return false;

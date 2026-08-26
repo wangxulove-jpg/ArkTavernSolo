@@ -14,6 +14,8 @@
 
 import { LorebookViewModel } from '../viewmodels/LorebookViewModel';
 import { LorebookService } from '../services/LorebookService';
+import { CharacterService } from '../services/CharacterService';
+import { CharacterBookRef } from '../repositories/CharacterRepository';
 import { Lorebook, LorebookEntry } from '../models/Lorebook';
 import { AppServices } from '../services/AppServices';
 import { router } from '@kit.ArkUI';
@@ -39,6 +41,8 @@ struct LorebookPage {
   @State deleteTargetEntry: LorebookEntry | null = null;
   @State deleteTargetEntryLorebookId: string = '';
   @State vmErrorMessage: string = '';
+  /** 世界书 id → 绑定角色引用(镜像 ViewModel,用于展示绑定关系) */
+  @State boundCharacterMap: Record<string, CharacterBookRef[]> = {};
   /** 本地 @State 镜像,用于条目编辑对话框表单字段 */
   @State editEntryName: string = '';
   @State editEntryKeys: string = '';
@@ -51,11 +55,14 @@ struct LorebookPage {
   @State editEntryPriority: number = 0;
   /** 顶部状态栏避让高度(由 EntryAbility 写入 AppStorage) */
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
+  /** 底部手势条/导航栏避让高度(由 EntryAbility 写入 AppStorage) */
+  @StorageProp('navigationBarHeight') navigationBarHeight: number = 0;
   @StorageProp('effectiveTheme') effectiveTheme: string = 'dark';
 
   aboutToAppear(): void {
     const service: LorebookService = AppServices.getLorebookService();
-    const vm: LorebookViewModel = new LorebookViewModel(service);
+    const characterService: CharacterService = AppServices.getCharacterService();
+    const vm: LorebookViewModel = new LorebookViewModel(service, characterService);
     this.viewModel = vm;
     vm.onDataUpdate = () => {
       this.syncFromViewModel();
@@ -77,6 +84,7 @@ struct LorebookPage {
     this.deleteTargetEntry = this.viewModel.deleteTargetEntry;
     this.deleteTargetEntryLorebookId = this.viewModel.deleteTargetEntryLorebookId;
     this.vmErrorMessage = this.viewModel.errorMessage;
+    this.boundCharacterMap = this.viewModel.boundCharacterMap;
     // 同步条目编辑表单字段
     this.editEntryName = this.viewModel.editEntryName;
     this.editEntryKeys = this.viewModel.editEntryKeys;
@@ -128,28 +136,34 @@ struct LorebookPage {
         if (this.lorebooks.length === 0) {
           this.emptyState();
         } else {
-          Scroll() {
-            Column() {
-              ForEach(this.lorebooks, (lb: Lorebook) => {
+          // 用 List 而非 Scroll 承载列表:展开世界书后内容变高,List 会对每个 ListItem
+          // 重新测量高度并保持可滚动到底部,避免"新建条目"按钮被推出屏幕/点不到。
+          List({ space: 8 }) {
+            ForEach(this.lorebooks, (lb: Lorebook) => {
+              ListItem() {
                 this.lorebookCard(lb);
-              }, (lb: Lorebook) => lb.id + '_' + lb.updatedAt);
-              Blank().height(80);
+              }
+            }, (lb: Lorebook) => lb.id + '_' + lb.updatedAt)
+            // 底部留白:按底部手势条高度动态避让,保留足够保底,避免最后一个条目标签被系统底栏遮挡
+            ListItem() {
+              Column()
+                .width('100%')
+                .height(Math.max(126, this.navigationBarHeight + 64))
             }
-            .width('100%')
           }
-          .scrollable(ScrollDirection.Vertical)
+          // 水平缩进放在 List 的 padding,避免子元素 width('100%')+横向 margin 溢出右侧
+          .padding({ left: 12, right: 12 })
           .scrollBar(BarState.Auto)
           .edgeEffect(EdgeEffect.Spring)
           .width('100%')
           .height('100%')
-          .align(Alignment.Top)
         }
       }
       .width('100%')
       .height('100%')
 
-      // FAB
-      if (this.viewModel !== null) {
+      // FAB(展开任意世界书时隐藏,避免遮挡卡片底部的"新建条目"按钮)
+      if (this.viewModel !== null && this.expandedLorebookId === null) {
         Button($r('app.string.lorebook_new'))
           .fontSize(14)
           .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
@@ -264,6 +278,9 @@ struct LorebookPage {
               .margin({ top: 4 })
           }
           .width('100%')
+
+          // 绑定角色行
+          this.boundCharactersLine(lb.id)
         }
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
@@ -371,18 +388,26 @@ struct LorebookPage {
           .width('100%')
           .height(1)
 
-        if (lb.entries.length === 0) {
-          Text($r('app.string.lorebook_no_entries'))
-            .fontSize(13)
-            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-            .padding(16)
-            .width('100%')
-            .textAlign(TextAlign.Center)
-        } else {
-          ForEach(lb.entries, (entry: LorebookEntry) => {
-            this.entryRow(lb.id, entry);
-          }, (entry: LorebookEntry) => entry.id + '_' + entry.updatedAt);
+        // 条目子块统一用内边距缩进,避免 width('100%')+横向 margin 溢出右侧
+        Column() {
+          if (lb.entries.length === 0) {
+            Text($r('app.string.lorebook_no_entries'))
+              .fontSize(13)
+              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+              .padding(16)
+              .width('100%')
+              .textAlign(TextAlign.Center)
+          } else {
+            ForEach(lb.entries, (entry: LorebookEntry) => {
+              this.entryRow(lb.id, entry);
+            }, (entry: LorebookEntry) => entry.id + '_' + entry.updatedAt);
+          }
         }
+        .width('100%')
+        .padding({ left: 12, right: 12 })
+
+        // 绑定角色区(展开时显示)
+        this.boundCharactersExpand(lb.id)
 
         Button($r('app.string.lorebook_new_entry'))
           .fontSize(12)
@@ -402,7 +427,83 @@ struct LorebookPage {
     .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
     .border({ width: 1, color: ThemePalette.dividerColor(this.effectiveTheme) })
     .borderRadius(10)
-    .margin({ left: 12, right: 12, top: 8 })
+    .margin({ top: 8 })
+  }
+
+  // ===== 世界书绑定角色 =====
+
+  /** 卡片标题下方的绑定角色概览行(可换行,避免右侧溢出) */
+  @Builder
+  boundCharactersLine(bookId: string) {
+    Flex({ wrap: FlexWrap.Wrap }) {
+      if (this.viewModel !== null && this.viewModel.hasBoundCharacters(bookId)) {
+        Text($r('app.string.lorebook_bound_characters_label'))
+          .fontSize(11)
+          .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+          .margin({ right: 4 })
+        ForEach(this.viewModel.getBoundCharacters(bookId), (ref: CharacterBookRef) => {
+          Text(ref.name)
+            .fontSize(11)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .constraintSize({ maxWidth: '70%' })
+            .padding({ left: 6, right: 6, top: 1, bottom: 1 })
+            .margin({ right: 4, bottom: 2 })
+            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+            .borderRadius(8)
+        }, (ref: CharacterBookRef) => ref.id)
+      } else {
+        Text($r('app.string.lorebook_bound_none'))
+          .fontSize(11)
+          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+      }
+    }
+    .width('100%')
+    .margin({ top: 4 })
+  }
+
+  /** 展开区:列出绑定角色,支持逐个解除绑定 */
+  @Builder
+  boundCharactersExpand(bookId: string) {
+    if (this.viewModel !== null && this.viewModel.hasBoundCharacters(bookId)) {
+      Divider()
+        .color(ThemePalette.dividerColor(this.effectiveTheme))
+        .width('100%')
+        .height(1)
+        .margin({ top: 4 })
+      Text($r('app.string.lorebook_bound_characters_section'))
+        .fontSize(13)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+        .width('100%')
+        .padding({ left: 12, right: 12, top: 10 })
+      ForEach(this.viewModel.getBoundCharacters(bookId), (ref: CharacterBookRef) => {
+        Row() {
+          Text(ref.name)
+            .fontSize(13)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+          Button($r('app.string.lorebook_unbind_character'))
+            .fontSize(12)
+            .backgroundColor(Color.Transparent)
+            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+            .height(28)
+            .padding({ left: 8, right: 8 })
+            .onClick(() => {
+              if (this.viewModel !== null) {
+                void this.viewModel.unbindCharacter(bookId, ref.id).then(() => {
+                  this.syncFromViewModel();
+                });
+              }
+            })
+        }
+        .width('100%')
+        .padding({ left: 12, right: 12, top: 8, bottom: 4 })
+      }, (ref: CharacterBookRef) => ref.id)
+    }
   }
 
   // ===== 条目行 =====
@@ -453,7 +554,11 @@ struct LorebookPage {
                 .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .layoutWeight(1)
                 .margin({ right: 4 })
+            } else {
+              // 无 keys 时占位,避免优先级/位置被挤到右侧溢出
+              Row().layoutWeight(1)
             }
             if (this.viewModel !== null) {
               Text('P' + entry.priority.toString())
@@ -504,7 +609,7 @@ struct LorebookPage {
     .width('100%')
     .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
     .border({ width: 1, color: ThemePalette.dividerColor(this.effectiveTheme) })
-    .margin({ left: 12, right: 12, bottom: 6 })
+    .margin({ bottom: 6 })
     .borderRadius(8)
   }
 

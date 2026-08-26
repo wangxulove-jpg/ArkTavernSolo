@@ -19,7 +19,7 @@ import { common } from '@kit.AbilityKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { Character, createCharacter, updateCharacter, validateCharacter, CharacterUpdates } from '../models/Character';
-import { CharacterRepository } from '../repositories/CharacterRepository';
+import { CharacterRepository, CharacterBookRef } from '../repositories/CharacterRepository';
 import { LorebookRepository } from '../repositories/LorebookRepository';
 import { LorebookPosition, createLorebook, createLorebookEntry, Lorebook, LorebookEntry } from '../models/Lorebook';
 import { CharacterSelectionStore } from '../storage/CharacterSelectionStore';
@@ -135,6 +135,15 @@ export class CharacterService {
   async getById(id: string): Promise<Character | null> {
     this.requireInit();
     return await this.repository.getById(id);
+  }
+
+  /**
+   * 查询绑定到指定世界书的角色引用(id + name)。
+   * 供世界书页面展示"该世界书绑定到哪些角色卡"。
+   */
+  async getCharactersBoundToBook(bookId: string): Promise<CharacterBookRef[]> {
+    this.requireInit();
+    return await this.repository.getCharacterRefsByBookId(bookId);
   }
 
   async create(

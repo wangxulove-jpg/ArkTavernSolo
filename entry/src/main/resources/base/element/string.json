@@ -1058,7 +1058,51 @@
     },
     {
       "name": "character_edit_character_book_hint",
-      "value": "从角色卡导入时会自动创建;也可在 Lorebook 编辑页中关联"
+      "value": "从角色卡导入时会自动创建,也可在此手动绑定或解除"
+    },
+    {
+      "name": "character_edit_character_book_bind",
+      "value": "选择世界书"
+    },
+    {
+      "name": "character_edit_character_book_unbind",
+      "value": "解除绑定"
+    },
+    {
+      "name": "character_book_bound_badge",
+      "value": "已绑定"
+    },
+    {
+      "name": "character_book_picker_title",
+      "value": "绑定角色专属世界书"
+    },
+    {
+      "name": "character_book_picker_empty",
+      "value": "暂无世界书，请先前往世界书页创建"
+    },
+    {
+      "name": "dialog_close",
+      "value": "关闭"
+    },
+    {
+      "name": "dialog_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "lorebook_bound_characters_label",
+      "value": "绑定角色:"
+    },
+    {
+      "name": "lorebook_bound_none",
+      "value": "未绑定角色"
+    },
+    {
+      "name": "lorebook_bound_characters_section",
+      "value": "绑定角色"
+    },
+    {
+      "name": "lorebook_unbind_character",
+      "value": "解除绑定"
     },
     {
       "name": "tab_sessions",

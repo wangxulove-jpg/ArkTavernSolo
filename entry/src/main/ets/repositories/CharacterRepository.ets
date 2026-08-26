@@ -63,6 +63,15 @@ import {
   isConstraintViolation
 } from './RepositoryMappers';
 
+/**
+ * 世界书绑定角色引用(id + name)。
+ * 由世界书反向查询角色卡使用,仅含轻量列。
+ */
+export interface CharacterBookRef {
+  readonly id: string;
+  readonly name: string;
+}
+
 const LOG_TAG: string = 'CharacterRepository';
 
 /**
@@ -611,6 +620,35 @@ export class CharacterRepository {
         return '';
       }
       return readStringColumnSafe(rs, COLUMN_CHARACTER_BOOK_ID, '');
+    } finally {
+      rs.close();
+    }
+  }
+
+  /**
+   * 查询绑定到指定世界书的角色引用(id + name)。
+   * 只读取轻量列,不触碰超大文本字段,规避 RDB 共享块 2MB 超限。
+   * 供世界书页面展示"该世界书绑定到哪些角色卡"。
+   */
+  async getCharacterRefsByBookId(bookId: string): Promise<CharacterBookRef[]> {
+    if (bookId.length === 0) {
+      return [];
+    }
+    const store: relationalStore.RdbStore = this.dbHelper.getStore();
+    const sql: string =
+      `SELECT ${COLUMN_ID}, ${COLUMN_NAME} FROM ${TABLE_CHARACTERS} WHERE ${COLUMN_CHARACTER_BOOK_ID} = ?`;
+    const rs: relationalStore.ResultSet = await store.querySql(sql, [bookId]);
+    const result: CharacterBookRef[] = [];
+    try {
+      while (rs.goToNextRow()) {
+        result.push({
+          id: readStringColumnSafe(rs, COLUMN_ID, ''),
+          name: readStringColumnSafe(rs, COLUMN_NAME, '')
+        });
+      }
+      return result;
+    } catch (e) {
+      throw DatabaseError.queryFailed(`character.getCharacterRefsByBookId: ${extractCauseMessage(e)}`);
     } finally {
       rs.close();
     }
