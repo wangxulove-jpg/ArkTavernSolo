@@ -21,6 +21,14 @@ import { ModelSettingsViewModel } from '../viewmodels/ModelSettingsViewModel';
 import { ProviderType } from '../models/ProviderType';
 import { ModelOption } from '../models/ProviderPreset';
 import { getModelCapability, ModelCapability } from '../models/ModelCapabilities';
+import {
+  TEMPERATURE_MIN,
+  TEMPERATURE_MAX,
+  TOP_P_MIN,
+  TOP_P_MAX,
+  MAX_TOKENS_MIN,
+  MAX_TOKENS_MAX
+} from '../models/ProviderConfig';
 import { router } from '@kit.ArkUI';
 import { ThemePalette } from '../theme/ThemePalette';
 
@@ -201,15 +209,15 @@ struct ModelConfigEditPage {
       Column({ space: 16 }) {
         this.statusBanner()
 
-        // 配置名称
-        FormSection() {
-          this.fieldLabel($r('app.string.model_settings_name'))
+        // ===== 基础信息 分组卡片 =====
+        Column() {
+          this.fieldRowLabel($r('app.string.model_settings_name'))
           TextInput({
             text: this.viewModel!.name,
             placeholder: $r('app.string.model_settings_name_placeholder')
           })
             .width('100%')
-            .height(48)
+            .height(44)
             .fontSize($r('app.float.app_font_body'))
             .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
             .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
@@ -224,26 +232,25 @@ struct ModelConfigEditPage {
               }
             })
         }
+        .width('100%')
+        .padding(16)
+        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+        .borderRadius($r('app.float.app_radius_md'))
 
-        // API 服务商
-        FormSection() {
-          this.fieldLabel($r('app.string.model_settings_provider'))
-          this.selectableRow(
-            () => this.providerDisplayName(),
-            () => {
-              this.providerSheetOpen = true;
-            }
-          )
-        }
+        // ===== API 接入 分组卡片 =====
+        Column() {
+          // 服务商
+          this.fieldRowLabel($r('app.string.model_settings_provider'))
+          this.providerPickerRow()
 
-        // API Key
-        FormSection() {
-          this.fieldLabel($r('app.string.model_settings_api_key'))
+          Divider().color(ThemePalette.dividerColor(this.effectiveTheme)).margin({ left: 16, right: 16, top: 12, bottom: 12 })
+
+          // API Key
+          this.fieldRowLabel($r('app.string.model_settings_api_key'))
           if (this.viewModel!.selectedConfigId !== null && this.viewModel!.apiKeyConfigured) {
             Text($r('app.string.model_settings_api_key_status_configured'))
               .fontSize($r('app.float.app_font_caption'))
               .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-              .margin({ bottom: 4 })
           }
           Row() {
             TextInput({
@@ -252,7 +259,7 @@ struct ModelConfigEditPage {
             })
               .type(this.viewModel!.showApiKey ? InputType.Normal : InputType.Password)
               .width('100%')
-              .height(48)
+              .height(44)
               .fontSize($r('app.float.app_font_body'))
               .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
               .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
@@ -270,7 +277,7 @@ struct ModelConfigEditPage {
 
             Button(this.viewModel!.showApiKey ? $r('app.string.model_settings_hide_key') : $r('app.string.model_settings_show_key'))
               .width(72)
-              .height(48)
+              .height(44)
               .fontSize($r('app.float.app_font_caption'))
               .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
               .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
@@ -282,65 +289,26 @@ struct ModelConfigEditPage {
           }
           .width('100%')
         }
+        .width('100%')
+        .padding(16)
+        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+        .borderRadius($r('app.float.app_radius_md'))
 
-        // 模型
-        FormSection() {
-          this.fieldLabel($r('app.string.model_settings_model'))
-          Row() {
-            // 内容区始终填充文字(为空时显示占位),保证可点击区域始终存在
-            Column() {
-              Text(this.modelDisplayName().length > 0
-                ? this.modelDisplayName()
-                : $r('app.string.model_settings_model_placeholder'))
-                .fontSize($r('app.float.app_font_body'))
-                .fontColor(this.modelDisplayName().length > 0
-                  ? ThemePalette.textPrimaryColor(this.effectiveTheme)
-                  : ThemePalette.textTertiaryColor(this.effectiveTheme))
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-            }
-            .layoutWeight(1)
-            .height('100%')
-            .justifyContent(FlexAlign.Center)
-            .alignItems(HorizontalAlign.Start)
-            .onClick(() => {
-              this.modelSheetOpen = true;
-            })
-            if (this.viewModel!.isFetchingModels) {
-              LoadingProgress()
-                .width(24)
-                .height(24)
-                .color(ThemePalette.accentColor(this.effectiveTheme))
-                .margin({ left: 8 })
-            } else {
-              SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-                .fontSize(20)
-                .fontColor([this.viewModel!.canFetchModels()
-                  ? ThemePalette.accentColor(this.effectiveTheme)
-                  : ThemePalette.textTertiaryColor(this.effectiveTheme)])
-                .margin({ left: 8 })
-                .enabled(this.viewModel!.canFetchModels())
-                .onClick(() => {
-                  this.viewModel!.fetchModels();
-                })
-            }
-          }
-          .width('100%')
-          .height(48)
-          .padding({ left: 16, right: 16 })
-          .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-          .borderRadius($r('app.float.app_radius_sm'))
+        // ===== 模型 & 接口 分组卡片 =====
+        Column() {
+          // 模型(可点击选择)
+          this.modelPickerRow()
           if (this.viewModel!.fetchModelsMessage.length > 0) {
             Text(this.viewModel!.fetchModelsMessage)
               .fontSize($r('app.float.app_font_caption'))
               .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-              .margin({ top: 4 })
+              .margin({ top: 8 })
           }
-        }
 
-        // Base URL
-        FormSection() {
-          this.fieldLabel($r('app.string.model_settings_base_url_summary'))
+          Divider().color(ThemePalette.dividerColor(this.effectiveTheme)).margin({ left: 16, right: 16, top: 12, bottom: 12 })
+
+          // Base URL
+          this.fieldRowLabel($r('app.string.model_settings_base_url_summary'))
           if (this.viewModel!.isPresetMode) {
             Row() {
               Text($r('app.string.model_settings_base_url_auto'))
@@ -352,8 +320,8 @@ struct ModelConfigEditPage {
                 .fontColor([ThemePalette.accentColor(this.effectiveTheme)])
             }
             .width('100%')
-            .height(48)
-            .padding({ left: 16, right: 16 })
+            .height(44)
+            .padding({ left: 12, right: 12 })
             .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
             .borderRadius($r('app.float.app_radius_sm'))
           } else {
@@ -362,7 +330,7 @@ struct ModelConfigEditPage {
               placeholder: 'https://api.example.com'
             })
               .width('100%')
-              .height(48)
+              .height(44)
               .fontSize($r('app.float.app_font_body'))
               .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
               .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
@@ -373,17 +341,22 @@ struct ModelConfigEditPage {
               })
           }
         }
+        .width('100%')
+        .padding(16)
+        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+        .borderRadius($r('app.float.app_radius_md'))
 
         // 测试连接
         Button(this.viewModel!.isTesting ? $r('app.string.model_settings_testing') : $r('app.string.model_settings_test'))
           .width('100%')
-          .height(48)
+          .height(50)
           .fontSize($r('app.float.app_font_body'))
+          .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.app_on_accent'))
           .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
-          .borderRadius($r('app.float.app_radius_sm'))
+          .borderRadius($r('app.float.app_radius_md'))
           .enabled(this.isFormReady() && !this.viewModel!.isSaving && !this.viewModel!.isTesting)
-          .margin({ top: 8 })
+          .margin({ top: 4 })
           .onClick(() => {
             if (this.viewModel!.checkFormValid()) {
               this.viewModel!.testConnection();
@@ -395,11 +368,11 @@ struct ModelConfigEditPage {
           && this.viewModel!.selectedConfigId !== this.viewModel!.currentConfigId) {
           Button($r('app.string.model_settings_set_current'))
             .width('100%')
-            .height(48)
+            .height(50)
             .fontSize($r('app.float.app_font_body'))
             .fontColor(ThemePalette.accentColor(this.effectiveTheme))
             .backgroundColor($r('app.color.app_accent_surface'))
-            .borderRadius($r('app.float.app_radius_sm'))
+            .borderRadius($r('app.float.app_radius_md'))
             .enabled(!this.viewModel!.isSaving && !this.viewModel!.isTesting)
             .margin({ top: 8 })
             .onClick(async () => {
@@ -419,6 +392,88 @@ struct ModelConfigEditPage {
   }
 
   @Builder
+  fieldRowLabel(label: Resource) {
+    Text(label)
+      .fontSize($r('app.float.app_font_caption'))
+      .fontWeight(FontWeight.Medium)
+      .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+      .margin({ bottom: 8 })
+  }
+
+  @Builder
+  providerPickerRow() {
+    Row() {
+      Text(this.providerDisplayName())
+        .fontSize($r('app.float.app_font_body'))
+        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        .layoutWeight(1)
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(16)
+        .fontColor([ThemePalette.textTertiaryColor(this.effectiveTheme)])
+    }
+    .width('100%')
+    .height(48)
+    .padding({ left: 12, right: 12 })
+    .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+    .borderRadius($r('app.float.app_radius_sm'))
+    .onClick(() => {
+      this.providerSheetOpen = true;
+    })
+  }
+
+  @Builder
+  modelPickerRow() {
+    Row() {
+      // 内容区始终填充文字(为空时显示占位),保证可点击区域始终存在
+      Column() {
+        Text(this.modelDisplayName().length > 0
+          ? this.modelDisplayName()
+          : $r('app.string.model_settings_model_placeholder'))
+          .fontSize($r('app.float.app_font_body'))
+          .fontColor(this.modelDisplayName().length > 0
+            ? ThemePalette.textPrimaryColor(this.effectiveTheme)
+            : ThemePalette.textTertiaryColor(this.effectiveTheme))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .layoutWeight(1)
+      .height('100%')
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Start)
+      .onClick(() => {
+        this.modelSheetOpen = true;
+      })
+      if (this.viewModel!.isFetchingModels) {
+        LoadingProgress()
+          .width(22)
+          .height(22)
+          .color(ThemePalette.accentColor(this.effectiveTheme))
+          .margin({ left: 8 })
+      } else {
+        SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+          .fontSize(18)
+          .fontColor([this.viewModel!.canFetchModels()
+            ? ThemePalette.accentColor(this.effectiveTheme)
+            : ThemePalette.textTertiaryColor(this.effectiveTheme)])
+          .margin({ left: 8 })
+          .enabled(this.viewModel!.canFetchModels())
+          .onClick(() => {
+            this.viewModel!.fetchModels();
+          })
+      }
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(16)
+        .fontColor([ThemePalette.textTertiaryColor(this.effectiveTheme)])
+        .margin({ left: 8 })
+    }
+    .width('100%')
+    .height(48)
+    .padding({ left: 12, right: 12 })
+    .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+    .borderRadius($r('app.float.app_radius_sm'))
+  }
+
+  @Builder
   parametersTabContent() {
     Scroll() {
       Column({ space: 16 }) {
@@ -430,87 +485,81 @@ struct ModelConfigEditPage {
           .width('100%')
           .padding({ top: 4, bottom: 4 })
 
-        // Temperature(需要小数,使用 Normal 输入类型并在 onChange 校验)
-        FormSection() {
-          this.fieldLabelWithHint($r('app.string.model_settings_temperature'), $r('app.string.model_settings_temperature_range'))
-          this.fieldDesc($r('app.string.model_settings_temperature_desc'))
-          TextInput({ text: this.viewModel!.temperature.toString() })
-            .type(InputType.Normal)
-            .width('100%')
-            .height(48)
-            .fontSize($r('app.float.app_font_body'))
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-            .borderRadius($r('app.float.app_radius_sm'))
-            .padding({ left: 12, right: 12 })
-            .onChange((v: string) => {
-              const n: number = parseFloat(v);
-              if (!isNaN(n)) {
-                this.viewModel!.temperature = n;
-              }
-            })
+        // ===== 采样参数 分组卡片 =====
+        Column() {
+          // Temperature
+          this.sliderRow(
+            $r('app.string.model_settings_temperature'),
+            $r('app.string.model_settings_temperature_desc'),
+            this.viewModel!.temperature,
+            TEMPERATURE_MIN,
+            TEMPERATURE_MAX,
+            0.1,
+            (n: number) => {
+              this.viewModel!.temperature = n;
+            }
+          )
+
+          Divider().color(ThemePalette.dividerColor(this.effectiveTheme)).margin({ left: 16, right: 16, top: 4, bottom: 4 })
+
+          // Top P
+          this.sliderRow(
+            $r('app.string.model_settings_top_p'),
+            $r('app.string.model_settings_top_p_desc'),
+            this.viewModel!.topP,
+            TOP_P_MIN,
+            TOP_P_MAX,
+            0.05,
+            (n: number) => {
+              this.viewModel!.topP = n;
+            }
+          )
+
+          Divider().color(ThemePalette.dividerColor(this.effectiveTheme)).margin({ left: 16, right: 16, top: 4, bottom: 4 })
+
+          // Max Tokens
+          this.sliderRow(
+            $r('app.string.model_settings_max_tokens'),
+            $r('app.string.model_settings_max_tokens_desc'),
+            this.viewModel!.maxTokens,
+            MAX_TOKENS_MIN,
+            MAX_TOKENS_MAX,
+            256,
+            (n: number) => {
+              this.viewModel!.maxTokens = n;
+            }
+          )
         }
+        .width('100%')
+        .padding({ top: 8, bottom: 8 })
+        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+        .borderRadius($r('app.float.app_radius_md'))
 
-        // Top P(需要小数,使用 Normal 输入类型)
-        FormSection() {
-          this.fieldLabelWithHint($r('app.string.model_settings_top_p'), $r('app.string.model_settings_top_p_range'))
-          this.fieldDesc($r('app.string.model_settings_top_p_desc'))
-          TextInput({ text: this.viewModel!.topP.toString() })
-            .type(InputType.Normal)
-            .width('100%')
-            .height(48)
-            .fontSize($r('app.float.app_font_body'))
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-            .borderRadius($r('app.float.app_radius_sm'))
-            .padding({ left: 12, right: 12 })
-            .onChange((v: string) => {
-              const n: number = parseFloat(v);
-              if (!isNaN(n)) {
-                this.viewModel!.topP = n;
-              }
-            })
+        // ===== 行为 分组卡片 =====
+        Column() {
+          this.switchRow(
+            $r('app.string.model_settings_stream'),
+            $r('app.string.model_settings_stream_desc'),
+            this.viewModel!.stream,
+            (on: boolean) => {
+              this.viewModel!.stream = on;
+            }
+          )
+
+          Divider().color(ThemePalette.dividerColor(this.effectiveTheme)).margin({ left: 16, right: 16 })
+
+          this.switchRow(
+            $r('app.string.model_settings_enabled'),
+            $r('app.string.model_settings_enabled_desc'),
+            this.viewModel!.enabled,
+            (on: boolean) => {
+              this.viewModel!.enabled = on;
+            }
+          )
         }
-
-        // Max Tokens
-        FormSection() {
-          this.fieldLabelWithHint($r('app.string.model_settings_max_tokens'), $r('app.string.model_settings_max_tokens_desc'))
-          TextInput({ text: this.viewModel!.maxTokens.toString() })
-            .type(InputType.Number)
-            .width('100%')
-            .height(48)
-            .fontSize($r('app.float.app_font_body'))
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-            .borderRadius($r('app.float.app_radius_sm'))
-            .padding({ left: 12, right: 12 })
-            .onChange((v: string) => {
-              const n: number = parseInt(v, 10);
-              if (!isNaN(n)) {
-                this.viewModel!.maxTokens = n;
-              }
-            })
-        }
-
-        // 流式请求
-        this.toggleRow(
-          $r('app.string.model_settings_stream'),
-          $r('app.string.model_settings_stream_desc'),
-          this.viewModel!.stream,
-          (on: boolean) => {
-            this.viewModel!.stream = on;
-          }
-        )
-
-        // 启用
-        this.toggleRow(
-          $r('app.string.model_settings_enabled'),
-          $r('app.string.model_settings_enabled_desc'),
-          this.viewModel!.enabled,
-          (on: boolean) => {
-            this.viewModel!.enabled = on;
-          }
-        )
+        .width('100%')
+        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+        .borderRadius($r('app.float.app_radius_md'))
 
         Blank().height(24)
       }
@@ -521,6 +570,82 @@ struct ModelConfigEditPage {
     .width('100%')
     .height('100%')
     .scrollBar(BarState.Auto)
+  }
+
+  @Builder
+  sliderRow(title: Resource, desc: Resource, value: number, min: number, max: number, step: number, onChange: (n: number) => void) {
+    Column() {
+      Row() {
+        Column({ space: 2 }) {
+          Text(title)
+            .fontSize($r('app.float.app_font_body'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+          Text(desc)
+            .fontSize($r('app.float.app_font_caption'))
+            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+
+        Text(this.formatSliderValue(value))
+          .fontSize($r('app.float.app_font_body'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+      }
+      .width('100%')
+
+      Slider({
+        value: value,
+        min: min,
+        max: max,
+        step: step,
+        style: SliderStyle.OutSet
+      })
+        .width('100%')
+        .selectedColor(ThemePalette.accentColor(this.effectiveTheme))
+        .trackColor(ThemePalette.surface2Color(this.effectiveTheme))
+        .blockColor(ThemePalette.accentColor(this.effectiveTheme))
+        .onChange((v: number, mode: SliderChangeMode) => {
+          onChange(v);
+        })
+    }
+    .width('100%')
+    .padding(16)
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  switchRow(title: Resource, desc: Resource, isOn: boolean, onChange: (on: boolean) => void) {
+    Row() {
+      Column({ space: 2 }) {
+        Text(title)
+          .fontSize($r('app.float.app_font_body'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        Text(desc)
+          .fontSize($r('app.float.app_font_caption'))
+          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+
+      Toggle({ type: ToggleType.Switch, isOn: isOn })
+        .selectedColor(ThemePalette.accentColor(this.effectiveTheme))
+        .onChange(onChange)
+    }
+    .width('100%')
+    .padding(16)
+    .onClick(() => {
+      onChange(!isOn);
+    })
+  }
+
+  private formatSliderValue(value: number): string {
+    if (Number.isInteger(value)) {
+      return value.toString();
+    }
+    return value.toFixed(2);
   }
 
   @Builder
@@ -752,91 +877,6 @@ struct ModelConfigEditPage {
   }
 
   @Builder
-  fieldLabel(label: Resource) {
-    Text(label)
-      .fontSize($r('app.float.app_font_caption'))
-      .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-      .margin({ bottom: 6 })
-  }
-
-  @Builder
-  fieldLabelWithHint(label: Resource, hint: Resource) {
-    Row() {
-      Text(label)
-        .fontSize($r('app.float.app_font_caption'))
-        .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-      Text(' · ')
-        .fontSize($r('app.float.app_font_caption'))
-        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-      Text(hint)
-        .fontSize($r('app.float.app_font_caption'))
-        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-    }
-    .margin({ bottom: 6 })
-  }
-
-  @Builder
-  fieldDesc(desc: Resource) {
-    Text(desc)
-      .fontSize($r('app.float.app_font_caption'))
-      .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-      .margin({ bottom: 8 })
-  }
-
-  @Builder
-  selectableRow(valueProvider: () => string, onClick: () => void) {
-    Row() {
-      if (valueProvider().length > 0) {
-        Text(valueProvider())
-          .fontSize($r('app.float.app_font_body'))
-          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-          .layoutWeight(1)
-      } else {
-        Text($r('app.string.model_settings_select_provider_hint'))
-          .fontSize($r('app.float.app_font_body'))
-          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-          .layoutWeight(1)
-      }
-      SymbolGlyph($r('sys.symbol.chevron_right'))
-        .fontSize(18)
-        .fontColor([ThemePalette.textTertiaryColor(this.effectiveTheme)])
-    }
-    .width('100%')
-    .height(48)
-    .padding({ left: 16, right: 16 })
-    .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-    .borderRadius($r('app.float.app_radius_sm'))
-    .onClick(onClick)
-  }
-
-  @Builder
-  toggleRow(title: Resource, desc: Resource, isOn: boolean, onChange: (on: boolean) => void) {
-    Row() {
-      Column() {
-        Text(title)
-          .fontSize($r('app.float.app_font_body'))
-          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-        Text(desc)
-          .fontSize($r('app.float.app_font_caption'))
-          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-          .margin({ top: 2 })
-      }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
-
-      Toggle({ type: ToggleType.Switch, isOn: isOn })
-        .onChange(onChange)
-    }
-    .width('100%')
-    .padding(16)
-    .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
-    .borderRadius($r('app.float.app_radius_md'))
-    .onClick(() => {
-      onChange(!isOn);
-    })
-  }
-
-  @Builder
   statusBanner() {
     if (this.viewModel!.errorMessage.length > 0) {
       Text(this.viewModel!.errorMessage)
@@ -926,26 +966,5 @@ struct ModelConfigEditPage {
       return false;
     }
     return true;
-  }
-}
-
-/**
- * 表单分组容器组件。
- * 通过 @BuilderParam 接收子组件,避免 @Builder 方法传递 Builder 的语法限制。
- */
-@Component
-struct FormSection {
-  @BuilderParam content: () => void;
-  @StorageProp('effectiveTheme') effectiveTheme: string = 'dark';
-
-  build() {
-    Column() {
-      this.content()
-    }
-    .width('100%')
-    .padding(16)
-    .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
-    .borderRadius($r('app.float.app_radius_md'))
-    .alignItems(HorizontalAlign.Start)
   }
 }
