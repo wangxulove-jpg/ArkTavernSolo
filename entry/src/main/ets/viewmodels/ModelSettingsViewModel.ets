@@ -342,12 +342,8 @@ export class ModelSettingsViewModel {
     } catch (e) {
       this.errorMessage = this.toUserMessage(e, '连接测试失败');
     } finally {
-      if (this.selectedConfigId !== null) {
-        const existingKey: string | null = await this.modelService.readApiKey(this.selectedConfigId);
-        this.apiKey = existingKey !== null ? existingKey : '';
-      } else {
-        this.apiKey = '';
-      }
+      // 测试连接不修改正式配置,也不清空表单中已输入的 API Key。
+      // 否则新建模式下测试后 apiKey 被清空,导致无法再保存(必须先保存再测试)。
       this.isTesting = false;
     }
   }

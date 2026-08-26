@@ -441,17 +441,36 @@ export class ModelService {
     }
 
     const provider: AiProvider = this.resolveProvider(config);
+    // 对于无预设的自定义 Provider(如 OpenAICompatible),网络失败时
+    // 不应静默回退为空列表(会让页面误显示"已获取 0 个模型"且无法切换),
+    // 而应透传真实错误,引导用户修正 Base URL / /models 接口。
+    let models: ModelListItem[] = [];
+    let fetchError: ModelServiceError | null = null;
     try {
-      const models: ModelListItem[] = await provider.fetchModels(config.baseUrl, resolvedKey as string);
-      if (models.length > 0) {
-        const result: ModelListResult = { models: models, source: 'api' };
-        return result;
-      }
-      return this.fallbackToPreset(config.type);
-    } catch (_e) {
-      Logger.warn(LOG_TAG, 'fetchAvailableModels failed, falling back to preset');
-      return this.fallbackToPreset(config.type);
+      models = await provider.fetchModels(config.baseUrl, resolvedKey as string);
+    } catch (e) {
+      fetchError = this.wrapNetworkError(e, 'fetchAvailableModels failed');
     }
+
+    if (models.length > 0) {
+      const result: ModelListResult = { models: models, source: 'api' };
+      return result;
+    }
+
+    if (getPreset(config.type) === null) {
+      if (fetchError !== null) {
+        throw fetchError;
+      }
+      throw createModelServiceError(
+        ModelServiceErrorType.NetworkFailure,
+        'Model list is empty'
+      );
+    }
+
+    if (fetchError !== null) {
+      Logger.warn(LOG_TAG, 'fetchAvailableModels failed, falling back to preset');
+    }
+    return this.fallbackToPreset(config.type);
   }
 
   private fallbackToPreset(type: ProviderType): ModelListResult {
