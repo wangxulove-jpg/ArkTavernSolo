@@ -81,6 +81,13 @@ struct LorebookPage {
     vm.load();
   }
 
+  /** 页面每次回显时重新加载(从"查看源码"编辑器返回后立即刷新为最新内容,无需退出重进) */
+  onPageShow(): void {
+    if (this.viewModel !== null) {
+      this.viewModel.load();
+    }
+  }
+
   /** 将 ViewModel 的所有 UI 状态同步到本地 @State,确保属性变化触发重渲染 */
   private syncFromViewModel(): void {
     if (this.viewModel === null) {
@@ -762,6 +769,21 @@ struct LorebookPage {
             }
           })
 
+        // 查看源码(仅编辑模式)
+        if (this.viewModel !== null && this.viewModel.editingLorebook !== null) {
+          Button($r('app.string.lorebook_source_open'))
+            .fontSize(13)
+            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+            .height(36)
+            .width('100%')
+            .borderRadius(18)
+            .margin({ bottom: 16 })
+            .onClick(() => {
+              this.openSourceEditor(this.getEditingLorebookId());
+            })
+        }
+
         // 绑定角色(仅编辑模式)
         if (this.viewModel !== null && this.viewModel.editingLorebook !== null) {
           Divider()
@@ -1352,6 +1374,21 @@ struct LorebookPage {
       return this.viewModel.editingLorebook.id;
     }
     return '';
+  }
+
+  /** 打开源码编辑器;关闭当前编辑弹窗,避免叠加。 */
+  private openSourceEditor(bookId: string): void {
+    if (bookId.length === 0) {
+      return;
+    }
+    if (this.viewModel !== null) {
+      this.viewModel.closeLorebookDialog();
+    }
+    this.syncFromViewModel();
+    router.pushUrl({
+      url: 'pages/LorebookSourceEditorPage',
+      params: { param: { lorebookId: bookId } }
+    });
   }
 
   // ===== 删除确认(世界书) =====

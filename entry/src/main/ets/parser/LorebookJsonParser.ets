@@ -29,6 +29,9 @@ const LOG_TAG: string = 'LorebookJsonParser';
 const MAX_ENTRIES: number = 2000;
 /** 单条内容最大长度(字符) */
 const MAX_CONTENT_LENGTH: number = 100000;
+/** 序列化源码时的默认扫描深度 token 预算 */
+const DEFAULT_SCAN_DEPTH: number = 100;
+const DEFAULT_TOKEN_BUDGET: number = 500;
 
 /** 解析后的世界书文件中间格式 */
 export interface ParsedLorebookFile {
@@ -47,6 +50,22 @@ const ENTRY_NAME_LIMIT: number = 100;
  * @throws 文本不是合法 JSON 或结构无效时抛出 Error
  */
 export function parseLorebookJson(text: string, fallbackName: string = ''): ParsedLorebookFile {
+  return parseLorebookInternal(text, fallbackName, false);
+}
+
+/**
+ * 解析世界书源码(供"查看源码"编辑器保存)。与 parseLorebookJson 的区别:
+ * 保留所有条目(不做有效性过滤),避免保存时静默丢失内容;条目是否有效交由保存层校验并明确报错。
+ */
+export function parseLorebookSource(text: string, fallbackName: string = ''): ParsedLorebookFile {
+  return parseLorebookInternal(text, fallbackName, true);
+}
+
+function parseLorebookInternal(
+  text: string,
+  fallbackName: string,
+  lenient: boolean
+): ParsedLorebookFile {
   let root: Object;
   try {
     root = JSON.parse(text) as Object;
@@ -73,7 +92,7 @@ export function parseLorebookJson(text: string, fallbackName: string = ''): Pars
     if (typeof item !== 'object' || item === null || Array.isArray(item)) {
       continue;
     }
-    const entry: LorebookEntry | null = parseEntry(item as Record<string, Object>, i);
+    const entry: LorebookEntry | null = parseEntry(item as Record<string, Object>, i, lenient);
     if (entry !== null) {
       entries.push(entry);
     }
@@ -151,8 +170,12 @@ function readEntrySortIndex(m: Record<string, Object>): number {
   return readNumber(m, 'uid', -1);
 }
 
-/** 解析单条世界书条目;非法条目返回 null(跳过)。 */
-function parseEntry(raw: Record<string, Object>, index: number): LorebookEntry | null {
+/** 解析单条世界书条目;非法条目返回 null(跳过)。lenient=true 时保留所有条目(供源码保存)。 */
+function parseEntry(
+  raw: Record<string, Object>,
+  index: number,
+  lenient: boolean = false
+): LorebookEntry | null {
   // 兼容两种字段名:SillyTavern(keys/secondary_keys) 与对象形态导出(key/keysecondary)
   const keys: string[] = readKeyArray(raw, 'keys', 'key');
   const secondaryKeys: string[] = readKeyArray(raw, 'secondary_keys', 'keysecondary');
@@ -172,17 +195,20 @@ function parseEntry(raw: Record<string, Object>, index: number): LorebookEntry |
   const insertionOrder: number = readNumber(raw, 'insertion_order', 0);
   const priority: number = readNumber(raw, 'priority', insertionOrder);
 
-  // 内容过长则截断,避免撑爆单个条目
-  const cappedContent: string = content.length > MAX_CONTENT_LENGTH
+  // 内容过长则截断,避免撑爆单个条目(仅严格模式;宽松模式保留完整内容,
+  // 让保存层校验拦截并明确报错,而不是静默截断导致与 JSON 不一致)
+  const cappedContent: string = !lenient && content.length > MAX_CONTENT_LENGTH
     ? content.substring(0, MAX_CONTENT_LENGTH)
     : content;
-  if (cappedContent.trim().length === 0 && keys.length === 0 && !constant) {
-    // 既无内容也无关键词且非常量,视为无效条目,跳过
-    return null;
-  }
-  if (name.length > ENTRY_NAME_LIMIT) {
-    // 名字过长,用关键词或序号替代
-    return null;
+  if (!lenient) {
+    if (cappedContent.trim().length === 0 && keys.length === 0 && !constant) {
+      // 既无内容也无关键词且非常量,视为无效条目,跳过
+      return null;
+    }
+    if (name.length > ENTRY_NAME_LIMIT) {
+      // 名字过长,用关键词或序号替代
+      return null;
+    }
   }
 
   try {
@@ -197,7 +223,7 @@ function parseEntry(raw: Record<string, Object>, index: number): LorebookEntry |
       position,
       priority
     );
-    if (validateLorebookEntry(entry) !== null) {
+    if (!lenient && validateLorebookEntry(entry) !== null) {
       return null;
     }
     return entry;
@@ -219,6 +245,67 @@ export function buildLorebookFromParsed(parsed: ParsedLorebookFile): Lorebook {
     createdAt: base.createdAt,
     updatedAt: base.updatedAt
   };
+}
+
+/** 序列化源码时的条目标准形状 */
+interface SerializableLorebookEntry {
+  readonly name: string;
+  readonly keys: string[];
+  readonly secondary_keys: string[];
+  readonly comment: string;
+  readonly content: string;
+  readonly constant: boolean;
+  readonly selective: boolean;
+  readonly enabled: boolean;
+  readonly position: string;
+  readonly priority: number;
+}
+
+/** 序列化源码时的世界书标准形状 */
+interface SerializableLorebook {
+  readonly name: string;
+  readonly description: string;
+  readonly enabled: boolean;
+  readonly scan_depth: number;
+  readonly token_budget: number;
+  readonly recursive_scanning: boolean;
+  readonly extensions: Record<string, Object>;
+  readonly entries: SerializableLorebookEntry[];
+}
+
+/**
+ * 把 Lorebook 序列化为 SillyTavern 兼容的 JSON 源码(供"查看源码"编辑器展示)。
+ * 与 parseLorebookJson 互为逆操作。
+ */
+export function serializeLorebook(lorebook: Lorebook): string {
+  const entries: SerializableLorebookEntry[] = [];
+  for (let i = 0; i < lorebook.entries.length; i++) {
+    const e: LorebookEntry = lorebook.entries[i];
+    entries.push({
+      name: e.name,
+      keys: e.keys,
+      secondary_keys: e.secondaryKeys,
+      comment: '',
+      content: e.content,
+      constant: e.constant,
+      selective: e.selective,
+      enabled: e.enabled,
+      position: e.position === LorebookPosition.AfterCharacter
+        ? 'after_char' : 'before_char',
+      priority: e.priority
+    });
+  }
+  const root: SerializableLorebook = {
+    name: lorebook.name,
+    description: lorebook.description,
+    enabled: lorebook.enabled,
+    scan_depth: DEFAULT_SCAN_DEPTH,
+    token_budget: DEFAULT_TOKEN_BUDGET,
+    recursive_scanning: false,
+    extensions: {},
+    entries: entries
+  };
+  return JSON.stringify(root, null, 2);
 }
 
 // ===== 安全读取辅助 =====

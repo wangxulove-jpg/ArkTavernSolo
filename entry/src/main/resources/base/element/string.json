@@ -1109,6 +1109,74 @@
       "value": "绑定到角色…"
     },
     {
+      "name": "lorebook_source_open",
+      "value": "查看源码(JSON)"
+    },
+    {
+      "name": "lorebook_source_editor_title",
+      "value": "世界书源码"
+    },
+    {
+      "name": "lorebook_source_save",
+      "value": "保存"
+    },
+    {
+      "name": "lorebook_source_find",
+      "value": "查找"
+    },
+    {
+      "name": "lorebook_source_replace",
+      "value": "替换"
+    },
+    {
+      "name": "lorebook_source_stats",
+      "value": "统计"
+    },
+    {
+      "name": "lorebook_source_find_placeholder",
+      "value": "输入要查找的内容"
+    },
+    {
+      "name": "lorebook_source_replace_placeholder",
+      "value": "替换为"
+    },
+    {
+      "name": "lorebook_source_replace_one",
+      "value": "替换"
+    },
+    {
+      "name": "lorebook_source_replace_all",
+      "value": "全部替换"
+    },
+    {
+      "name": "lorebook_source_close",
+      "value": "关闭"
+    },
+    {
+      "name": "lorebook_source_loading",
+      "value": "加载中…"
+    },
+    {
+      "name": "lorebook_source_editor_placeholder",
+      "value": "世界书源码(JSON)"
+    },
+    {
+      "name": "lorebook_source_lines_suffix",
+      "value": " 行"
+    },
+    {
+      "name": "lorebook_source_chars_suffix",
+      "value": " 字符"
+    },
+    {
+      "name": "lorebook_source_words_suffix",
+      "value": " 词"
+    },
+    {
+      "name": "lorebook_source_stats_title",
+      "value": "文字统计"
+    },
+    {
       "name": "lorebook_import",
       "value": "导入"
     },

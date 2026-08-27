@@ -14,7 +14,7 @@ import {
 import { LorebookService } from '../services/LorebookService';
 import { CharacterService } from '../services/CharacterService';
 import { CharacterBookRef } from '../repositories/CharacterRepository';
-import { parseLorebookJson } from '../parser/LorebookJsonParser';
+import { parseLorebookJson, parseLorebookSource, serializeLorebook } from '../parser/LorebookJsonParser';
 import { Logger } from '../utils/Logger';
 
 const LOG_TAG: string = 'LorebookViewModel';
@@ -156,6 +156,24 @@ export class LorebookViewModel {
       Logger.warn(LOG_TAG, 'listCharactersForBinding failed: ' + String(e));
       return [];
     }
+  }
+
+  /** 生成世界书源码 JSON(供"查看源码"编辑器)。 */
+  async loadLorebookSource(id: string): Promise<string> {
+    const book: Lorebook | null = await this.service.getById(id);
+    if (book === null) {
+      throw new Error('世界书不存在或已被删除');
+    }
+    return serializeLorebook(book);
+  }
+
+  /** 把编辑后的源码 JSON 保存回世界书(整册替换)。失败抛错。 */
+  async saveLorebookSource(id: string, jsonText: string): Promise<void> {
+    // 宽松解析保留全部条目,不做静默过滤;无效条目由保存层校验并明确报错,
+    // 保证保存后展开看到的内容与 JSON 一致,不偷偷丢条目/丢内容。
+    const parsed = parseLorebookSource(jsonText, '导入的世界书');
+    await this.service.replaceLorebookContent(id, parsed);
+    await this.load();
   }
 
   /** 通知首页角色列表刷新版本号(角色绑定世界书变化后让列表重新加载)。 */

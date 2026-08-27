@@ -6,6 +6,7 @@
     "pages/CharacterEditPage",
     "pages/AddCharacterPage",
     "pages/LorebookPage",
+    "pages/LorebookSourceEditorPage",
     "pages/ModelSettingsPage",
     "pages/ModelConfigEditPage",
     "pages/AppSettingsPage",

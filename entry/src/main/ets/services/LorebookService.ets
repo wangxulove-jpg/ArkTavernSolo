@@ -120,6 +120,45 @@ export class LorebookService {
     return lorebook;
   }
 
+  /**
+   * 用解析后的内容整册替换已有世界书(保留原 id/createdAt,替换 name/description/entries)。
+   * 供"查看源码"编辑器保存使用。任意条目不符合规则时明确报错,不静默丢弃内容。
+   */
+  async replaceLorebookContent(id: string, parsed: ParsedLorebookFile): Promise<Lorebook> {
+    this.requireInit();
+    const existing: Lorebook | null = await this.repository.getById(id);
+    if (existing === null) {
+      throw new Error('LorebookService replaceLorebookContent: not found');
+    }
+    // 明确校验,而不是静默丢弃:发现无效条目直接报错,保证 JSON 与保存结果一致
+    const invalidNames: string[] = [];
+    for (let i = 0; i < parsed.entries.length; i++) {
+      const err: string | null = validateLorebookEntry(parsed.entries[i]);
+      if (err !== null) {
+        invalidNames.push(parsed.entries[i].name);
+      }
+    }
+    if (invalidNames.length > 0) {
+      throw new Error('存在无效条目(' + invalidNames.join('、') + '),请检查 JSON 后重新保存');
+    }
+    const base: Lorebook = createLorebook(parsed.name, parsed.description, parsed.enabled);
+    const next: Lorebook = {
+      id: id,
+      name: base.name,
+      description: base.description,
+      enabled: base.enabled,
+      entries: parsed.entries,
+      createdAt: existing.createdAt,
+      updatedAt: Date.now()
+    };
+    const error: string | null = validateLorebook(next);
+    if (error !== null) {
+      throw new Error(error);
+    }
+    await this.repository.update(next);
+    return next;
+  }
+
   async update(id: string, updates: LorebookUpdates): Promise<Lorebook> {
     this.requireInit();
     const existing: Lorebook | null = await this.repository.getById(id);
