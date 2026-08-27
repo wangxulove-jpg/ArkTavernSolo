@@ -75,7 +75,8 @@ struct LorebookSourceEditorPage {
       return;
     }
     try {
-      this.sourceText = await this.vm.loadLorebookSource(id);
+      // 把字符串内部的 \n / \t 转义序列还原为真实换行/制表,便于阅读(不改变内容语义)
+      this.sourceText = unpackJsonForDisplay(await this.vm.loadLorebookSource(id));
       this.recomputeStats();
       this.isLoading = false;
     } catch (e) {
@@ -221,7 +222,9 @@ struct LorebookSourceEditorPage {
     }
     this.infoText = '';
     try {
-      await this.vm.saveLorebookSource(this.lorebookId, this.sourceText);
+      // 把显示用的真实换行/制表重新转义为 JSON 转义序列,恢复为合法 JSON 再保存
+      const strictJson: string = repackJsonForSave(this.sourceText);
+      await this.vm.saveLorebookSource(this.lorebookId, strictJson);
       promptAction.showToast({ message: '保存成功', duration: 1500 });
       router.back();
     } catch (e) {
@@ -523,4 +526,100 @@ function caseInsensitiveReplaceAll(
   }
   parts.push(text.substring(pos));
   return parts.join('');
+}
+
+/**
+ * 将严格 JSON 源码还原为便于阅读的显示文本:
+ * 仅把字符串字面量内部的 \n / \t 转义序列还原为真实换行/制表;结构缩进与其它转义原样保留。
+ * 通过进入/退出双引号字符串跟踪字符串边界,避免误改字符串外的结构缩进。
+ */
+function unpackJsonForDisplay(json: string): string {
+  const out: string[] = [];
+  const len: number = json.length;
+  let inString: boolean = false;
+  let i: number = 0;
+  while (i < len) {
+    const c: string = json.charAt(i);
+    if (inString) {
+      if (c === '\\' && i + 1 < len) {
+        const next: string = json.charAt(i + 1);
+        if (next === 'n') {
+          out.push('\n');
+          i += 2;
+          continue;
+        }
+        if (next === 't') {
+          out.push('\t');
+          i += 2;
+          continue;
+        }
+        // 其它转义(\\ \" \/ \b \f \r \uXXXX 等)原样保留
+        out.push(c);
+        out.push(next);
+        i += 2;
+        continue;
+      }
+      if (c === '"') {
+        inString = false;
+      }
+      out.push(c);
+      i += 1;
+      continue;
+    }
+    if (c === '"') {
+      inString = true;
+    }
+    out.push(c);
+    i += 1;
+  }
+  return out.join('');
+}
+
+/**
+ * 把显示文本(字符串内部可能是真实换行/制表)还原为合法 JSON:
+ * 仅把字符串字面量内部出现的真实换行/制表转义为 \n / \t;其余字符与转义原样保留。
+ */
+function repackJsonForSave(text: string): string {
+  const out: string[] = [];
+  const len: number = text.length;
+  let inString: boolean = false;
+  let i: number = 0;
+  while (i < len) {
+    const c: string = text.charAt(i);
+    if (inString) {
+      if (c === '\\') {
+        // 原样保留反斜杠,后续字符按普通字符继续处理(已有的 \\ 等转义不会被二次改写)
+        out.push(c);
+        i += 1;
+        continue;
+      }
+      if (c === '"') {
+        inString = false;
+        out.push(c);
+        i += 1;
+        continue;
+      }
+      if (c === '\n') {
+        out.push('\\');
+        out.push('n');
+        i += 1;
+        continue;
+      }
+      if (c === '\t') {
+        out.push('\\');
+        out.push('t');
+        i += 1;
+        continue;
+      }
+      out.push(c);
+      i += 1;
+      continue;
+    }
+    if (c === '"') {
+      inString = true;
+    }
+    out.push(c);
+    i += 1;
+  }
+  return out.join('');
 }
