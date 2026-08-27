@@ -1105,6 +1105,34 @@
       "value": "解除绑定"
     },
     {
+      "name": "lorebook_bind_character_action",
+      "value": "绑定到角色…"
+    },
+    {
+      "name": "lorebook_import",
+      "value": "导入"
+    },
+    {
+      "name": "lorebook_import_success_title",
+      "value": "导入成功"
+    },
+    {
+      "name": "lorebook_import_bind_character",
+      "value": "绑定到角色…"
+    },
+    {
+      "name": "lorebook_import_bind_character_title",
+      "value": "选择要绑定的角色"
+    },
+    {
+      "name": "lorebook_import_no_character",
+      "value": "暂无可绑定角色"
+    },
+    {
+      "name": "dialog_done",
+      "value": "完成"
+    },
+    {
       "name": "tab_sessions",
       "value": "对话记录"
     },

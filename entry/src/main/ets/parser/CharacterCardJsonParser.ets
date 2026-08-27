@@ -169,7 +169,7 @@ const MAX_FILE_SIZE_BYTES: number = 10 * 1024 * 1024;
 const MAX_FIELD_LENGTH: number = 100000;
 
 /** 备用开场白最大数量 */
-const MAX_ALTERNATE_GREETINGS: number = 20;
+const MAX_ALTERNATE_GREETINGS: number = 40;
 
 /** 标签最大数量 */
 const MAX_TAGS: number = 30;

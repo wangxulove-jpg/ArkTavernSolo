@@ -21,7 +21,7 @@ import { util } from '@kit.ArkTS';
 import { Character, createCharacter, updateCharacter, validateCharacter, CharacterUpdates } from '../models/Character';
 import { CharacterRepository, CharacterBookRef } from '../repositories/CharacterRepository';
 import { LorebookRepository } from '../repositories/LorebookRepository';
-import { LorebookPosition, createLorebook, createLorebookEntry, Lorebook, LorebookEntry } from '../models/Lorebook';
+import { LorebookPosition, createLorebook, createLorebookEntry, updateLorebook, Lorebook, LorebookEntry } from '../models/Lorebook';
 import { CharacterSelectionStore } from '../storage/CharacterSelectionStore';
 import { CharacterAssetStore } from '../storage/CharacterAssetStore';
 import { DatabaseError, DatabaseErrorType } from '../models/DatabaseError';
@@ -47,6 +47,11 @@ import {
 import { convertUriToPngBytes, isPngBytes } from '../utils/ImageConverter';
 
 const LOG_TAG: string = 'CharacterService';
+
+/**
+ * 角色专属世界书的命名后缀(导入时按"角色名 + 此后缀"创建,改名时按此前缀规则同步)。
+ */
+const CHARACTER_BOOK_NAME_SUFFIX: string = ' · 角色世界书';
 
 /** 单个 extensions 字段序列化长度上限(字节)。超过即视为无用大 blob,导入时丢弃。 */
 const EXTENSION_VALUE_SIZE_CAP: number = 200 * 1024;
@@ -207,6 +212,10 @@ export class CharacterService {
         throw e;
       }
       throw new Error('CharacterService update failed: ' + String(e));
+    }
+    // 角色改名时,同步其专属世界书的"角色名"前缀(仅当书名按角色名派生命名时)
+    if (existing.name !== updated.name && updated.characterBookId.length > 0) {
+      await this.syncCharacterBookName(updated.characterBookId, existing.name, updated.name);
     }
     return updated;
   }
@@ -816,7 +825,7 @@ export class CharacterService {
       Logger.warn(LOG_TAG, 'character_book skipped: lorebookRepository not injected');
       return '';
     }
-    const bookName: string = parsed.name + ' · 角色世界书';
+    const bookName: string = parsed.name + CHARACTER_BOOK_NAME_SUFFIX;
     const lorebook: Lorebook = createLorebook(bookName, '从角色卡导入的专属世界书', true);
     const entries: LorebookEntry[] = [];
     for (let i = 0; i < parsed.characterBook.entries.length; i++) {
@@ -847,6 +856,54 @@ export class CharacterService {
     };
     await this.lorebookRepository.insert(fullLorebook);
     return lorebook.id;
+  }
+
+  /**
+   * 角色改名后同步其专属世界书书名。
+   *
+   * 仅当世界书书名以"旧角色名"为前缀(即按"角色名 + ' · 角色世界书'"派生命名)时,
+   * 把前缀替换为新角色名;自定义书名的世界书(不以旧角色名开头)不做改动。
+   * 失败只记录日志,不影响角色改名主流程。
+   */
+  private async syncCharacterBookName(
+    bookId: string,
+    oldName: string,
+    newName: string
+  ): Promise<void> {
+    const oldTrim: string = oldName.trim();
+    const newTrim: string = newName.trim();
+    if (bookId.length === 0 || oldTrim.length === 0 || newTrim.length === 0
+      || oldTrim === newTrim) {
+      return;
+    }
+    if (this.lorebookRepository === null) {
+      return;
+    }
+    let book: Lorebook | null = null;
+    try {
+      book = await this.lorebookRepository.getById(bookId);
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'syncCharacterBookName: get failed: ' + String(e));
+      return;
+    }
+    if (book === null) {
+      return;
+    }
+    const currentName: string = book.name ?? '';
+    if (!currentName.startsWith(oldTrim)) {
+      // 书名不是按"旧角色名"派生的,视为自定义书名,不改动
+      return;
+    }
+    const updatedBook: Lorebook = updateLorebook(book, {
+      name: newTrim + currentName.substring(oldTrim.length)
+    });
+    try {
+      await this.lorebookRepository.update(updatedBook);
+      Logger.info(LOG_TAG, 'syncCharacterBookName: ' + bookId
+        + ' "' + currentName + '" -> "' + (updatedBook.name ?? '') + '"');
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'syncCharacterBookName: update failed: ' + String(e));
+    }
   }
 
   /**

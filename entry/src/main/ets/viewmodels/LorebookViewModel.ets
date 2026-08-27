@@ -14,6 +14,7 @@ import {
 import { LorebookService } from '../services/LorebookService';
 import { CharacterService } from '../services/CharacterService';
 import { CharacterBookRef } from '../repositories/CharacterRepository';
+import { parseLorebookJson } from '../parser/LorebookJsonParser';
 import { Logger } from '../utils/Logger';
 
 const LOG_TAG: string = 'LorebookViewModel';
@@ -118,6 +119,49 @@ export class LorebookViewModel {
       this.errorMessage = '解除绑定失败: ' + String(e);
       Logger.error(LOG_TAG, 'unbindCharacter failed: ' + String(e));
     }
+  }
+
+  /**
+   * 从文件 URI 导入世界书(JSON)。
+   * 读取文本 → 白名单解析 → 批量入库 → 刷新列表。失败时抛错,由页面提示。
+   */
+  async importLorebookFile(uri: string): Promise<Lorebook> {
+    this.errorMessage = '';
+    const text: string = await this.characterService.readFileContent(uri);
+    const fallbackName: string = basenameWithoutExtension(uri);
+    const parsed = parseLorebookJson(text, fallbackName);
+    const book: Lorebook = await this.service.importLorebook(parsed);
+    await this.load();
+    return book;
+  }
+
+  /** 将某世界书绑定到指定角色(通过 character_book_id)。失败时抛错。 */
+  async bindLorebookToCharacter(bookId: string, characterId: string): Promise<void> {
+    await this.characterService.update(characterId, { characterBookId: bookId });
+    this.bumpCharacterListVersion();
+    await this.refreshBoundCharacters();
+    this.notifyDataUpdate();
+  }
+
+  /** 获取可选绑定角色列表(id + name,轻量)。失败返回空数组。 */
+  async listCharactersForBinding(): Promise<CharacterBookRef[]> {
+    try {
+      const chars = await this.characterService.listSummaries();
+      const refs: CharacterBookRef[] = [];
+      for (let i = 0; i < chars.length; i++) {
+        refs.push({ id: chars[i].id, name: chars[i].name });
+      }
+      return refs;
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'listCharactersForBinding failed: ' + String(e));
+      return [];
+    }
+  }
+
+  /** 通知首页角色列表刷新版本号(角色绑定世界书变化后让列表重新加载)。 */
+  private bumpCharacterListVersion(): void {
+    const v: number = AppStorage.get<number>('characterListVersion') ?? 0;
+    AppStorage.setOrCreate<number>('characterListVersion', v + 1);
   }
 
   private notifyDataUpdate(): void {
@@ -367,4 +411,23 @@ export class LorebookViewModel {
     }
     return count.toString() + ' 个条目';
   }
+}
+
+/** 从文件 URI 中提取不含扩展名的文件名(用于世界书无书名时的兜底)。 */
+function basenameWithoutExtension(uri: string): string {
+  const idx: number = uri.lastIndexOf('/');
+  let name: string = idx >= 0 ? uri.substring(idx + 1) : uri;
+  // picker 返回的 uri 中非 ASCII 文件名可能为 percent 编码,需解码后才是真实文件名
+  try {
+    name = decodeURIComponent(name);
+  } catch (e) {
+    // 非合法编码则原样使用
+  }
+  // 去掉可能的查询串
+  const qIdx: number = name.indexOf('?');
+  if (qIdx >= 0) {
+    name = name.substring(0, qIdx);
+  }
+  const dot: number = name.lastIndexOf('.');
+  return dot > 0 ? name.substring(0, dot) : name;
 }

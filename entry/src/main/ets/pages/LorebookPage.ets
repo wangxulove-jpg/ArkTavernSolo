@@ -18,7 +18,8 @@ import { CharacterService } from '../services/CharacterService';
 import { CharacterBookRef } from '../repositories/CharacterRepository';
 import { Lorebook, LorebookEntry } from '../models/Lorebook';
 import { AppServices } from '../services/AppServices';
-import { router } from '@kit.ArkUI';
+import { router, promptAction } from '@kit.ArkUI';
+import { picker } from '@kit.CoreFileKit';
 import { ThemePalette } from '../theme/ThemePalette';
 
 /**
@@ -43,6 +44,16 @@ struct LorebookPage {
   @State vmErrorMessage: string = '';
   /** 世界书 id → 绑定角色引用(镜像 ViewModel,用于展示绑定关系) */
   @State boundCharacterMap: Record<string, CharacterBookRef[]> = {};
+  /** 是否正在导入世界书文件 */
+  @State importingLorebook: boolean = false;
+  /** 导入成功待操作的归书(null 表示关闭导入结果弹窗) */
+  @State importedBook: Lorebook | null = null;
+  /** 绑定角色选择弹窗是否显示 */
+  @State showBindPicker: boolean = false;
+  /** 绑定角色弹窗对应的世界书 ID */
+  @State bindTargetBookId: string = '';
+  /** 可选绑定角色列表 */
+  @State bindCharacters: CharacterBookRef[] = [];
   /** 本地 @State 镜像,用于条目编辑对话框表单字段 */
   @State editEntryName: string = '';
   @State editEntryKeys: string = '';
@@ -97,6 +108,49 @@ struct LorebookPage {
     this.editEntryPriority = this.viewModel.editEntryPriority;
   }
 
+  /** 选择并导入世界书文件(JSON)。成功后弹出操作弹窗。 */
+  private async pickLorebookFile(): Promise<void> {
+    if (this.importingLorebook || this.viewModel === null) {
+      return;
+    }
+    let uris: string[] = [];
+    try {
+      const documentPicker = new picker.DocumentViewPicker();
+      const options = new picker.DocumentSelectOptions();
+      options.maxSelectNumber = 1;
+      options.fileSuffixFilters = ['.json', '.txt', '.png'];
+      uris = await documentPicker.select(options);
+    } catch (e) {
+      promptAction.showToast({ message: '打开文件选择器失败', duration: 2000 });
+      return;
+    }
+    if (uris.length === 0) {
+      return;
+    }
+    this.importingLorebook = true;
+    try {
+      const book: Lorebook = await this.viewModel.importLorebookFile(uris[0]);
+      this.importedBook = book;
+      this.syncFromViewModel();
+    } catch (e) {
+      const msg: string = (e as Error).message ?? '导入失败';
+      promptAction.showToast({ message: msg, duration: 2500 });
+    } finally {
+      this.importingLorebook = false;
+    }
+  }
+
+  /** 打开绑定角色选择弹窗。 */
+  private async openBindPicker(bookId: string): Promise<void> {
+    if (this.viewModel === null) {
+      return;
+    }
+    this.bindTargetBookId = bookId;
+    this.importedBook = null;
+    this.bindCharacters = await this.viewModel.listCharactersForBinding();
+    this.showBindPicker = true;
+  }
+
   build() {
     Stack() {
       Column() {
@@ -117,7 +171,18 @@ struct LorebookPage {
             .layoutWeight(1)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .padding({ left: 8, right: 40 })
+            .padding({ left: 8 })
+
+          Button($r('app.string.lorebook_import'))
+            .fontSize(13)
+            .backgroundColor(Color.Transparent)
+            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+            .height(32)
+            .padding({ left: 10, right: 10 })
+            .enabled(!this.importingLorebook)
+            .onClick(() => {
+              void this.pickLorebookFile();
+            })
         }
         .width('100%')
         .padding({ top: this.statusBarHeight + 12, left: 12, right: 12, bottom: 12 })
@@ -194,6 +259,16 @@ struct LorebookPage {
       // 删除确认(条目)
       if (this.deleteTargetEntry !== null) {
         this.deleteEntryConfirm();
+      }
+
+      // 导入结果弹窗
+      if (this.importedBook !== null) {
+        this.importResultDialog();
+      }
+
+      // 绑定角色弹窗
+      if (this.showBindPicker) {
+        this.bindCharacterDialog();
       }
     }
     .width('100%')
@@ -463,10 +538,10 @@ struct LorebookPage {
     .margin({ top: 4 })
   }
 
-  /** 展开区:列出绑定角色,支持逐个解除绑定 */
+  /** 展开区:列出绑定角色(可逐个解除),并支持"绑定到角色…"新增绑定 */
   @Builder
   boundCharactersExpand(bookId: string) {
-    if (this.viewModel !== null && this.viewModel.hasBoundCharacters(bookId)) {
+    if (this.viewModel !== null) {
       Divider()
         .color(ThemePalette.dividerColor(this.effectiveTheme))
         .width('100%')
@@ -478,31 +553,40 @@ struct LorebookPage {
         .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
         .width('100%')
         .padding({ left: 12, right: 12, top: 10 })
-      ForEach(this.viewModel.getBoundCharacters(bookId), (ref: CharacterBookRef) => {
-        Row() {
-          Text(ref.name)
-            .fontSize(13)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .layoutWeight(1)
-          Button($r('app.string.lorebook_unbind_character'))
-            .fontSize(12)
-            .backgroundColor(Color.Transparent)
-            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-            .height(28)
-            .padding({ left: 8, right: 8 })
-            .onClick(() => {
-              if (this.viewModel !== null) {
-                void this.viewModel.unbindCharacter(bookId, ref.id).then(() => {
-                  this.syncFromViewModel();
-                });
-              }
-            })
-        }
-        .width('100%')
-        .padding({ left: 12, right: 12, top: 8, bottom: 4 })
-      }, (ref: CharacterBookRef) => ref.id)
+
+      if (this.viewModel.hasBoundCharacters(bookId)) {
+        ForEach(this.viewModel.getBoundCharacters(bookId), (ref: CharacterBookRef) => {
+          Row() {
+            Text(ref.name)
+              .fontSize(13)
+              .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .layoutWeight(1)
+            Button($r('app.string.lorebook_unbind_character'))
+              .fontSize(12)
+              .backgroundColor(Color.Transparent)
+              .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+              .height(28)
+              .padding({ left: 8, right: 8 })
+              .onClick(() => {
+                if (this.viewModel !== null) {
+                  void this.viewModel.unbindCharacter(bookId, ref.id).then(() => {
+                    this.syncFromViewModel();
+                  });
+                }
+              })
+          }
+          .width('100%')
+          .padding({ left: 12, right: 12, top: 6, bottom: 4 })
+        }, (ref: CharacterBookRef) => ref.id)
+      } else {
+        Text($r('app.string.lorebook_bound_none'))
+          .fontSize(12)
+          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+          .width('100%')
+          .padding({ left: 12, right: 12, top: 6, bottom: 8 })
+      }
     }
   }
 
@@ -677,6 +761,78 @@ struct LorebookPage {
               this.viewModel.editLorebookDescription = value;
             }
           })
+
+        // 绑定角色(仅编辑模式)
+        if (this.viewModel !== null && this.viewModel.editingLorebook !== null) {
+          Divider()
+            .color(ThemePalette.dividerColor(this.effectiveTheme))
+            .width('100%')
+            .height(1)
+            .margin({ top: 4, bottom: 12 })
+
+          Text($r('app.string.lorebook_bound_characters_section'))
+            .fontSize(13)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+            .width('100%')
+            .margin({ bottom: 6 })
+
+          if (this.viewModel.hasBoundCharacters(this.getEditingLorebookId())) {
+            ForEach(this.viewModel.getBoundCharacters(this.getEditingLorebookId()),
+              (ref: CharacterBookRef) => {
+                Row() {
+                  Text(ref.name)
+                    .fontSize(13)
+                    .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                    .layoutWeight(1)
+                  Button($r('app.string.lorebook_unbind_character'))
+                    .fontSize(12)
+                    .backgroundColor(Color.Transparent)
+                    .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+                    .height(28)
+                    .padding({ left: 8, right: 8 })
+                    .onClick(() => {
+                      if (this.viewModel !== null) {
+                        void this.viewModel.unbindCharacter(
+                          this.getEditingLorebookId(), ref.id
+                        ).then(() => {
+                          this.syncFromViewModel();
+                        });
+                      }
+                    })
+                }
+                .width('100%')
+                .padding({ top: 4, bottom: 4 })
+              }, (ref: CharacterBookRef) => ref.id)
+          } else {
+            Text($r('app.string.lorebook_bound_none'))
+              .fontSize(13)
+              .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+              .width('100%')
+              .margin({ bottom: 8 })
+          }
+
+          Button($r('app.string.lorebook_bind_character_action'))
+            .fontSize(13)
+            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+            .height(36)
+            .width('100%')
+            .borderRadius(18)
+            .margin({ bottom: 16 })
+            .onClick(() => {
+              const bookId: string = this.getEditingLorebookId();
+              if (this.viewModel !== null) {
+                this.viewModel.closeLorebookDialog();
+              }
+              this.syncFromViewModel();
+              if (bookId.length > 0) {
+                void this.openBindPicker(bookId);
+              }
+            })
+        }
 
         Row() {
           Button($r('app.string.lorebook_form_cancel'))
@@ -992,6 +1148,210 @@ struct LorebookPage {
       }
     }
     .width('100%')
+  }
+
+  // ===== 导入世界书结果弹窗 =====
+
+  @Builder
+  importResultDialog() {
+    Stack() {
+      Column() {
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor('rgba(0,0,0,0.4)')
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+      .onClick(() => {
+        this.importedBook = null;
+      })
+
+      Column() {
+        Text($r('app.string.lorebook_import_success_title'))
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .margin({ bottom: 8 })
+
+        Text(this.importedBook !== null ? this.importedBook.name : '')
+          .fontSize(14)
+          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .margin({ bottom: 4 })
+
+        Text(this.importedBook !== null
+          ? '已导入 ' + String(this.importedBook.entries.length) + ' 个条目'
+          : '')
+          .fontSize(12)
+          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+          .margin({ bottom: 16 })
+
+        Button($r('app.string.lorebook_set_current'))
+          .fontSize(14)
+          .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
+          .fontColor($r('app.color.app_on_accent'))
+          .height(40)
+          .width('100%')
+          .borderRadius(20)
+          .margin({ bottom: 8 })
+          .onClick(() => {
+            const id: string = this.importedBook !== null ? this.importedBook.id : '';
+            this.importedBook = null;
+            if (id.length > 0 && this.viewModel !== null) {
+              void this.viewModel.setCurrentLorebook(id).then(() => {
+                this.syncFromViewModel();
+              });
+            }
+          })
+
+        Button($r('app.string.lorebook_import_bind_character'))
+          .fontSize(14)
+          .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+          .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+          .height(40)
+          .width('100%')
+          .borderRadius(20)
+          .margin({ bottom: 8 })
+          .onClick(() => {
+            const id: string = this.importedBook !== null ? this.importedBook.id : '';
+            if (id.length > 0) {
+              void this.openBindPicker(id);
+            }
+          })
+
+        Button($r('app.string.dialog_done'))
+          .fontSize(14)
+          .backgroundColor(Color.Transparent)
+          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+          .height(40)
+          .width('100%')
+          .onClick(() => {
+            this.importedBook = null;
+          })
+      }
+      .width('82%')
+      .padding(20)
+      .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+      .borderRadius(16)
+      .alignItems(HorizontalAlign.Center)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('rgba(0,0,0,0.4)')
+    .onClick(() => {
+      this.importedBook = null;
+    })
+  }
+
+  // ===== 绑定角色弹窗 =====
+
+  @Builder
+  bindCharacterDialog() {
+    Stack() {
+      Column() {
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor('rgba(0,0,0,0.4)')
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+      .onClick(() => {
+        this.showBindPicker = false;
+      })
+
+      Column() {
+        Row() {
+          Text($r('app.string.lorebook_import_bind_character_title'))
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .layoutWeight(1)
+          Text($r('app.string.dialog_close'))
+            .fontSize(14)
+            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+            .onClick(() => {
+              this.showBindPicker = false;
+            })
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+        .margin({ bottom: 12 })
+
+        if (this.bindCharacters.length === 0) {
+          Text($r('app.string.lorebook_import_no_character'))
+            .fontSize(13)
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            .width('100%')
+            .textAlign(TextAlign.Center)
+            .padding(20)
+        } else {
+          Scroll() {
+            Column() {
+              ForEach(this.bindCharacters, (ref: CharacterBookRef) => {
+                Text(ref.name)
+                  .fontSize(14)
+                  .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .width('100%')
+                  .padding({ left: 12, right: 12, top: 12, bottom: 12 })
+                  .margin({ bottom: 6 })
+                  .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+                  .borderRadius(8)
+                  .onClick(() => {
+                    this.bindToCharacter(ref.id, ref.name);
+                  })
+              }, (ref: CharacterBookRef) => ref.id)
+            }
+            .width('100%')
+          }
+          .height('70%')
+          .scrollBar(BarState.Auto)
+          .align(Alignment.Top)
+          .width('100%')
+        }
+
+        Button($r('app.string.dialog_cancel'))
+          .fontSize(14)
+          .backgroundColor(Color.Transparent)
+          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+          .height(40)
+          .width('100%')
+          .margin({ top: 12 })
+          .onClick(() => {
+            this.showBindPicker = false;
+          })
+      }
+      .width('85%')
+      .padding(20)
+      .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+      .borderRadius(16)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('rgba(0,0,0,0.4)')
+  }
+
+  /** 执行世界书 → 角色绑定。 */
+  private async bindToCharacter(refId: string, refName: string): Promise<void> {
+    this.showBindPicker = false;
+    if (this.viewModel === null || this.bindTargetBookId.length === 0) {
+      return;
+    }
+    try {
+      await this.viewModel.bindLorebookToCharacter(this.bindTargetBookId, refId);
+      this.bindTargetBookId = '';
+      promptAction.showToast({ message: '已绑定到 ' + refName, duration: 2000 });
+    } catch (e) {
+      promptAction.showToast({ message: '绑定失败: ' + String((e as Error).message ?? e), duration: 2500 });
+    }
+  }
+
+  /** 当前编辑弹窗对应的世界书 ID(无则空串)。 */
+  private getEditingLorebookId(): string {
+    if (this.viewModel !== null && this.viewModel.editingLorebook !== null) {
+      return this.viewModel.editingLorebook.id;
+    }
+    return '';
   }
 
   // ===== 删除确认(世界书) =====

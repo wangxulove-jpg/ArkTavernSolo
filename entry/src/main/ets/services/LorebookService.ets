@@ -32,6 +32,7 @@ import { ChatMessage } from '../models/ChatMessage';
 import { ChatRole } from '../models/ChatRole';
 import { LorebookRepository } from '../repositories/LorebookRepository';
 import { LorebookSelectionStore } from '../storage/LorebookSelectionStore';
+import { ParsedLorebookFile, buildLorebookFromParsed } from '../parser/LorebookJsonParser';
 
 /** 默认扫描最近消息数 */
 const DEFAULT_SCAN_MESSAGES: number = 10;
@@ -96,6 +97,21 @@ export class LorebookService {
   async create(name: string, description: string = ''): Promise<Lorebook> {
     this.requireInit();
     const lorebook: Lorebook = createLorebook(name, description);
+    const error: string | null = validateLorebook(lorebook);
+    if (error !== null) {
+      throw new Error(error);
+    }
+    await this.repository.insert(lorebook);
+    return lorebook;
+  }
+
+  /**
+   * 批量导入一本世界书(含条目)。
+   * 供"导入世界书"文件功能使用;条目已在 parser 中白名单解析与校验。
+   */
+  async importLorebook(parsed: ParsedLorebookFile): Promise<Lorebook> {
+    this.requireInit();
+    const lorebook: Lorebook = buildLorebookFromParsed(parsed);
     const error: string | null = validateLorebook(lorebook);
     if (error !== null) {
       throw new Error(error);

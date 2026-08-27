@@ -3295,6 +3295,18 @@ export class ChatService {
       }
     }
 
+    // 可观测性:记录本次请求实际加载到的世界书(全局/角色专属),用于排查"世界书是否参与注入"
+    Logger.info(LOG_TAG,
+      'buildRequestMessages worldbook: global=' + (lorebook !== undefined
+        ? ('id=' + lorebook.id + ' name=' + lorebook.name + ' enabled=' + String(lorebook.enabled)
+          + ' entries=' + String(lorebook.entries.length))
+        : 'none')
+      + ' characterBook=' + (characterBook !== undefined
+        ? ('id=' + characterBook.id + ' name=' + characterBook.name + ' enabled=' + String(characterBook.enabled)
+          + ' entries=' + String(characterBook.entries.length))
+        : 'none')
+      + ' characterBookId=' + (this.character !== null ? this.character.characterBookId : ''));
+
     // 通过 PromptBuilder.buildMacroContext 构建宏替换上下文
     // (包含 description / personality / scenario / mesExample / lastMessage / originalContent)
     // 用户称呼优先级:对话覆盖 > 角色设置 > 全局设置 > 'User'

@@ -1407,6 +1407,7 @@ function buildSystemPrompt(input: AiCharacterInput): string {
     + '\n- 不预设用户的心理活动'
     + '\n- 开场白应为用户保留互动空间'
     + '\n- 多个开场白之间应有明显差异'
+    + '\n- alternate_greetings 数组中,每个元素是一个完整开场白(可包含多个自然段),不要按段落拆成多个元素,数量控制在合理范围(建议 3-10 个)'
     + '\n- 对话示例应体现角色语气和行为方式'
     + '\n- System Prompt 应帮助模型稳定扮演角色'
     + '\n- Post-History Instructions 应简洁'

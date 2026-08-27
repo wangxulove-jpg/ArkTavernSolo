@@ -104,7 +104,7 @@ export interface V3CharacterFields {
 
 const MAX_NAME_LENGTH: number = 100;
 const MAX_FIELD_LENGTH: number = 100000;
-const MAX_ALTERNATE_GREETINGS: number = 20;
+const MAX_ALTERNATE_GREETINGS: number = 40;
 const MAX_TAGS: number = 30;
 
 /**
@@ -365,7 +365,9 @@ export function buildCharacterSystemContent(character: Character): string {
 function filterGreetings(greetings: string[]): string[] {
   const result: string[] = [];
   const seen: Set<string> = new Set();
-  for (let i = 0; i < greetings.length; i++) {
+  // 每个元素是一个完整开场白(内部可含多段)。超过上限时收敛到上限,不再硬性报错,
+  // 避免 AI 生成较多开场白时"不能超过XX条"导致角色卡无法保存。
+  for (let i = 0; i < greetings.length && result.length < MAX_ALTERNATE_GREETINGS; i++) {
     const trimmed: string = greetings[i].trim();
     if (trimmed.length === 0) {
       continue;
