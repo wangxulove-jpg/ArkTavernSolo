@@ -371,6 +371,8 @@ export struct ChatRichText {
           return $r('app.color.chat_text_link');
         case 'quote':
           return $r('app.color.chat_text_quote');
+        case 'header':
+          return $r('app.color.chat_text_emphasis');
         case 'system':
           return $r('app.color.chat_text_system');
         case 'character':
@@ -391,7 +393,8 @@ export struct ChatRichText {
     switch (seg.colorRole) {
       case 'emphasis':
       case 'secondary':
-        // 加粗/斜体/删除线归入强调色
+      case 'header':
+        // 加粗/斜体/删除线/标题归入强调色
         return theme.emphasisColor;
       case 'dialogue':
       case 'character':
@@ -418,6 +421,17 @@ export struct ChatRichText {
     }
   }
 
+  /**
+   * 计算片段字号。标题(#)按级别放大,其余使用基础字号。
+   */
+  private getSegmentFontSize(base: number, seg: ChatTextSegment): number {
+    if (seg.styleType !== 'header') {
+      return base;
+    }
+    const levelStep: number = seg.listLevel <= 1 ? 3 : (seg.listLevel === 2 ? 2 : 1);
+    return base + levelStep;
+  }
+
   build() {
     if (this.segments.length === 0) {
       // 空内容占位
@@ -430,7 +444,7 @@ export struct ChatRichText {
         ForEach(this.segments, (seg: ChatTextSegment, index: number) => {
           Span(seg.text)
             .fontColor(this.getSegmentColor(seg))
-            .fontSize(this.settings !== null ? this.settings.fontSize : 16)
+            .fontSize(this.getSegmentFontSize(this.settings !== null ? this.settings.fontSize : 16, seg))
             .fontWeight(seg.bold ? FontWeight.Bold : FontWeight.Normal)
             .fontStyle(seg.italic ? FontStyle.Italic : FontStyle.Normal)
             .decoration({

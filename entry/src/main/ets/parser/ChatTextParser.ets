@@ -54,6 +54,8 @@ export type ChatTextStyleType =
   | 'link'
   | 'quote'
   | 'list_item'
+  | 'header'
+  | 'hr'
   | 'dialogue'
   | 'action'
   | 'narrator';
@@ -82,6 +84,7 @@ export type ChatColorRole =
   | 'code'
   | 'link'
   | 'quote'
+  | 'header'
   | 'system'
   | 'character';
 
@@ -125,7 +128,7 @@ export function createSegment(
   colorRole: ChatColorRole = 'default',
   extras: Partial<ChatTextSegment> = {}
 ): ChatTextSegment {
-  const bold: boolean = styleType === 'bold' || styleType === 'bold_italic' || extras.bold === true;
+  const bold: boolean = styleType === 'bold' || styleType === 'bold_italic' || styleType === 'header' || extras.bold === true;
   const italic: boolean = styleType === 'italic' || styleType === 'bold_italic' || extras.italic === true;
   const strike: boolean = styleType === 'strikethrough' || extras.strike === true;
   const code: boolean = styleType === 'code' || extras.code === true;
@@ -267,6 +270,45 @@ function parseLine(
     return [];
   }
 
+  // 检测 Markdown 标题 # ## ###(1-6 级)
+  const headerMatch: RegExpMatchArray | null = line.match(/^\s*(#{1,6})\s+(.*)$/);
+  if (headerMatch !== null) {
+    const level: number = headerMatch[1].length;
+    const headingContent: string = headerMatch[2].trim();
+    // 标题以加粗 + 标题色呈现,内容内部仍可解析行内 Markdown(如 **加粗**)
+    const inner: ChatTextSegment[] = parseInlineMarkdown(headingContent, options, codePlaceholders, true);
+    const wrapped: ChatTextSegment[] = [];
+    for (let i = 0; i < inner.length; i++) {
+      const s: ChatTextSegment = inner[i];
+      wrapped.push({
+        text: s.text,
+        styleType: 'header',
+        colorRole: 'header',
+        bold: true,
+        italic: s.italic,
+        strike: s.strike,
+        code: s.code,
+        dialogue: false,
+        narrator: false,
+        linkTarget: s.linkTarget,
+        lineStart: i === 0,
+        listLevel: level
+      });
+    }
+    return wrapped;
+  }
+
+  // 检测分隔线 --- / *** / ___
+  const hrMatch: RegExpMatchArray | null = line.match(/^\s*(-{3,}|\*{3,}|_{3,})\s*$/);
+  if (hrMatch !== null) {
+    return [createSegment('――――――――', 'hr', 'secondary', { lineStart: isFirstLine })];
+  }
+
+  // 检测表格行(以 | 开头,含至少 2 个 |)
+  if (isTableRow(line)) {
+    return parseTableRow(line, isFirstLine, options, codePlaceholders);
+  }
+
   // 检测引用 >
   const quoteMatch: RegExpMatchArray | null = line.match(/^>\s?(.*)$/);
   if (quoteMatch !== null) {
@@ -366,13 +408,91 @@ function parseLine(
 }
 
 /**
+ * 是否为 Markdown 表格行:以 | 开头,且包含至少 2 个 |。
+ */
+function isTableRow(line: string): boolean {
+  if (!line.trimStart().startsWith('|')) {
+    return false;
+  }
+  let count: number = 0;
+  for (let i = 0; i < line.length; i++) {
+    if (line.charAt(i) === '|') {
+      count++;
+    }
+  }
+  return count >= 2;
+}
+
+/**
+ * 解析一行 Markdown 表格:把 | 作为分割,单元格内容正常渲染,| 用次要色弱化。
+ * 表头分隔行(| --- | --- |)渲染为细分隔线。
+ */
+function parseTableRow(
+  line: string,
+  isFirstLine: boolean,
+  options: ChatTextParserOptions,
+  codePlaceholders: CodePlaceholder[]
+): ChatTextSegment[] {
+  const cells: string[] = line.split('|');
+  // 去掉首尾空白单元,只保留有效单元之间
+  const trimmedCells: string[] = [];
+  for (let i = 0; i < cells.length; i++) {
+    const t: string = cells[i].trim();
+    if (t.length > 0) {
+      trimmedCells.push(t);
+    }
+  }
+
+  // 表头分隔行:每个单元都是 :?-+:? 形式的横线
+  let isSeparator: boolean = trimmedCells.length > 0;
+  for (let i = 0; i < trimmedCells.length; i++) {
+    if (!/^:?-+:?$/.test(trimmedCells[i])) {
+      isSeparator = false;
+      break;
+    }
+  }
+  if (isSeparator) {
+    return [createSegment('――――――――', 'hr', 'secondary', { lineStart: isFirstLine })];
+  }
+
+  const result: ChatTextSegment[] = [];
+  const pipe: ChatTextSegment = createSegment('│ ', 'normal', 'secondary');
+  for (let i = 0; i < trimmedCells.length; i++) {
+    if (i > 0) {
+      result.push(pipe);
+    }
+    const inner: ChatTextSegment[] = parseInlineMarkdown(trimmedCells[i], options, codePlaceholders, true);
+    for (let j = 0; j < inner.length; j++) {
+      const s: ChatTextSegment = inner[j];
+      result.push({
+        text: s.text,
+        styleType: s.styleType,
+        colorRole: s.colorRole,
+        bold: s.bold,
+        italic: s.italic,
+        strike: s.strike,
+        code: s.code,
+        dialogue: s.dialogue,
+        narrator: s.narrator,
+        linkTarget: s.linkTarget,
+        lineStart: i === 0 && j === 0,
+        listLevel: 0
+      });
+    }
+  }
+  return result;
+}
+
+/**
  * 解析行内 Markdown。
  * 顺序:链接 → 加粗斜体 → 加粗 → 斜体 → 删除线 → 还原代码 → 对白
+ * @param skipDecorations true 时跳过对白/动作装饰识别(用于表格单元格)
  */
 function parseInlineMarkdown(
   text: string,
   options: ChatTextParserOptions,
-  codePlaceholders: CodePlaceholder[]
+  codePlaceholders: CodePlaceholder[],
+  skipDecorations: boolean = false
 ): ChatTextSegment[] {
   if (text.length === 0) {
     return [];
@@ -397,7 +517,7 @@ function parseInlineMarkdown(
   segments = restoreCode(segments, codePlaceholders);
 
   // 对白识别(在代码还原后做,避免代码内容被误判)
-  if (options.enableDialogue) {
+  if (options.enableDialogue && !skipDecorations) {
     segments = applyDialogue(segments);
     // 括号动作/旁白识别 (…)、（…）
     segments = applyParenthetical(segments);
