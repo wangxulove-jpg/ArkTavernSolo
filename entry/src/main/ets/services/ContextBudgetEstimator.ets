@@ -184,32 +184,56 @@ export class ContextBudgetEstimator {
    * 将 source 转换为用户可读的中文名称。
    */
   private labelForSource(src: ChatMessageSource): string {
-    switch (src) {
-      case ChatMessageSource.PromptPresetSystem:
-        return 'Prompt Preset';
-      case ChatMessageSource.ExternalSystem:
-        return 'System Prompt';
-      case ChatMessageSource.CharacterPrompt:
-        return '角色卡';
-      case ChatMessageSource.LorebookBefore:
-        return '角色世界书';
-      case ChatMessageSource.LorebookAfter:
-        return '全局世界书';
-      case ChatMessageSource.MemorySummary:
-        return '记忆摘要';
-      case ChatMessageSource.CharacterMesExample:
-        return '对话示例';
-      case ChatMessageSource.CharacterFirstMessage:
-        return '角色首条消息';
-      case ChatMessageSource.NarratorInstruction:
-        return '旁白指令';
-      case ChatMessageSource.Conversation:
-        return '最近聊天历史';
-      case ChatMessageSource.CharacterPostHistory:
-        return 'Post-History Instructions';
-      default:
-        return '其他';
-    }
+    return sourceDisplayLabel(src);
+  }
+}
+
+/**
+ * 将消息来源(source)转换为用户可读的中文名称。
+ * 供分段统计与"发送顺序"展示共用,保证两处名称一致。
+ */
+export function sourceDisplayLabel(src: ChatMessageSource): string {
+  switch (src) {
+    case ChatMessageSource.PromptPresetSystem:
+      return 'Prompt Preset';
+    case ChatMessageSource.ExternalSystem:
+      return 'System Prompt';
+    case ChatMessageSource.CharacterPrompt:
+      return '角色卡';
+    case ChatMessageSource.LorebookBefore:
+    // 按插入位置命名(角色前/后),而不是"角色/全局"——注入消息不区分来源书,
+    // 全局书与角色书的条目都按 entry.position 归属这两段,避免误导用户以为加载了全局世界书
+      return '世界书(角色前)';
+    case ChatMessageSource.LorebookAfter:
+      return '世界书(角色后)';
+    case ChatMessageSource.MemorySummary:
+      return '记忆摘要';
+    case ChatMessageSource.MemoryCore:
+      return '核心记忆';
+    case ChatMessageSource.MemoryChapter:
+      return '章节记忆';
+    case ChatMessageSource.MemoryRolling:
+      return '滚动记忆';
+    case ChatMessageSource.MemoryLegacy:
+      return '旧记忆';
+    case ChatMessageSource.PersonaBefore:
+      return 'Persona(角色前)';
+    case ChatMessageSource.PersonaAfter:
+      return 'Persona(角色后)';
+    case ChatMessageSource.CrossSessionContext:
+      return '跨会话上下文';
+    case ChatMessageSource.CharacterMesExample:
+      return '对话示例';
+    case ChatMessageSource.CharacterFirstMessage:
+      return '角色首条消息';
+    case ChatMessageSource.NarratorInstruction:
+      return '旁白指令';
+    case ChatMessageSource.Conversation:
+      return '最近聊天历史';
+    case ChatMessageSource.CharacterPostHistory:
+      return 'Post-History Instructions';
+    default:
+      return '其他';
   }
 }
 

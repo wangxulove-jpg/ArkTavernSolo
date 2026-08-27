@@ -40,9 +40,29 @@ import { getModelCapability, ModelCapability } from '../models/ModelCapabilities
 import { TokenBudget } from '../models/TokenBudget';
 import { ProviderConfig } from '../models/ProviderConfig';
 import { ChatMessage } from '../models/ChatMessage';
+import { ChatRole } from '../models/ChatRole';
+import { ChatMessageSource } from '../models/ChatMessageSource';
+import { sourceDisplayLabel } from '../services/ContextBudgetEstimator';
 import { Logger } from '../utils/Logger';
 
 const LOG_TAG: string = 'BudgetVM';
+
+/** 发送给模型上下文顺序中的单条展示项。 */
+export interface ContextOrderItem {
+  readonly index: number;
+  /** 来源中文名(与分段统计一致) */
+  readonly sourceLabel: string;
+  /** 角色名(user / assistant / system) */
+  readonly roleLabel: string;
+  /** 该条 Token 估算 */
+  readonly tokenCount: number;
+  /** 到该条为止的累计 Token(前缀,便于估算缓存命中) */
+  readonly cumulativeTokens: number;
+  /** 内容预览(截断,单行) */
+  readonly preview: string;
+  /** ForEach key */
+  readonly uid: string;
+}
 
 @Observed
 export class ContextBudgetViewModel {
@@ -349,6 +369,72 @@ export class ContextBudgetViewModel {
       return BudgetLevel.Normal;
     }
     return classifyBudgetLevel(this.stats.usageRatio);
+  }
+
+  /**
+   * 生成"发送给模型的上下文顺序"展示列表(按实际请求顺序)。
+   * 每条含来源、角色、Token、累计 Token 与预览,便于调整稳定前缀以提升缓存命中率。
+   * 无快照时返回空数组。
+   */
+  getContextOrder(): ContextOrderItem[] {
+    const msgs: ChatMessage[] | undefined = this.currentRequestMessages;
+    if (msgs === undefined || msgs.length === 0) {
+      return [];
+    }
+    const items: ContextOrderItem[] = [];
+    let cum: number = 0;
+    for (let i = 0; i < msgs.length; i++) {
+      const m: ChatMessage = msgs[i];
+      const tokens: number = this.estimateMessage(m);
+      cum += tokens;
+      items.push({
+        index: i + 1,
+        sourceLabel: sourceDisplayLabel(m.source !== undefined ? m.source : this.defaultSource()),
+        roleLabel: this.roleLabel(m.role),
+        tokenCount: tokens,
+        cumulativeTokens: cum,
+        preview: this.preview(m.content),
+        uid: String(i)
+      });
+    }
+    return items;
+  }
+
+  private estimateMessage(m: ChatMessage): number {
+    try {
+      if (m.content.length === 0) {
+        return 0;
+      }
+      return this.tokenCounter.estimateMessage(m);
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'estimateMessage failed: ' + String(e));
+      return 0;
+    }
+  }
+
+  private defaultSource(): ChatMessageSource {
+    return ChatMessageSource.Conversation;
+  }
+
+  private roleLabel(role: ChatRole): string {
+    switch (role) {
+      case ChatRole.System:
+        return 'system';
+      case ChatRole.Assistant:
+        return 'assistant';
+      case ChatRole.User:
+        return 'user';
+      default:
+        return 'other';
+    }
+  }
+
+  private preview(content: string): string {
+    const text: string = content.replace(/\s+/g, ' ').trim();
+    if (text.length <= 60) {
+      return text;
+    }
+    return text.substring(0, 60) + '…';
   }
 
   /**

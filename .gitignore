@@ -21,3 +21,4 @@ docs/*.md
 AGENT.md
 spec/
 tools/
+/docs/log.txt

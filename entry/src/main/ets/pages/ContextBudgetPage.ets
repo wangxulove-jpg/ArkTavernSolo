@@ -38,6 +38,7 @@ import {
 import { Logger } from '../utils/Logger';
 import { ThemePalette } from '../theme/ThemePalette';
 import { DeepSeekBalanceInfo } from '../services/DeepSeekBalanceService';
+import { ContextOrderItem } from '../viewmodels/ContextBudgetViewModel';
 
 const LOG_TAG: string = 'ContextBudgetPage';
 
@@ -59,6 +60,10 @@ struct ContextBudgetPage {
   @StorageProp('effectiveTheme') effectiveTheme: string = 'dark';
   @State showDeepSeekBalance: boolean = false;
   @State deepSeekBalance: DeepSeekBalanceInfo | null = null;
+  /** 是否展开"发送给模型的上下文顺序" */
+  @State showContextOrder: boolean = false;
+  /** 上下文顺序展示项(从 VM 派生) */
+  @State contextOrder: ContextOrderItem[] = [];
   private pendingRefresh: boolean = false;
   private refreshPollCount: number = 0;
 
@@ -109,14 +114,25 @@ struct ContextBudgetPage {
     const snapshot = store.getSnapshot(this.chatId);
     if (snapshot === null) {
       this.stats = null;
+      this.contextOrder = [];
       return;
     }
     this.viewModel!.refreshFromSnapshot(snapshot.budget, snapshot.requestMessages).then((): void => {
-      this.stats = this.viewModel!.stats;
+      this.applyStatsAndOrder();
     }).catch((e: Error): void => {
       Logger.warn(LOG_TAG, 'refreshFromSnapshot failed: ' + e.message);
       this.stats = null;
+      this.contextOrder = [];
     });
+  }
+
+  /** 同步 VM 统计与"发送顺序"到本地 @State。 */
+  private applyStatsAndOrder(): void {
+    if (this.viewModel === null) {
+      return;
+    }
+    this.stats = this.viewModel!.stats;
+    this.contextOrder = this.viewModel!.getContextOrder();
   }
 
   /**
@@ -125,9 +141,7 @@ struct ContextBudgetPage {
    * 此处重新加载快照,以便用户改完上下文上限后立即看到刷新后的占用。
    */
   onBudgetConfigVersionChanged(): void {
-    if (this.viewModel !== null) {
-      this.stats = this.viewModel!.stats;
-    }
+    this.applyStatsAndOrder();
     this.requestRefreshAfterConfigChange();
   }
 
@@ -142,7 +156,7 @@ struct ContextBudgetPage {
       return;
     }
     this.viewModel!.refreshFromSnapshot(snapshot.budget, snapshot.requestMessages).then((): void => {
-      this.stats = this.viewModel!.stats;
+      this.applyStatsAndOrder();
     }).catch((e: Error): void => {
       Logger.warn(LOG_TAG, 'onBudgetSnapshotVersionChanged refreshFromSnapshot failed: ' + e.message);
     });
@@ -168,7 +182,7 @@ struct ContextBudgetPage {
       const snapshot = store.getSnapshot(this.chatId);
       if (snapshot !== null) {
         this.viewModel!.refreshFromSnapshot(snapshot.budget, snapshot.requestMessages).then((): void => {
-          this.stats = this.viewModel!.stats;
+          this.applyStatsAndOrder();
           this.pendingRefresh = false;
         }).catch((): void => {
           this.startRefreshPoll();
@@ -202,6 +216,11 @@ struct ContextBudgetPage {
 
           // 分段占用详情
           this.segmentBreakdownSection()
+
+          Divider().color(ThemePalette.dividerColor(this.effectiveTheme)).margin({ top: 8, bottom: 8 })
+
+          // 发送给模型的上下文顺序(便于调整稳定前缀以提升缓存命中率)
+          this.contextOrderSection()
 
           Divider().color(ThemePalette.dividerColor(this.effectiveTheme)).margin({ top: 8, bottom: 8 })
 
@@ -382,6 +401,106 @@ struct ContextBudgetPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  contextOrderSection() {
+    Column() {
+      // 标题行 + 展开开关
+      Row() {
+        Column() {
+          Text('发送给模型的上下文顺序')
+            .fontSize($r('app.float.app_font_caption'))
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+          Text('按实际请求顺序展示;前缀越稳定,缓存命中率越高')
+            .fontSize(11)
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            .margin({ top: 2 })
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+
+        Toggle({ type: ToggleType.Switch, isOn: this.showContextOrder })
+          .onChange((isOn: boolean) => {
+            this.showContextOrder = isOn;
+            if (isOn) {
+              this.applyStatsAndOrder();
+            }
+          })
+      }
+      .width('100%')
+      .margin({ bottom: 6 })
+
+      if (this.showContextOrder) {
+        if (this.contextOrder.length === 0) {
+          Text('暂无顺序数据,发送一次消息后再查看')
+            .fontSize($r('app.float.app_font_body'))
+            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+            .padding({ top: 12, bottom: 12, left: 0, right: 0 })
+        } else {
+          // 列表较长,滚动查看
+          Scroll() {
+            Column() {
+              ForEach(this.contextOrder, (item: ContextOrderItem) => {
+                this.contextOrderRow(item)
+              }, (item: ContextOrderItem) => item.uid)
+            }
+            .width('100%')
+          }
+          .scrollBar(BarState.Auto)
+          .edgeEffect(EdgeEffect.Spring)
+          .constraintSize({ maxHeight: 420 })
+        }
+      }
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  contextOrderRow(item: ContextOrderItem) {
+    Row() {
+      // 序号
+      Text(item.index.toString())
+        .fontSize($r('app.float.app_font_caption'))
+        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+        .width(24)
+        .textAlign(TextAlign.End)
+        .margin({ right: 8 })
+      // 来源 + 角色
+      Column() {
+        Text(item.sourceLabel)
+          .fontSize($r('app.float.app_font_body'))
+          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(item.roleLabel + ' · 前 ' + this.formatTokenNumber(item.cumulativeTokens))
+          .fontSize(11)
+          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+      // 本条 Token
+      Text(this.formatTokenNumber(item.tokenCount))
+        .fontSize($r('app.float.app_font_body'))
+        .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+        .width(72)
+        .textAlign(TextAlign.End)
+    }
+    .width('100%')
+
+    // 内容预览
+    if (item.preview.length > 0) {
+      Text(item.preview)
+        .fontSize(11)
+        .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%')
+        .margin({ top: 4, left: 32 })
+    }
   }
 
   @Builder
