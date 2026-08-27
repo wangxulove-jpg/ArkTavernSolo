@@ -123,8 +123,8 @@ struct PromptPresetEditPage {
             // ===== 卡片 1:基本信息 =====
             this.basicInfoCard()
 
-            // ===== 卡片 2:参数覆盖 =====
-            this.parameterOverrideCard()
+            // ===== 卡片 2:参数覆盖(已注释掉,保留 Builder 定义以免编译报错) =====
+            // this.parameterOverrideCard()
 
             // 全局错误(保存失败时显示)
             if (this.errorMessage.length > 0) {
@@ -147,6 +147,7 @@ struct PromptPresetEditPage {
         .layoutWeight(1)
         .scrollBar(BarState.Auto)
         .edgeEffect(EdgeEffect.Spring)
+        .align(Alignment.Top)
       }
     }
     .width('100%')

@@ -29,6 +29,7 @@ import {
   updatePromptPreset,
   validatePromptPreset
 } from '../models/PromptPreset';
+import { ParsedPromptPresetImport } from '../parser/PromptPresetImportParser';
 import { DatabaseError } from '../models/DatabaseError';
 import { Logger } from '../utils/Logger';
 
@@ -149,5 +150,38 @@ export class PromptPresetService {
       }
     }
     await this.selectionStore.setSelectedPresetIds(next);
+  }
+
+  /**
+   * 批量导入提示词预设。
+   * 单条字段非法时跳过该条(不中断整体),返回成功导入的数量。
+   * @returns 成功入库的预设数量
+   */
+  async importPresets(items: ParsedPromptPresetImport[]): Promise<number> {
+    let inserted: number = 0;
+    const failedNames: string[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item: ParsedPromptPresetImport = items[i];
+      try {
+        const preset: PromptPreset = createPromptPreset({
+          name: item.name,
+          description: item.description,
+          systemPrompt: item.systemPrompt,
+          temperature: item.temperature,
+          topP: item.topP,
+          maxOutputTokens: item.maxOutputTokens,
+          contextWindow: item.contextWindow
+        });
+        await this.repository.insert(preset);
+        inserted++;
+      } catch (e) {
+        failedNames.push(item.name);
+        Logger.warn(LOG_TAG, 'importPresets skip invalid preset: ' + (e as Error).message);
+      }
+    }
+    if (inserted === 0 && failedNames.length > 0) {
+      throw new Error('所选预设均无效导入失败');
+    }
+    return inserted;
   }
 }

@@ -14,18 +14,23 @@
 import { PromptPresetListViewModel } from '../viewmodels/PromptPresetListViewModel';
 import { AppServices } from '../services/AppServices';
 import { PromptPreset } from '../models/PromptPreset';
-import { router } from '@kit.ArkUI';
+import { router, promptAction } from '@kit.ArkUI';
+import { picker } from '@kit.CoreFileKit';
+import { Logger } from '../utils/Logger';
 import { ThemePalette } from '../theme/ThemePalette';
 
 interface PresetEditRouteParam {
   presetId: string;
 }
 
+const LOG_TAG: string = 'PromptPresetListPage';
+
 @Entry
 @Component
 struct PromptPresetListPage {
   @State viewModel: PromptPresetListViewModel = AppServices.createPromptPresetListViewModel();
   @State refreshKey: number = 0;
+  @State importing: boolean = false;
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   @StorageProp('effectiveTheme') effectiveTheme: string = 'dark';
   private hasInitialized: boolean = false;
@@ -44,6 +49,38 @@ struct PromptPresetListPage {
 
   aboutToDisappear(): void {
     this.viewModel.dispose();
+  }
+
+  /** 选择并导入提示词预设 JSON 文件。成功后提示导入数量。 */
+  private async pickPresetFile(): Promise<void> {
+    if (this.importing) {
+      return;
+    }
+    let uris: string[] = [];
+    try {
+      const documentPicker = new picker.DocumentViewPicker();
+      const options = new picker.DocumentSelectOptions();
+      options.maxSelectNumber = 1;
+      options.fileSuffixFilters = ['.json', '.txt'];
+      uris = await documentPicker.select(options);
+    } catch (e) {
+      promptAction.showToast({ message: '打开文件选择器失败', duration: 2000 });
+      return;
+    }
+    if (uris.length === 0) {
+      return;
+    }
+    this.importing = true;
+    try {
+      const inserted: number = await this.viewModel.importPresetsFromFile(uris[0]);
+      if (inserted > 0) {
+        promptAction.showToast({ message: '成功导入 ' + inserted.toString() + ' 个预设', duration: 2000 });
+      }
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'pickPresetFile failed: ' + String(e));
+    } finally {
+      this.importing = false;
+    }
   }
 
   build() {
@@ -65,7 +102,18 @@ struct PromptPresetListPage {
             .layoutWeight(1)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .padding({ left: 8, right: 40 })
+            .padding({ left: 8 })
+
+          Button('导入')
+            .fontSize(13)
+            .backgroundColor(Color.Transparent)
+            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+            .height(32)
+            .padding({ left: 10, right: 10 })
+            .enabled(!this.importing)
+            .onClick(() => {
+              void this.pickPresetFile();
+            })
         }
         .width('100%')
         .padding({ top: this.statusBarHeight + 12, left: 12, right: 12, bottom: 12 })

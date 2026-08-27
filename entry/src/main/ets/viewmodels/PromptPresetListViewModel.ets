@@ -7,6 +7,8 @@
 
 import { PromptPreset } from '../models/PromptPreset';
 import { PromptPresetService } from '../services/PromptPresetService';
+import { parsePromptPresetImport } from '../parser/PromptPresetImportParser';
+import { AppServices } from '../services/AppServices';
 import { Logger } from '../utils/Logger';
 
 const LOG_TAG: string = 'PromptPresetListViewModel';
@@ -144,6 +146,33 @@ export class PromptPresetListViewModel {
     return parts.join(' · ');
   }
 
+  /**
+   * 从文件导入提示词预设(JSON)。
+   * 读取文本 → 白名单解析 → 批量入库 → 刷新列表。
+   * @returns 成功导入的数量
+   */
+  async importPresetsFromFile(uri: string): Promise<number> {
+    if (this.disposed || this.isOperating) {
+      return 0;
+    }
+    this.isOperating = true;
+    this.errorMessage = '';
+    try {
+      const text: string = await AppServices.getCharacterService().readFileContent(uri);
+      const fallbackName: string = basenameWithoutExtension(uri);
+      const items = parsePromptPresetImport(text, fallbackName);
+      const inserted: number = await this.presetService.importPresets(items);
+      await this.refresh();
+      return inserted;
+    } catch (e) {
+      this.errorMessage = '导入失败: ' + ((e as Error).message ?? String(e));
+      Logger.error(LOG_TAG, 'importPresetsFromFile failed: ' + String(e));
+      return 0;
+    } finally {
+      this.isOperating = false;
+    }
+  }
+
   isSelected(id: string): boolean {
     return this.selectedPresetIds.indexOf(id) >= 0;
   }
@@ -155,4 +184,21 @@ export class PromptPresetListViewModel {
   dispose(): void {
     this.disposed = true;
   }
+}
+
+/** 从文件 URI 中提取不含扩展名的文件名(用于命名缺失时的兜底)。 */
+function basenameWithoutExtension(uri: string): string {
+  const idx: number = uri.lastIndexOf('/');
+  let name: string = idx >= 0 ? uri.substring(idx + 1) : uri;
+  try {
+    name = decodeURIComponent(name);
+  } catch (e) {
+    // 非合法编码则原样使用
+  }
+  const qIdx: number = name.indexOf('?');
+  if (qIdx >= 0) {
+    name = name.substring(0, qIdx);
+  }
+  const dot: number = name.lastIndexOf('.');
+  return dot > 0 ? name.substring(0, dot) : name;
 }
