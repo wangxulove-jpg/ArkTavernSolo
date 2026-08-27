@@ -47,6 +47,8 @@ export class AiCardReviseViewModel {
 
   // ===== 建议 =====
   suggestions: string = '';
+  /** 是否允许 AI 修改世界书(默认关闭;开启才会把世界书发给 AI 并按建议修改) */
+  includeWorldbook: boolean = false;
 
   // ===== AI 重做状态 =====
   aiWorking: boolean = false;
@@ -86,6 +88,7 @@ export class AiCardReviseViewModel {
     this.parsedCard = null;
     this.pngSourceUri = '';
     this.suggestions = '';
+    this.includeWorldbook = false;
     this.aiError = '';
     try {
       const lowerUri: string = uri.toLowerCase();
@@ -154,6 +157,7 @@ export class AiCardReviseViewModel {
       this.suggestions,
       true,
       '',
+      this.includeWorldbook,
       {
         onDelta: (content: string): void => {
           this.aiProgressChars = content.length;
@@ -163,7 +167,9 @@ export class AiCardReviseViewModel {
           let success: boolean = false;
           let errorMessage: string = result.errorMessage;
           if (result.status === AiGenerationStatus.Success && result.card !== null) {
-            const merged: ParsedCharacterCard = mergePreservedFields(sourceCard, result.card);
+            const merged: ParsedCharacterCard = mergePreservedFields(
+              sourceCard, result.card, this.includeWorldbook
+            );
             AppStorage.setOrCreate<ParsedCharacterCard | null>(PENDING_AI_CARD_KEY, merged);
             // 来源为 PNG 时,把卡图传给预览页,保存时用作封面
             AppStorage.setOrCreate<string>(PENDING_AI_PNG_URI_KEY, this.pngSourceUri);
@@ -195,15 +201,21 @@ export class AiCardReviseViewModel {
 
 /**
  * 把原卡中 AI 再生时可能丢失的数据回填到新卡:
- * - 世界书(character_book):原卡有则保留
+ * - 世界书(character_book):按用户意图决定来源
+ *   - includeWorldbook=true(用户要求修改世界书):信任 AI 结果;若 AI 未返回世界书则回退原卡避免丢失
+ *   - includeWorldbook=false:完全保留原卡世界书,避免 AI 再生导致丢失/走样
  * - 复用校验后的新卡文本字段
  * 保证“只改建议部分,未提及数据尽量不丢”。
  */
 function mergePreservedFields(
   source: ParsedCharacterCard,
-  generated: ParsedCharacterCard
+  generated: ParsedCharacterCard,
+  includeWorldbook: boolean
 ): ParsedCharacterCard {
   const sourceBook: ParsedCharacterBook | null = source.characterBook;
+  const resultBook: ParsedCharacterBook | null = includeWorldbook
+    ? (generated.characterBook !== null ? generated.characterBook : sourceBook)
+    : (sourceBook !== null ? sourceBook : generated.characterBook);
   return {
     name: generated.name,
     nickname: generated.nickname,
@@ -222,7 +234,7 @@ function mergePreservedFields(
     creator: generated.creator,
     characterVersion: generated.characterVersion,
     extensions: generated.extensions,
-    characterBook: sourceBook !== null ? sourceBook : generated.characterBook,
+    characterBook: resultBook,
     userName: source.userName,
     groupOnlyGreetings: generated.groupOnlyGreetings,
     creatorNotesMultilingual: generated.creatorNotesMultilingual,

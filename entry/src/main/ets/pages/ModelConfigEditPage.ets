@@ -25,9 +25,7 @@ import {
   TEMPERATURE_MIN,
   TEMPERATURE_MAX,
   TOP_P_MIN,
-  TOP_P_MAX,
-  MAX_TOKENS_MIN,
-  MAX_TOKENS_MAX
+  TOP_P_MAX
 } from '../models/ProviderConfig';
 import { router } from '@kit.ArkUI';
 import { ThemePalette } from '../theme/ThemePalette';
@@ -512,21 +510,6 @@ struct ModelConfigEditPage {
             0.05,
             (n: number) => {
               this.viewModel!.topP = n;
-            }
-          )
-
-          Divider().color(ThemePalette.dividerColor(this.effectiveTheme)).margin({ left: 16, right: 16, top: 4, bottom: 4 })
-
-          // Max Tokens
-          this.sliderRow(
-            $r('app.string.model_settings_max_tokens'),
-            $r('app.string.model_settings_max_tokens_desc'),
-            this.viewModel!.maxTokens,
-            MAX_TOKENS_MIN,
-            MAX_TOKENS_MAX,
-            256,
-            (n: number) => {
-              this.viewModel!.maxTokens = n;
             }
           )
         }

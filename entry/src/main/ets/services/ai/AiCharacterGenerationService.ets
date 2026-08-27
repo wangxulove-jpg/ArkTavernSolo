@@ -53,12 +53,11 @@ import {
   AiGenerationStatus,
   AiGenerationMeta,
   AiValidationError,
-  AI_GENERATION_VERSION,
-  CharacterOptimizeMode
+  AI_GENERATION_VERSION
 } from '../../models/AiGenerationResult';
 import { validateV2CharacterCard } from '../../parser/CharacterCardV2Validator';
 import { extractJsonObject } from '../../parser/CharacterCardV2Fixer';
-import { ParsedCharacterCard } from '../../parser/CharacterCardJsonParser';
+import { ParsedCharacterCard, ParsedCharacterBook } from '../../parser/CharacterCardJsonParser';
 import { getModelCapability } from '../../models/ModelCapabilities';
 import { estimateMessagesTokens } from '../TokenCounter';
 
@@ -298,82 +297,6 @@ export class AiCharacterGenerationService {
   }
 
   /**
-   * 优化现有角色卡(ARK-UI-LAYOUT-OPT-02 后新增功能)。
-   *
-   * 语义:
-   * - Preserve 模式:不改变角色卡的内容与设定,而是根据角色卡已有内容,
-   *   让 AI 将其重写为规范、完整的 Tavern Card V2 JSON 结构。主要用于导入
-   *   PNG/JSON 角色卡时,内容字段不完整/结构混乱的整理。
-   * - Rewrite 模式:在保持角色核心身份与世界观基调一致的前提下,让 AI 重写
-   *   并丰富角色定位、描述、性格、场景等字段,使其更清晰、生动、完整。
-   *
-   * 约束:
-   * - 保持角色核心设定一致,不重新创作与设定矛盾的内容
-   * - 只整理字段归属、补全缺失字段(空字段补空串/空数组)、统一语言风格
-   * - 不修改头像 / 世界书已有条目内容
-   *
-   * @param card 现有角色卡(来自导入解析)
-   * @param mode AI 优化模式(Preserve=仅整理结构, Rewrite=深度优化改写)
-   * @param useCurrentModel true=跟随当前 ProviderConfig;false=使用指定 configId
-   * @param configId 指定 ProviderConfig ID
-   * @param callbacks 流式回调
-   * @returns 生成句柄(用于取消)
-   */
-  optimizeCharacterCard(
-    card: ParsedCharacterCard,
-    mode: CharacterOptimizeMode,
-    useCurrentModel: boolean,
-    configId: string,
-    callbacks: AiGenerationCallbacks
-  ): AiGenerationHandle {
-    const state: GenerationState = {
-      aborted: false,
-      done: false,
-      accumulated: '',
-      truncated: false,
-      meta: null,
-      autoFixAttempts: 0,
-      streamHandle: null,
-      abortChecker: null
-    };
-
-    this.executeOptimize(card, mode, useCurrentModel, configId, state, callbacks).then(
-      (): void => { /* 正常完成 */ },
-      (err: Object): void => {
-        if (state.done) {
-          return;
-        }
-        state.done = true;
-        Logger.error(LOG_TAG, 'optimize unexpected error: ' + String(err));
-        const result: AiGenerationResult = createFailed(
-          state.accumulated,
-          [],
-          state.autoFixAttempts,
-          false,
-          state.meta,
-          '优化失败: ' + String(err)
-        );
-        try {
-          callbacks.onComplete(result);
-        } catch (e) {
-          Logger.error(LOG_TAG, 'onComplete throw: ' + String(e));
-        }
-      }
-    );
-
-    const handle: AiGenerationHandle = new AiGenerationHandleImpl(
-      (): void => {
-        if (state.done) {
-          return;
-        }
-        state.aborted = true;
-      },
-      (): boolean => state.done
-    );
-    return handle;
-  }
-
-  /**
    * 基于已有角色卡+用户修改建议重新生成一张新的完整 V3 角色卡。
    *
    * 语义:
@@ -385,6 +308,7 @@ export class AiCharacterGenerationService {
    * @param suggestions 用户的自由修改建议
    * @param useCurrentModel true=跟随当前 ProviderConfig;false=使用指定 configId
    * @param configId 指定 ProviderConfig ID
+   * @param includeWorldbook true=把原卡世界书发给 AI 并按建议修改;false=不在输入中包含世界书(默认,避免丢失/走样)
    * @param callbacks 流式回调
    * @returns 生成句柄(用于取消)
    */
@@ -393,6 +317,7 @@ export class AiCharacterGenerationService {
     suggestions: string,
     useCurrentModel: boolean,
     configId: string,
+    includeWorldbook: boolean,
     callbacks: AiGenerationCallbacks
   ): AiGenerationHandle {
     const state: GenerationState = {
@@ -406,7 +331,7 @@ export class AiCharacterGenerationService {
       abortChecker: null
     };
 
-    this.executeRevise(card, suggestions, useCurrentModel, configId, state, callbacks).then(
+    this.executeRevise(card, suggestions, useCurrentModel, configId, includeWorldbook, state, callbacks).then(
       (): void => { /* 正常完成 */ },
       (err: Object): void => {
         if (state.done) {
@@ -450,6 +375,7 @@ export class AiCharacterGenerationService {
     suggestions: string,
     useCurrentModel: boolean,
     configId: string,
+    includeWorldbook: boolean,
     state: GenerationState,
     callbacks: AiGenerationCallbacks
   ): Promise<void> {
@@ -487,7 +413,7 @@ export class AiCharacterGenerationService {
     };
     state.meta = meta;
 
-    const messages: ChatMessage[] = buildReviseMessages(card, suggestions);
+    const messages: ChatMessage[] = buildReviseMessages(card, suggestions, includeWorldbook);
     const options: ChatRequestOptions = {
       temperature: GENERATION_TEMPERATURE,
       topP: GENERATION_TOP_P,
@@ -522,95 +448,6 @@ export class AiCharacterGenerationService {
     const finalResult: AiGenerationResult = await this.validateAndAutoFix(
       rawResponse, meta, state, callbacks, messages, options,
       buildReviseSystemPrompt(),
-      JSON.stringify(buildOptimizeCardContent(card), null, 2)
-    );
-    state.done = true;
-    callbacks.onComplete(finalResult);
-  }
-
-  /**
-   * 执行角色卡优化(内部实现)。
-   */
-  private async executeOptimize(
-    card: ParsedCharacterCard,
-    mode: CharacterOptimizeMode,
-    useCurrentModel: boolean,
-    configId: string,
-    state: GenerationState,
-    callbacks: AiGenerationCallbacks
-  ): Promise<void> {
-    const config: ProviderConfig | null = useCurrentModel
-      ? await this.modelService.getCurrentConfig()
-      : await this.modelService.getConfig(configId);
-    if (config === null) {
-      state.done = true;
-      callbacks.onComplete(createFailed(
-        '', [], 0, false, null, '未找到可用的 Provider 配置,请先在模型设置中配置'
-      ));
-      return;
-    }
-    if (config.modelName.trim().length === 0) {
-      state.done = true;
-      callbacks.onComplete(createFailed(
-        '', [], 0, false, null, '当前 Provider 配置未指定模型名称'
-      ));
-      return;
-    }
-    const hasKey: boolean = await this.modelService.hasApiKey(config.id);
-    if (!hasKey) {
-      state.done = true;
-      callbacks.onComplete(createFailed(
-        '', [], 0, false, null, '当前 Provider 配置未设置 API Key'
-      ));
-      return;
-    }
-
-    const meta: AiGenerationMeta = {
-      providerId: config.id,
-      modelId: config.modelName,
-      generatedAt: Date.now(),
-      generationVersion: AI_GENERATION_VERSION
-    };
-    state.meta = meta;
-
-    // 构造优化消息(保持内容,重写为规范 V2 JSON)
-    const messages: ChatMessage[] = buildOptimizeMessages(card, mode);
-    const options: ChatRequestOptions = {
-      temperature: GENERATION_TEMPERATURE,
-      topP: GENERATION_TOP_P,
-      maxTokens: this.computeOutputMaxTokens(config, messages),
-      stream: true
-    };
-
-    const rawResponse: string = await this.streamMessages(
-      messages, options, state, callbacks, '优化失败'
-    );
-    if (state.aborted) {
-      state.done = true;
-      callbacks.onComplete(createCancelledResult(rawResponse));
-      return;
-    }
-    if (rawResponse.length === 0) {
-      state.done = true;
-      callbacks.onComplete(createFailed(
-        '', [], 0, false, meta, '优化失败:模型返回空响应'
-      ));
-      return;
-    }
-    if (state.truncated) {
-      state.done = true;
-      callbacks.onComplete(createFailed(
-        '', [], 0, false, meta,
-        '优化失败:角色卡内容过大,超出模型单次输出上限,建议精简内容或分段生成'
-      ));
-      return;
-    }
-
-    // 校验 + 自动修复(复用生成路径,自动修复复用与首次请求相同的优化提示词 + 原始卡内容,
-    // 避免自动修复时用"生成助手"提示词重生成一张全新角色卡)
-    const finalResult: AiGenerationResult = await this.validateAndAutoFix(
-      rawResponse, meta, state, callbacks, messages, options,
-      buildOptimizeSystemPrompt(card, mode),
       JSON.stringify(buildOptimizeCardContent(card), null, 2)
     );
     state.done = true;
@@ -1153,13 +990,21 @@ function buildFieldRegenMessages(
  * 语义:原卡内容作为背景信息;只按用户建议修改对应内容,未提及字段保持原样;
  * 输出一张新的完整 Tavern Card V3 JSON。
  */
-function buildReviseMessages(card: ParsedCharacterCard, suggestions: string): ChatMessage[] {
+function buildReviseMessages(
+  card: ParsedCharacterCard,
+  suggestions: string,
+  includeWorldbook: boolean
+): ChatMessage[] {
   const systemPrompt: string = buildReviseSystemPrompt();
   const cardContent: Record<string, Object> = buildOptimizeCardContent(card);
+  // 仅当用户显式要求修改世界书时,才把原卡世界书并入输入,让 AI 有据可依地修改
+  if (includeWorldbook && card.characterBook !== null) {
+    cardContent['character_book'] = serializeCharacterBookObject(card.characterBook);
+  }
   const serializedContent: string = JSON.stringify(cardContent, null, 2);
   const trimmedSuggestions: string = suggestions.trim();
 
-  const userPrompt: string = '以下是原始角色卡内容(作为背景信息):\n\n'
+  let userPrompt: string = '以下是原始角色卡内容(作为背景信息):\n\n'
     + serializedContent
     + '\n\n【用户的修改建议】:\n'
     + (trimmedSuggestions.length > 0 ? trimmedSuggestions : '(无)')
@@ -1167,13 +1012,85 @@ function buildReviseMessages(card: ParsedCharacterCard, suggestions: string): Ch
     + '\n- 以修改建议为准进行调整;建议要求补全/丰富/替换时,可充实空缺或薄弱的字段、替换不合适或占位性的开场白'
     + '\n- 未提及的合理内容尽量保留,不做与建议无关的多余删改'
     + '\n- 不得改名/换角(除非建议明确要求改角色名)'
-    + '\n- 保持角色核心身份与世界观基调一致,不引入与建议无关的冲突设定'
-    + '\n- 只输出完整 JSON,不要输出任何其他文字或 Markdown 代码块。';
+    + '\n- 保持角色核心身份与世界观基调一致,不引入与建议无关的冲突设定';
+  if (includeWorldbook) {
+    userPrompt += '\n- 若修改建议涉及角色世界书(character_book),请按要求修改对应条目;未在建议中明确提及的条目必须原样保留,不得丢失、删减或篡改其内容/关键词';
+  }
+  userPrompt += '\n- 只输出完整 JSON,不要输出任何其他文字或 Markdown 代码块。';
 
   return [
     createChatMessage('ai-rev-sys-' + generateUuid(), ChatRole.System, systemPrompt, Date.now()),
     createChatMessage('ai-rev-usr-' + generateUuid(), ChatRole.User, userPrompt, Date.now())
   ];
+}
+
+/** 供 "让 AI 修改世界书" 嵌入提示用的序列化世界书条目。 */
+interface SerializableBookEntry {
+  readonly id: number;
+  readonly keys: string[];
+  readonly secondary_keys: string[];
+  readonly comment: string;
+  readonly content: string;
+  readonly constant: boolean;
+  readonly selective: boolean;
+  readonly insertion_order: number;
+  readonly enabled: boolean;
+  readonly position: string;
+  readonly case_sensitive: boolean;
+  readonly useRegex: boolean;
+  readonly priority: number;
+  readonly name: string;
+  readonly extensions: Record<string, Object>;
+}
+
+/** 供 "让 AI 修改世界书" 嵌入提示用的序列化世界书。 */
+interface SerializableBook {
+  readonly name: string;
+  readonly description: string;
+  readonly scan_depth: number;
+  readonly token_budget: number;
+  readonly recursive_scanning: boolean;
+  readonly extensions: Record<string, Object>;
+  readonly entries: SerializableBookEntry[];
+}
+
+/**
+ * 把 ParsedCharacterBook 序列化为标准 SillyTavern character_book JSON 对象,
+ * 供 "让 AI 修改世界书" 时嵌入到发给模型的角色卡内容中(与 Lorebook 导出一致)。
+ */
+function serializeCharacterBookObject(book: ParsedCharacterBook): SerializableBook {
+  const entriesObj: SerializableBookEntry[] = [];
+  for (let i = 0; i < book.entries.length; i++) {
+    const e = book.entries[i];
+    const entry: SerializableBookEntry = {
+      id: e.id,
+      keys: e.keys.slice(),
+      secondary_keys: e.secondaryKeys.slice(),
+      comment: e.comment,
+      content: e.content,
+      constant: e.constant,
+      selective: e.selective,
+      insertion_order: e.insertionOrder,
+      enabled: e.enabled,
+      position: e.position,
+      case_sensitive: e.caseSensitive,
+      useRegex: e.useRegex,
+      priority: e.priority,
+      name: e.name,
+      extensions: e.extensions
+    };
+    entriesObj.push(entry);
+  }
+  const result: SerializableBook = {
+    name: book.name,
+    description: book.description,
+    scan_depth: book.scanDepth,
+    token_budget: book.tokenBudget,
+    recursive_scanning: book.recursiveScanning,
+    extensions: book.extensions,
+    entries: entriesObj
+  };
+  return result;
 }
 
 /**
@@ -1197,109 +1114,7 @@ function buildReviseSystemPrompt(): string {
 }
 
 /**
- * 构造角色卡优化请求的消息(ARK-UI-LAYOUT-OPT-02)。
- *
- * 根据 mode 分支:
- * - Preserve(仅整理结构):保持现有角色卡内容,让 AI 重写为规范、完整的 Tavern Card V3 JSON 结构。
- *   不改变角色设定,不重新创作,只整理字段归属与补全缺失字段。
- * - Rewrite(深度优化改写):在保持角色核心身份与世界观基调一致的前提下,让 AI 重写并丰富
- *   角色定位、描述、性格、场景等字段,使其更清晰、生动、完整。
- */
-function buildOptimizeMessages(card: ParsedCharacterCard, mode: CharacterOptimizeMode): ChatMessage[] {
-  const isRewrite: boolean = mode === CharacterOptimizeMode.Rewrite;
-  const systemPrompt: string = buildOptimizeSystemPrompt(card, mode);
-
-  const cardContent: Record<string, Object> = buildOptimizeCardContent(card);
-  const serializedContent: string = JSON.stringify(cardContent, null, 2);
-
-  const userPrompt: string = isRewrite
-    ? '以下是需要深度优化的现有角色卡内容:\n\n'
-      + serializedContent
-      + '\n\n请在保持角色核心身份与世界观基调一致的前提下,对以上角色内容进行深度优化与改写,'
-      + '丰富角色定位、描述、性格、场景、开场白等字段,使其更清晰、生动、完整;'
-      + '若某字段内容薄弱,请补充更充实的描述,不要留空。'
-      + '只输出优化后的完整 Tavern Card V3 JSON,不要输出任何其他文字或 Markdown 代码块。'
-    : '以下是需要整理的现有角色卡内容:\n\n'
-      + serializedContent
-      + '\n\n请理解以上角色的完整设定,将其**忠实拆分并归类**到 Tavern Card V3 的正确字段中'
-      + '(description / personality / scenario / first_mes / system_prompt / mes_example 等)。'
-      + '注意:当内容集中在单个字段(如 description)时,须将其中的设定、规则、对话风格、示例对话等'
-      + '合理归类到对应字段,而不是简单堆回 description。'
-      + '\n只输出 JSON,不要输出任何其他文字或 Markdown 代码块。';
-
-  return [
-    createChatMessage('ai-opt-sys-' + generateUuid(), ChatRole.System, systemPrompt, Date.now()),
-    createChatMessage('ai-opt-usr-' + generateUuid(), ChatRole.User, userPrompt, Date.now())
-  ];
-}
-
-/**
- * 构造角色卡优化请求的 system prompt(按 mode 分支,供首次请求与自动修复复用)。
- */
-function buildOptimizeSystemPrompt(card: ParsedCharacterCard, mode: CharacterOptimizeMode): string {
-  return mode === CharacterOptimizeMode.Rewrite
-    ? buildRewriteOptimizeSystemPrompt()
-    : buildTidyOptimizeSystemPrompt();
-}
-
-/**
- * 仅整理结构模式的 system prompt:保持设定不变,只整理字段归属与补全缺失字段。
- */
-function buildTidyOptimizeSystemPrompt(): string {
-  return '你是 Tavern Card V3 角色卡结构整理助手。'
-    + '用户会给你一个现有角色卡的内容(可能内容集中在单个字段如 description)。'
-    + '你需要**忠实理解并拆分**这份内容,将其**保留原意地归类**到规范、完整的 Tavern Card V3 JSON 的正确字段,'
-    + '而**绝不能改写或重新设计这个角色**。'
-    + '\n\n最高优先级(必须遵守):'
-    + '\n- **不得改名**:name / nickname 必须等于原卡的角色名/昵称,禁止改成其它名字'
-    + '\n- **不得换角色**:角色的人名、身份、来历、世界观、人格必须完全来自原卡已有文本,严禁虚构新角色或新身份'
-    + '\n- **不得新增原创设定**:只可把原文已有的信息归类到字段,禁止补充原文没有的能力、身份、背景、性格、关系'
-    + '\n- **不得丢信息**:原卡的所有有效内容必须保留在某个字段中,禁止丢弃或省略'
-    + '\n\n字段归类参考:'
-    + '\n- 角色扮演的系统指令、规则、禁止项、输出要求、扮演指南、元指令 → system_prompt'
-    + '\n- 示例对话、对话范例 → mes_example'
-    + '\n- 性格、说话风格、口癖、语气 → personality'
-    + '\n- 人名、身份、来历、外貌、基本设定、世界观背景 → description'
-    + '\n- 角色与用户的相遇场景、初始情境、世界观 → scenario'
-    + '\n- 角色首次说的话 → first_mes'
-    + '\n- 无法确定归属的内容 → 保留在 description,不要丢弃'
-    + '\n\n语言风格:'
-    + '\n- 仅做轻度润色与标点/换行整理,保持原有语言'
-    + '\n- 不要修改头像、不要修改角色书已有条目内容'
-    + '\n\n输出要求:'
-    + '\n- **只输出**标准 Tavern Card V3 JSON,不要输出 Markdown 代码块标记、解释、标题或其他任何文字'
-    + '\n- JSON 必须可被 JSON.parse 直接解析'
-    + '\n- 必须包含 spec="chara_card_v3"、spec_version="3.0" 和 data 对象'
-    + buildOptimizeJsonStructure();
-}
-
-/**
- * 深度优化改写模式的 system prompt:保持核心身份一致的前提下,重写并丰富内容。
- */
-function buildRewriteOptimizeSystemPrompt(): string {
-  return '你是 Tavern Card V3 角色卡深度优化助手。'
-    + '用户会给你一个现有角色卡的内容,你需要在**保持角色核心身份与世界观基调一致**的前提下,'
-    + '对角色卡进行深度优化与改写,让内容更丰满、更自然、更有辨识度。'
-    + '\n\n核心原则:'
-    + '\n- **忠于核心身份**:保留角色名称(nickname 可保留或微调)、身份定位、世界观基调与核心性格设定,不改变角色本质,不做与设定矛盾的改动'
-    + '\n- **不得改名/换角**:name 必须保持原卡角色名,禁止改成其它名字,禁止把角色替换成另一个身份'
-    + '\n- **深度优化内容**:重写并丰富 description(角色身份/定位、经历、外貌、行为习惯)、'
-    + 'personality(性格,不可只是关键词堆积,要清晰说明说话方式与性格特点)、'
-    + 'scenario(场景设定)、first_mes(开场白)、system_prompt(帮助稳定扮演)等字段,使其更清晰、生动、有层次'
-    + '\n- **结构匹配**:确保内容落在正确字段,避免错位'
-    + '\n- **语言风格统一**:整体润色,语言更自然流畅'
-    + '\n- **补全结构**:缺失字段需补全;若某字段内容薄弱,应填充更充实的描述,而不是留空或堆砌关键词'
-    + '\n- **不虚构冲突**:只可丰富已有设定的细节,不要新增与角色设定矛盾的能力、身份或背景'
-    + '\n- 不要修改头像、不要修改角色书已有条目内容'
-    + '\n\n输出要求:'
-    + '\n- **只输出**标准 Tavern Card V3 JSON,不要输出 Markdown 代码块标记、解释、标题或其他任何文字'
-    + '\n- JSON 必须可被 JSON.parse 直接解析'
-    + '\n- 必须包含 spec="chara_card_v3"、spec_version="3.0" 和 data 对象'
-    + buildOptimizeJsonStructure();
-}
-
-/**
- * Tavern Card V3 角色卡的 JSON 结构要求(两种优化模式共用)。
+ * Tavern Card V3 角色卡的 JSON 结构要求(生成/修改/优化共用)。
  */
 function buildOptimizeJsonStructure(): string {
   return '\n\nJSON 结构要求(所有字段必填,数组字段即使为空也必须是空数组,extensions 即使为空也必须是空对象):'

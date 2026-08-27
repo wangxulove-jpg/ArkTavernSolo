@@ -33,14 +33,10 @@ import { AppServices } from '../services/AppServices';
 import { picker } from '@kit.CoreFileKit';
 import { promptAction, router } from '@kit.ArkUI';
 import { ThemePalette } from '../theme/ThemePalette';
-import { CharacterOptimizeMode } from '../models/AiGenerationResult';
 
 const TAB_NEW: number = 0;
 const TAB_IMPORT: number = 1;
 const TAB_AI: number = 2;
-
-/** 触发"角色卡过大"提示的估算输入 token 阈值 */
-const LARGE_CARD_TOKEN_THRESHOLD: number = 10000;
 
 @Entry
 @Component
@@ -50,16 +46,8 @@ struct AddCharacterPage {
   @State isInitializing: boolean = true;
   /** 顶部状态栏避让高度(由 EntryAbility 写入 AppStorage) */
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
-  /** 底部导航栏/手势条避让高度 */
-  @StorageProp('navigationBarHeight') navigationBarHeight: number = 0;
   /** 当前有效主题 */
   @StorageProp('effectiveTheme') effectiveTheme: string = 'dark';
-  /** 是否勾选"AI 优化内容"(PNG 导入时可选) */
-  @State optimizePending: boolean = false;
-  /** AI 优化模式:Preserve=仅整理结构, Rewrite=深度优化改写 */
-  @State optimizeMode: CharacterOptimizeMode = CharacterOptimizeMode.Preserve;
-  /** 是否显示 AI 优化后完整内容预览窗口 */
-  @State showOptimizedPreview: boolean = false;
 
   async aboutToAppear(): Promise<void> {
     try {
@@ -166,54 +154,10 @@ struct AddCharacterPage {
       return;
     }
     this.viewModel.cancelImport();
-    this.optimizePending = false;
-  }
-
-  /** 触发 AI 优化导入的卡片内容 */
-  private startOptimize(): void {
-    if (this.viewModel === null || this.viewModel!.aiOptimizing) {
-      return;
-    }
-    // 同步当前选择的优化模式到 ViewModel
-    this.viewModel!.optimizeMode = this.optimizeMode;
-    this.viewModel!.aiOptimizeError = '';
-    this.viewModel!.optimizePreviewCard();
-  }
-
-  /** 切换 AI 优化模式 */
-  private selectOptimizeMode(mode: CharacterOptimizeMode): void {
-    this.optimizeMode = mode;
-    if (this.viewModel !== null && !this.viewModel!.aiOptimizing) {
-      // 切换模式时清除之前的优化结果与错误,需重新优化
-      this.viewModel!.aiOptimized = false;
-      this.viewModel!.aiOptimizeError = '';
-    }
-  }
-
-  /** 当前是否选中指定优化模式 */
-  private isOptimizeMode(mode: CharacterOptimizeMode): boolean {
-    return this.optimizeMode === mode;
-  }
-
-  /** 当前预览卡是否过大(可能超出 AI 单次输出上限) */
-  private isLargeCard(): boolean {
-    return this.viewModel !== null && this.viewModel!.previewCardInputTokens > LARGE_CARD_TOKEN_THRESHOLD;
-  }
-
-  /** 取消 AI 优化 */
-  private cancelOptimize(): void {
-    if (this.viewModel === null) {
-      return;
-    }
-    this.viewModel!.cancelOptimize();
   }
 
   /** 返回键处理:导入预览弹窗显示时,优先取消预览;否则正常返回 */
   onBackPressed(): boolean {
-    if (this.showOptimizedPreview) {
-      this.showOptimizedPreview = false;
-      return true;
-    }
     if (this.viewModel !== null && this.viewModel!.showImportPreview) {
       this.cancelImport();
       return true;
@@ -276,13 +220,6 @@ struct AddCharacterPage {
         && this.viewModel!.showImportPreview
         && this.viewModel!.previewCard !== null) {
         this.importPreviewDialog()
-      }
-
-      // AI 优化结果完整预览窗口:覆盖整个页面
-      if (this.showOptimizedPreview
-        && this.viewModel !== null
-        && this.viewModel!.previewCard !== null) {
-        this.optimizedPreviewDialog()
       }
     }
     .width('100%')
@@ -596,11 +533,6 @@ struct AddCharacterPage {
             .width('100%')
             .margin({ top: 8, bottom: 16 })
 
-          // AI 优化内容(PNG 导入时提供)
-          if (this.viewModel!.isPngImport) {
-            this.aiOptimizeSection()
-          }
-
           if (this.viewModel!.importError.length > 0) {
             Text(this.viewModel!.importError)
               .fontSize(13)
@@ -649,327 +581,6 @@ struct AddCharacterPage {
     .height('100%')
     .backgroundColor('rgba(0,0,0,0.5)')
     // 不设 onClick:点击外部遮罩不取消,只能通过"取消"按钮或返回键取消
-  }
-
-  /** AI 优化结果完整预览窗口:全屏滚动展示所有字段 */
-  @Builder
-  optimizedPreviewDialog() {
-    Stack() {
-      Column() {
-        // 顶部栏
-        Row() {
-          Button($r('app.string.character_import_close'))
-            .fontSize(14)
-            .backgroundColor(Color.Transparent)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .height(40)
-            .onClick(() => {
-              this.showOptimizedPreview = false;
-            })
-
-          Text($r('app.string.character_import_ai_optimized_title'))
-            .fontSize(16)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .layoutWeight(1)
-            .textAlign(TextAlign.Center)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-          Button('')
-            .fontSize(14)
-            .backgroundColor(Color.Transparent)
-            .fontColor(Color.Transparent)
-            .height(40)
-            .width(56)
-            .enabled(false)
-        }
-        .width('100%')
-        .padding({ left: 8, right: 8, top: this.statusBarHeight + 4, bottom: 4 })
-        .alignItems(VerticalAlign.Center)
-        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
-
-        // 滚动内容
-        Scroll() {
-          Column() {
-            // 头像 + 名称
-            if (this.viewModel!.isPngImport && this.viewModel!.previewPngUri.length > 0) {
-              Image(this.viewModel!.previewPngUri)
-                .width(80)
-                .height(80)
-                .borderRadius(12)
-                .objectFit(ImageFit.Cover)
-                .margin({ bottom: 12 })
-            }
-
-            this.optimizedField('名称', this.viewModel!.previewCard!.name)
-            this.optimizedField('描述', this.viewModel!.previewCard!.description)
-            this.optimizedField('性格', this.viewModel!.previewCard!.personality)
-            this.optimizedField('场景', this.viewModel!.previewCard!.scenario)
-            this.optimizedField('开场白', this.viewModel!.previewCard!.firstMessage)
-            this.optimizedField('System Prompt', this.viewModel!.previewCard!.systemPrompt)
-            this.optimizedField('对话示例', this.viewModel!.previewCard!.mesExample)
-            this.optimizedField('创作者备注', this.viewModel!.previewCard!.creatorNotes)
-            this.optimizedField('Post-History 指令', this.viewModel!.previewCard!.postHistoryInstructions)
-            this.optimizedField('备用开场白', this.viewModel!.previewCard!.alternateGreetings.join('\n\n'))
-            this.optimizedField('标签', this.viewModel!.previewCard!.tags.join(', '))
-            this.optimizedField('创作者', this.viewModel!.previewCard!.creator)
-            this.optimizedField('角色卡版本', this.viewModel!.previewCard!.characterVersion)
-            this.optimizedField('对用户的称呼', this.viewModel!.previewCard!.userName)
-
-            // 来源格式
-            Text('来源格式: ' + this.formatSourceLabel(this.viewModel!.previewCard!.sourceFormat))
-              .fontSize(12)
-              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-              .width('100%')
-              .margin({ top: 4, bottom: 8 })
-          }
-          .width('100%')
-          .alignItems(HorizontalAlign.Center)
-          .padding(20)
-        }
-        .layoutWeight(1)
-        .width('100%')
-        .align(Alignment.Top)
-        .scrollBar(BarState.Auto)
-
-        // 底部:重新优化 + 确认导入
-        Row() {
-          Button($r('app.string.character_import_ai_optimize_again'))
-            .fontSize(14)
-            .backgroundColor(Color.Transparent)
-            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-            .height(44)
-            .layoutWeight(1)
-            .onClick(() => {
-              this.showOptimizedPreview = false;
-              this.startOptimize();
-            })
-
-          Button($r('app.string.character_import_confirm'))
-            .fontSize(14)
-            .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
-            .fontColor($r('app.color.app_on_accent'))
-            .borderRadius($r('app.float.app_radius_sm'))
-            .height(44)
-            .layoutWeight(1)
-            .margin({ left: 12 })
-            .enabled(!this.viewModel!.importing)
-            .onClick(() => {
-              this.showOptimizedPreview = false;
-              this.confirmImport();
-            })
-        }
-        .width('100%')
-        .padding({ left: 16, right: 16, top: 8, bottom: this.navigationBarHeight + 8 })
-        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
-      }
-      .width('100%')
-      .height('100%')
-    }
-    .width('100%')
-    .height('100%')
-    .backgroundColor(ThemePalette.pageBgColor(this.effectiveTheme))
-  }
-
-  /** 优化结果字段展示:标签 + 完整内容 */
-  @Builder
-  optimizedField(label: string, value: string) {
-    Column() {
-      Row() {
-        Text(label)
-          .fontSize(12)
-          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-          .fontWeight(FontWeight.Medium)
-      }
-      .width('100%')
-
-      Text(value.length > 0 ? value : '(空)')
-        .fontSize(13)
-        .fontColor(value.length > 0
-          ? ThemePalette.textPrimaryColor(this.effectiveTheme)
-          : ThemePalette.textSecondaryColor(this.effectiveTheme))
-        .width('100%')
-        .margin({ top: 4, bottom: 14 })
-        .textAlign(TextAlign.Start)
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  /** AI 优化内容区块:开关 + 优化按钮 + 进度/错误 */
-  @Builder
-  aiOptimizeSection() {
-    Column() {
-      // 开关行
-      Row() {
-        Toggle({ type: ToggleType.Switch, isOn: this.optimizePending })
-          .selectedColor(ThemePalette.accentColor(this.effectiveTheme))
-          .onChange((isOn: boolean) => {
-            this.optimizePending = isOn;
-            if (!isOn && this.viewModel !== null && !this.viewModel!.aiOptimizing) {
-              // 关闭开关:清除优化错误
-              this.viewModel!.aiOptimizeError = '';
-            }
-          })
-
-        Column() {
-          Text($r('app.string.character_import_ai_optimize'))
-            .fontSize(13)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-
-          Text(this.isOptimizeMode(CharacterOptimizeMode.Rewrite)
-            ? $r('app.string.character_import_ai_optimize_mode_rewrite_desc')
-            : $r('app.string.character_import_ai_optimize_desc'))
-            .fontSize(11)
-            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-            .maxLines(2)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .margin({ top: 2 })
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-        .margin({ left: 8 })
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
-      .margin({ bottom: 8 })
-
-      // 角色卡过大提示
-      if (this.isLargeCard()) {
-        Row() {
-          Text($r('app.string.character_import_ai_optimize_large_warning'))
-            .fontSize(11)
-            .fontColor(ThemePalette.forTheme(this.effectiveTheme).warning)
-            .lineHeight(16)
-            .layoutWeight(1)
-        }
-        .width('100%')
-        .alignItems(VerticalAlign.Top)
-        .padding(8)
-        .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-        .borderRadius($r('app.float.app_radius_sm'))
-        .margin({ bottom: 8 })
-      }
-
-      // 优化模式选择:仅整理结构 / AI 深度改写
-      Row({ space: 8 }) {
-        Button($r('app.string.character_import_ai_optimize_mode_preserve'))
-          .fontSize(12)
-          .fontColor(this.isOptimizeMode(CharacterOptimizeMode.Preserve)
-            ? $r('app.color.app_on_accent')
-            : ThemePalette.textSecondaryColor(this.effectiveTheme))
-          .backgroundColor(this.isOptimizeMode(CharacterOptimizeMode.Preserve)
-            ? ThemePalette.accentColor(this.effectiveTheme)
-            : Color.Transparent)
-          .borderRadius($r('app.float.app_radius_sm'))
-          .height(30)
-          .layoutWeight(1)
-          .onClick(() => {
-            this.selectOptimizeMode(CharacterOptimizeMode.Preserve);
-          })
-
-        Button($r('app.string.character_import_ai_optimize_mode_rewrite'))
-          .fontSize(12)
-          .fontColor(this.isOptimizeMode(CharacterOptimizeMode.Rewrite)
-            ? $r('app.color.app_on_accent')
-            : ThemePalette.textSecondaryColor(this.effectiveTheme))
-          .backgroundColor(this.isOptimizeMode(CharacterOptimizeMode.Rewrite)
-            ? ThemePalette.accentColor(this.effectiveTheme)
-            : Color.Transparent)
-          .borderRadius($r('app.float.app_radius_sm'))
-          .height(30)
-          .layoutWeight(1)
-          .onClick(() => {
-            this.selectOptimizeMode(CharacterOptimizeMode.Rewrite);
-          })
-      }
-      .width('100%')
-      .margin({ bottom: 8 })
-
-      // AI 优化进行中
-      if (this.viewModel !== null && this.viewModel!.aiOptimizing) {
-        Row() {
-          LoadingProgress()
-            .width(20)
-            .height(20)
-            .color(ThemePalette.accentColor(this.effectiveTheme))
-
-          Text(this.viewModel!.aiOptimizeProgressText.length > 0
-            ? this.viewModel!.aiOptimizeProgressText
-            : $r('app.string.character_import_ai_optimizing'))
-            .fontSize(12)
-            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-            .margin({ left: 8 })
-            .layoutWeight(1)
-
-          Button('取消')
-            .fontSize(12)
-            .backgroundColor(Color.Transparent)
-            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-            .height(28)
-            .onClick(() => {
-              this.cancelOptimize();
-            })
-        }
-        .width('100%')
-        .alignItems(VerticalAlign.Center)
-      } else if (this.viewModel !== null && this.viewModel!.aiOptimized) {
-        // 优化已完成:查看完整内容 + 重新优化
-        Row() {
-          Button($r('app.string.character_import_ai_optimize_view'))
-            .fontSize(12)
-            .fontColor($r('app.color.app_on_accent'))
-            .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
-            .borderRadius($r('app.float.app_radius_sm'))
-            .height(32)
-            .layoutWeight(1)
-            .onClick(() => {
-              this.showOptimizedPreview = true;
-            })
-
-          Button($r('app.string.character_import_ai_optimize_again'))
-            .fontSize(12)
-            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-            .backgroundColor(Color.Transparent)
-            .borderRadius($r('app.float.app_radius_sm'))
-            .height(32)
-            .layoutWeight(1)
-            .margin({ left: 8 })
-            .onClick(() => {
-              this.startOptimize();
-            })
-        }
-        .width('100%')
-      } else if (this.optimizePending) {
-        // 已勾选且未优化:显示"开始优化"
-        Button($r('app.string.character_import_ai_optimize_again'))
-          .fontSize(12)
-          .fontColor($r('app.color.app_on_accent'))
-          .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
-          .borderRadius($r('app.float.app_radius_sm'))
-          .height(32)
-          .width('100%')
-          .margin({ top: 4 })
-          .onClick(() => {
-            this.startOptimize();
-          })
-      }
-
-      // AI 优化错误
-      if (this.viewModel !== null && this.viewModel!.aiOptimizeError.length > 0) {
-        Text(this.viewModel!.aiOptimizeError)
-          .fontSize(12)
-          .fontColor($r('app.color.app_danger'))
-          .width('100%')
-          .margin({ top: 4 })
-      }
-    }
-    .width('100%')
-    .padding(10)
-    .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-    .borderRadius($r('app.float.app_radius_md'))
-    .margin({ bottom: 12 })
   }
 
   @Builder

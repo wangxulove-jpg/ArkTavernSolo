@@ -250,8 +250,6 @@ struct AiCardRevisePage {
         .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
         .borderRadius($r('app.float.app_radius_lg'))
         .margin({
-          left: $r('app.float.app_spacing_12'),
-          right: $r('app.float.app_spacing_12'),
           top: $r('app.float.app_spacing_12')
         })
 
@@ -277,8 +275,6 @@ struct AiCardRevisePage {
           .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
           .borderRadius($r('app.float.app_radius_lg'))
           .margin({
-            left: $r('app.float.app_spacing_12'),
-            right: $r('app.float.app_spacing_12'),
             top: $r('app.float.app_spacing_12')
           })
         }
@@ -325,14 +321,44 @@ struct AiCardRevisePage {
                   this.viewModel!.suggestions = value;
                 }
               })
+
+            // ===== 世界书修改开关(仅当卡带世界书时显示) =====
+            if (this.viewModel!.parsedCard!.characterBook !== null) {
+              Divider()
+                .height(1)
+                .color(ThemePalette.dividerColor(this.effectiveTheme))
+                .margin({ top: 12, bottom: 4 })
+              Row() {
+                Column() {
+                  Text('同时让 AI 修改世界书')
+                    .fontSize($r('app.float.app_font_body'))
+                    .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+                  Text('开启后会把当前世界书发给 AI,按建议修改对应条目(未提及条目尽量保持)')
+                    .fontSize(11)
+                    .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+                    .margin({ top: 2 })
+                }
+                .alignItems(HorizontalAlign.Start)
+                .layoutWeight(1)
+
+                Toggle({ type: ToggleType.Switch, isOn: this.viewModel!.includeWorldbook })
+                  .selectedColor(ThemePalette.accentColor(this.effectiveTheme))
+                  .onChange((isOn: boolean) => {
+                    if (this.viewModel !== null) {
+                      this.viewModel!.includeWorldbook = isOn;
+                    }
+                  })
+              }
+              .width('100%')
+              .alignItems(VerticalAlign.Center)
+              .margin({ top: 8 })
+            }
           }
           .width('100%')
           .padding($r('app.float.app_spacing_16'))
           .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
           .borderRadius($r('app.float.app_radius_lg'))
           .margin({
-            left: $r('app.float.app_spacing_12'),
-            right: $r('app.float.app_spacing_12'),
             top: $r('app.float.app_spacing_12')
           })
         }
@@ -356,6 +382,7 @@ struct AiCardRevisePage {
         Row().height($r('app.float.app_spacing_24')).width('100%')
       }
       .width('100%')
+      .padding({ left: $r('app.float.app_spacing_12'), right: $r('app.float.app_spacing_12') })
       .alignItems(HorizontalAlign.Start)
     }
     .width('100%')
