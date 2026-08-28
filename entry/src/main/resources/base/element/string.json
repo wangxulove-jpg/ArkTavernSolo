@@ -129,6 +129,42 @@
       "value": "保存失败"
     },
     {
+      "name": "settings_market_cache_section",
+      "value": "市场缓存"
+    },
+    {
+      "name": "settings_market_cache_clear",
+      "value": "清除市场缓存"
+    },
+    {
+      "name": "settings_market_cache_size",
+      "value": "当前缓存大小："
+    },
+    {
+      "name": "settings_market_cache_clear_desc",
+      "value": "清除已浏览角色卡等本地缓存数据"
+    },
+    {
+      "name": "settings_market_cache_clear_confirm_title",
+      "value": "清除市场缓存"
+    },
+    {
+      "name": "settings_market_cache_clear_confirm_message",
+      "value": "确定清除已浏览角色卡等市场缓存吗？此操作不可恢复。"
+    },
+    {
+      "name": "settings_market_cache_clear_confirm_ok",
+      "value": "清除"
+    },
+    {
+      "name": "settings_market_cache_cleared",
+      "value": "市场缓存已清除"
+    },
+    {
+      "name": "settings_market_cache_clear_failed",
+      "value": "清除失败"
+    },
+    {
       "name": "chat_user_name_override_placeholder",
       "value": "留空时使用角色或全局"
     },
@@ -1321,12 +1357,20 @@
       "value": "显示已导入"
     },
     {
-      "name": "market_chinese_only",
-      "value": "仅中文"
-    },
-    {
       "name": "market_translate_toggle",
       "value": "翻译为中文"
+    },
+    {
+      "name": "market_filter_category",
+      "value": "分类"
+    },
+    {
+      "name": "market_filter_sort",
+      "value": "排序"
+    },
+    {
+      "name": "market_filter_toggle",
+      "value": "筛选"
     },
     {
       "name": "market_loading",

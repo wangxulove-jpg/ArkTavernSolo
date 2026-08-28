@@ -9,7 +9,9 @@
  * - 最近 Provider 选择(providerId)
  * - 最近排序(sort)
  * - 最近搜索历史(最近 10 条)
- * - 最近一次列表缓存(带时间戳,过期重新请求)
+ * - 最近一次列表缓存(整段已加载列表,永久,重启直接展示)
+ * - 已浏览角色卡缓存(永久)
+ * - 翻译缓存
  *
  * 不存储:
  * - 完整角色卡数据(导入前的临时数据)
@@ -17,8 +19,9 @@
  * - 用户身份信息
  *
  * 过期策略:
- * - 列表缓存默认 5 分钟过期
+ * - 列表缓存与已浏览缓存永久保存(由"清除市场缓存"清理)
  * - 搜索历史永久保存(直到清理)
+ * - 翻译缓存 30 天过期
  */
 
 import { AppPreferences } from '../../storage/AppPreferences';
@@ -29,7 +32,6 @@ import { Logger } from '../../utils/Logger';
 const LOG_TAG: string = 'MarketCacheStore';
 const KEY_HIDE_NSFW: string = 'market_hide_nsfw';
 const KEY_HIDE_IMPORTED: string = 'market_hide_imported';
-const KEY_CHINESE_ONLY: string = 'market_chinese_only';
 const KEY_PROVIDER_ID: string = 'market_provider_id';
 const KEY_SORT: string = 'market_sort';
 const KEY_SEARCH_HISTORY: string = 'market_search_history';
@@ -37,12 +39,17 @@ const KEY_LAST_LIST_CACHE: string = 'market_last_list_cache';
 const KEY_LAST_LIST_CACHE_TS: string = 'market_last_list_cache_ts';
 const KEY_TRANSLATE_ENABLED: string = 'market_translate_enabled';
 const KEY_TRANSLATE_CACHE: string = 'market_translate_cache';
-const LIST_CACHE_TTL_MS: number = 5 * 60 * 1000; // 5 分钟
+/** 已浏览角色卡缓存(永久保存,由"清除市场缓存"清理) */
+const KEY_BROWSED_CACHE: string = 'market_browsed_cache';
 const MAX_SEARCH_HISTORY: number = 10;
 /** 翻译缓存条目最大数量 */
 const MAX_TRANSLATE_ENTRIES: number = 200;
 /** 翻译缓存过期时间(30 天) */
 const TRANSLATE_CACHE_TTL_MS: number = 30 * 24 * 60 * 60 * 1000;
+/** 已浏览角色卡缓存最大条目数量 */
+const MAX_BROWSED_ENTRIES: number = 200;
+/** 缓存列表最大条目数量(覆盖整段已加载列表) */
+const MAX_CACHED_LIST_ITEMS: number = 200;
 
 /**
  * 市场缓存与偏好存储。
@@ -70,22 +77,6 @@ export class MarketCacheStore {
 
   async setHideImported(value: boolean): Promise<void> {
     await this.prefs.putBoolean(KEY_HIDE_IMPORTED, value);
-  }
-
-  // ===== 仅中文筛选 =====
-
-  /**
-   * 读取"仅中文角色"开关状态(默认关闭)。
-   */
-  async getChineseOnly(): Promise<boolean> {
-    return await this.prefs.getBoolean(KEY_CHINESE_ONLY, false);
-  }
-
-  /**
-   * 保存"仅中文角色"开关状态。
-   */
-  async setChineseOnly(value: boolean): Promise<void> {
-    await this.prefs.putBoolean(KEY_CHINESE_ONLY, value);
   }
 
   // ===== Provider 与排序 =====
@@ -171,22 +162,13 @@ export class MarketCacheStore {
     await this.prefs.putString(KEY_SEARCH_HISTORY, '');
   }
 
-  // ===== 列表缓存 =====
+  // ===== 列表缓存(整段已加载列表,永久) =====
 
   /**
-   * 读取最近一次缓存列表(若过期返回空数组)。
+   * 读取缓存列表(永久保存,无过期)。无缓存时返回空数组。
    */
   async getLastListCache(): Promise<MarketCharacter[]> {
     try {
-      const tsStr: string = await this.prefs.getString(KEY_LAST_LIST_CACHE_TS, '0');
-      const ts: number = parseInt(tsStr, 10);
-      if (isNaN(ts) || ts === 0) {
-        return [];
-      }
-      const now: number = Date.now();
-      if (now - ts > LIST_CACHE_TTL_MS) {
-        return [];
-      }
       const json: string = await this.prefs.getString(KEY_LAST_LIST_CACHE, '');
       if (json.length === 0) {
         return [];
@@ -212,12 +194,12 @@ export class MarketCacheStore {
   }
 
   /**
-   * 保存最近一次缓存列表(带时间戳)。
-   * 仅缓存前 24 条,避免占用过多 Preferences 空间。
+   * 保存整段已加载列表(永久,带时间戳)。
+   * 截断至 MAX_CACHED_LIST_ITEMS 条,避免占用过多 Preferences 空间。
    */
   async setLastListCache(items: MarketCharacter[]): Promise<void> {
     try {
-      const limited: MarketCharacter[] = items.slice(0, 24);
+      const limited: MarketCharacter[] = items.slice(0, MAX_CACHED_LIST_ITEMS);
       const json: string = JSON.stringify(limited);
       const now: number = Date.now();
       await this.prefs.putString(KEY_LAST_LIST_CACHE, json);
@@ -230,6 +212,89 @@ export class MarketCacheStore {
   async clearLastListCache(): Promise<void> {
     await this.prefs.putString(KEY_LAST_LIST_CACHE, '');
     await this.prefs.putString(KEY_LAST_LIST_CACHE_TS, '0');
+  }
+
+  /**
+   * 统计市场缓存占用字节数(近似,UTF-16 字符数×2)。
+   * 仅统计缓存数据(列表缓存 + 已浏览缓存 + 翻译缓存),不含用户偏好。
+   */
+  async countCacheBytes(): Promise<number> {
+    try {
+      const keyList: string[] = [KEY_LAST_LIST_CACHE, KEY_BROWSED_CACHE, KEY_TRANSLATE_CACHE];
+      let total: number = 0;
+      for (let i: number = 0; i < keyList.length; i++) {
+        const v: string = await this.prefs.getString(keyList[i], '');
+        total += v.length * 2;
+      }
+      return total;
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'countCacheBytes failed: ' + String(e));
+      return 0;
+    }
+  }
+
+  // ===== 已浏览角色卡缓存(永久) =====
+
+  /**
+   * 缓存一条已浏览的角色卡(永久保存,不进缓存)。
+   * 同一条角色重复浏览时刷新浏览时间戳。
+   * 超过最大数量时按浏览时间淘汰最早的条目(LRU 近似)。
+   */
+  async putBrowsedCharacter(character: MarketCharacter): Promise<void> {
+    try {
+      const json: string = await this.prefs.getString(KEY_BROWSED_CACHE, '');
+      let root: Record<string, MarketBrowsedCacheEntry> = {};
+      if (json.length > 0) {
+        const parsed: Object = JSON.parse(json);
+        if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+          root = parsed as Record<string, MarketBrowsedCacheEntry>;
+        }
+      }
+      const key: string = character.providerId + ':' + character.remoteId;
+      root[key] = { character: character, browsedAt: Date.now() };
+      // 容量控制:超过最大数量时保留最新的 MAX_BROWSED_ENTRIES 条
+      const keys: string[] = Object.keys(root);
+      if (keys.length > MAX_BROWSED_ENTRIES) {
+        const sortedEntries: MarketBrowsedCacheEntry[] = [];
+        for (let i: number = 0; i < keys.length; i++) {
+          const v: MarketBrowsedCacheEntry | undefined = root[keys[i]];
+          if (v !== undefined) {
+            sortedEntries.push(v);
+          }
+        }
+        sortedEntries.sort((a: MarketBrowsedCacheEntry, b: MarketBrowsedCacheEntry): number => {
+          return a.browsedAt - b.browsedAt;
+        });
+        const keepStart: number = sortedEntries.length - MAX_BROWSED_ENTRIES;
+        const trimmed: Record<string, MarketBrowsedCacheEntry> = {};
+        for (let i: number = keepStart; i < sortedEntries.length; i++) {
+          const k: string =
+            sortedEntries[i].character.providerId + ':' + sortedEntries[i].character.remoteId;
+          trimmed[k] = sortedEntries[i];
+        }
+        root = trimmed;
+      }
+      await this.prefs.putString(KEY_BROWSED_CACHE, JSON.stringify(root));
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'putBrowsedCharacter save failed: ' + String(e));
+    }
+  }
+
+  /**
+   * 清空已浏览角色卡缓存。
+   */
+  async clearBrowsedCache(): Promise<void> {
+    await this.prefs.putString(KEY_BROWSED_CACHE, '');
+  }
+
+  /**
+   * 清空全部市场缓存(已浏览角色卡 + 最近列表 + 翻译缓存)。
+   * 保留用户偏好(hideNsfw / hideImported / sort / providerId / 搜索历史)。
+   */
+  async clearAllCaches(): Promise<void> {
+    await this.clearBrowsedCache();
+    await this.clearLastListCache();
+    await this.clearTranslationCache();
   }
 
   // ===== 翻译偏好 =====
@@ -374,4 +439,14 @@ export interface MarketTranslationCacheEntry {
   readonly translatedCreatorNotes: string;
   /** 翻译时间戳 */
   readonly translatedAt: number;
+}
+
+/**
+ * 已浏览角色卡缓存条目(永久保存)。
+ */
+export interface MarketBrowsedCacheEntry {
+  /** 角色卡摘要数据 */
+  readonly character: MarketCharacter;
+  /** 最近浏览时间戳(用于 LRU 淘汰) */
+  readonly browsedAt: number;
 }

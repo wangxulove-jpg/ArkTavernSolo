@@ -113,15 +113,11 @@ export class MarketService {
 
   /**
    * 搜索角色卡,委托当前 Provider。
-   * 成功后缓存第一页结果。
+   * 列表缓存由 ViewModel 在刷新/加载更多完成后统一写入整段列表。
    */
   async searchCharacters(query: MarketQuery): Promise<MarketPageResult> {
     const provider: MarketProvider = this.getCurrentProvider();
     const result: MarketPageResult = await provider.searchCharacters(query);
-    // 仅缓存第一页
-    if (query.page === 0) {
-      await this.cache.setLastListCache(result.items);
-    }
     return result;
   }
 
@@ -168,14 +164,6 @@ export class MarketService {
     await this.cache.setHideImported(value);
   }
 
-  async getChineseOnly(): Promise<boolean> {
-    return await this.cache.getChineseOnly();
-  }
-
-  async setChineseOnly(value: boolean): Promise<void> {
-    await this.cache.setChineseOnly(value);
-  }
-
   async setSort(sort: MarketSort): Promise<void> {
     await this.cache.setSort(sort);
   }
@@ -219,6 +207,42 @@ export class MarketService {
    */
   getCacheStore(): MarketCacheStore {
     return this.cache;
+  }
+
+  /**
+   * 记录一条已浏览角色卡到永久缓存。
+   */
+  async markCharacterBrowsed(item: MarketCharacter): Promise<void> {
+    await this.cache.putBrowsedCharacter(item);
+  }
+
+  /**
+   * 缓存整段已加载列表(重启后直接展示)。
+   */
+  async cacheList(items: MarketCharacter[]): Promise<void> {
+    await this.cache.setLastListCache(items);
+  }
+
+  /**
+   * 读取上次缓存的列表(无缓存返回空数组)。
+   */
+  async getCachedList(): Promise<MarketCharacter[]> {
+    return await this.cache.getLastListCache();
+  }
+
+  /**
+   * 获取市场缓存大小(字节,近似)。
+   */
+  async getCacheSizeBytes(): Promise<number> {
+    return await this.cache.countCacheBytes();
+  }
+
+  /**
+   * 清除全部市场缓存(已浏览角色卡 + 最近列表 + 翻译缓存)。
+   * 保留用户偏好设置。
+   */
+  async clearMarketCaches(): Promise<void> {
+    await this.cache.clearAllCaches();
   }
 
   /**

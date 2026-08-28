@@ -48,6 +48,8 @@ struct AppSettingsPage {
   @State smartGripEnabled: boolean = false;
   /** 设备是否支持智感握姿 */
   @State smartGripSupported: boolean = true;
+  /** 市场缓存大小文本(如 "128 KB") */
+  @State marketCacheSize: string = '';
 
   private preferences: AppPreferences | null = null;
   private themeManager: ThemeManager | null = null;
@@ -60,6 +62,7 @@ struct AppSettingsPage {
       this.loadGlobalUserName();
       this.loadSendButtonSettings();
       this.checkGripSupport();
+      this.loadMarketCacheSize();
     }).catch(() => {
       this.errorMessage = 'AppServices 初始化失败';
       this.isLoading = false;
@@ -149,6 +152,59 @@ struct AppSettingsPage {
     } catch (_e) {
       this.smartGripSupported = false;
     }
+  }
+
+  /** 弹出确认框,确认后清除市场缓存 */
+  private confirmClearMarketCaches(): void {
+    promptAction.showDialog({
+      title: $r('app.string.settings_market_cache_clear_confirm_title'),
+      message: $r('app.string.settings_market_cache_clear_confirm_message'),
+      buttons: [
+        {
+          text: $r('app.string.settings_market_cache_clear_confirm_ok'),
+          color: $r('app.color.app_danger')
+        },
+        {
+          text: $r('app.string.market_cancel'),
+          color: $r('app.color.page_secondary_text')
+        }
+      ]
+    }).then((result: promptAction.ShowDialogSuccessResponse) => {
+      if (result.index === 0) {
+        void this.clearMarketCaches();
+      }
+    }).catch(() => {});
+  }
+
+  private async clearMarketCaches(): Promise<void> {
+    try {
+      await AppServices.getMarketService().clearMarketCaches();
+      this.loadMarketCacheSize();
+      promptAction.showToast({ message: $r('app.string.settings_market_cache_cleared') });
+    } catch (e) {
+      promptAction.showToast({ message: $r('app.string.settings_market_cache_clear_failed') });
+    }
+  }
+
+  /** 加载并格式化市场缓存大小 */
+  private async loadMarketCacheSize(): Promise<void> {
+    try {
+      const bytes: number = await AppServices.getMarketService().getCacheSizeBytes();
+      this.marketCacheSize = this.formatBytes(bytes);
+    } catch (e) {
+      this.marketCacheSize = '';
+    }
+  }
+
+  /** 字节数格式化为可读文本 */
+  private formatBytes(bytes: number): string {
+    if (bytes < 1024) {
+      return bytes.toString() + ' B';
+    }
+    if (bytes < 1024 * 1024) {
+      return (bytes / 1024).toFixed(1) + ' KB';
+    }
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   }
 
   /** 根据模式获取标题资源 */
@@ -359,6 +415,55 @@ struct AppSettingsPage {
             .alignItems(VerticalAlign.Center)
             .onClick(() => {
               router.pushUrl({ url: 'pages/PersonaListPage' });
+            })
+
+            // ===== 市场缓存分区 =====
+            Text($r('app.string.settings_market_cache_section'))
+              .fontSize($r('app.float.app_font_subtitle'))
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.page_primary_text'))
+              .width('100%')
+              .margin({ top: 24, bottom: 12 })
+
+            Row() {
+              Text($r('app.string.settings_market_cache_size'))
+                .fontSize($r('app.float.app_font_caption'))
+                .fontColor($r('app.color.page_secondary_text'))
+              Text(this.marketCacheSize)
+                .fontSize($r('app.float.app_font_caption'))
+                .fontColor($r('app.color.page_primary_text'))
+            }
+            .width('100%')
+            .alignItems(VerticalAlign.Top)
+            .margin({ bottom: 8 })
+
+            Row() {
+              Column() {
+                Text($r('app.string.settings_market_cache_clear'))
+                  .fontSize($r('app.float.app_font_body'))
+                  .fontColor($r('app.color.page_primary_text'))
+                  .width('100%')
+                Text($r('app.string.settings_market_cache_clear_desc'))
+                  .fontSize($r('app.float.app_font_caption'))
+                  .fontColor($r('app.color.page_secondary_text'))
+                  .width('100%')
+                  .margin({ top: 2 })
+              }
+              .layoutWeight(1)
+              .alignItems(HorizontalAlign.Start)
+
+              SymbolGlyph($r('sys.symbol.trash'))
+                .fontSize(16)
+                .fontColor([$r('app.color.app_danger')])
+            }
+            .width('100%')
+            .padding({ left: 12, right: 12, top: 12, bottom: 12 })
+            .borderRadius($r('app.float.app_radius_md'))
+            .backgroundColor($r('app.color.app_surface_1'))
+            .border({ width: 1, color: $r('app.color.app_divider') })
+            .alignItems(VerticalAlign.Center)
+            .onClick(() => {
+              this.confirmClearMarketCaches();
             })
 
             // ===== 发送按钮分区 =====

@@ -50,8 +50,6 @@ export class MarketViewModel {
   sort: MarketSort = MarketSort.Recommended;
   hideNsfw: boolean = true;
   hideImported: boolean = false;
-  /** 仅显示中文角色(本地过滤:标签含中文、或名称/简介中文字符占比>=30%) */
-  chineseOnly: boolean = false;
   tag: string = '';
   creator: string = '';
   providerId: string = 'chub';
@@ -103,11 +101,66 @@ export class MarketViewModel {
 
   /**
    * 加载用户偏好并刷新第一页。
-   * 由页面 aboutToAppear 调用。
+   * 若本地存在缓存的整段列表,立即返回让页面先渲染缓存,并后台异步刷新将新第一页合并到头部(不缩水)。
+   * 若无缓存,则等待首次联网加载完成。由页面 aboutToAppear 调用。
    */
   async load(): Promise<void> {
     await this.loadPreferences();
-    await this.refresh();
+    const hasCached: boolean = await this.tryShowCachedList();
+    // 有缓存:先结束加载态,让页面立即显示缓存;刷新放后台,不让用户等待
+    if (hasCached) {
+      void this.refresh(true).catch((e: Error): void => {
+        Logger.warn(LOG_TAG, 'background refresh failed: ' + String(e));
+      });
+      return;
+    }
+    // 无缓存:等待首次加载完成(页面保持 loading)
+    await this.refresh(false);
+  }
+
+  /**
+   * 若本地存在整段列表缓存,先填充 items 立即渲染(不触发全屏 loading)。
+   * @returns 是否展示过缓存(用于决定首次刷新是否合并保留)。
+   */
+  private async tryShowCachedList(): Promise<boolean> {
+    if (this.items.length > 0) {
+      return false;
+    }
+    try {
+      const cached: MarketCharacter[] = await this.marketService.getCachedList();
+      if (cached.length > 0) {
+        this.items = cached;
+        this.notifyStateChanged();
+        return true;
+      }
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'tryShowCachedList failed: ' + String(e));
+    }
+    return false;
+  }
+
+  /**
+   * 把新第一页与当前 items 合并:新第一页在前(去重),当前 items 中其余项去重追加。
+   * 仅用于"从缓存加载后"的首次后台刷新,避免重启后列表从整段缩水到一页。
+   */
+  private mergeWithExisting(newItems: MarketCharacter[]): MarketCharacter[] {
+    const seen: Set<string> = new Set<string>();
+    const result: MarketCharacter[] = [];
+    for (let i = 0; i < newItems.length; i++) {
+      const key: string = marketCharacterKey(newItems[i]);
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(newItems[i]);
+      }
+    }
+    for (let i = 0; i < this.items.length; i++) {
+      const key: string = marketCharacterKey(this.items[i]);
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(this.items[i]);
+      }
+    }
+    return result;
   }
 
   /**
@@ -128,8 +181,10 @@ export class MarketViewModel {
   /**
    * 刷新第一页(重置分页)。
    * 取消所有进行中的请求与翻译任务。
+   * @param mergeExisting 为 true 时,用新第一页替换列表头部,并保留当前 items 中
+   *  其余项目(用于"从缓存加载后"的首次后台刷新,避免列表缩水);默认完全替换。
    */
-  async refresh(): Promise<void> {
+  async refresh(mergeExisting: boolean = false): Promise<void> {
     this.operationId++;
     this.translationGenerationId++;
     const opId: number = this.operationId;
@@ -155,19 +210,13 @@ export class MarketViewModel {
       if (opId !== this.operationId) {
         return;
       }
-      // 应用本地过滤(仅中文 + 隐藏已导入)
-      let finalItems: MarketCharacter[] = this.applyLocalFilters(result.items, newMap);
+      // 应用本地过滤(隐藏已导入)
+      const filteredItems: MarketCharacter[] = this.applyLocalFilters(result.items, newMap);
       this.importedMap = newMap;
-      this.items = finalItems;
+      this.items = mergeExisting ? this.mergeWithExisting(filteredItems) : filteredItems;
       this.nextCursor = result.nextCursor;
       this.hasMore = result.nextCursor.length > 0;
-      // 仅中文筛选开启时,可能本地过滤后不足一页,需要补足
-      if (this.chineseOnly && this.hasMore && finalItems.length < DEFAULT_MARKET_PAGE_SIZE) {
-        await this.fillMoreToReach(opId, DEFAULT_MARKET_PAGE_SIZE);
-        if (opId !== this.operationId) {
-          return;
-        }
-      }
+      this.persistItemCache();
       // 翻译触发
       this.maybeTranslateVisible();
     } catch (e) {
@@ -187,7 +236,6 @@ export class MarketViewModel {
   /**
    * 加载下一页。
    * 防止重复加载、刷新中、无更多数据时直接返回。
-   * chineseOnly 开启时,本地过滤后不足一页会循环拉取后续页,直到达到目标数量或无更多。
    */
   async loadMore(): Promise<void> {
     if (this.loadingMore || this.refreshing || !this.hasMore) {
@@ -198,68 +246,53 @@ export class MarketViewModel {
     const opId: number = this.operationId;
     const genId: number = this.translationGenerationId;
     try {
-      const targetBatchSize: number = DEFAULT_MARKET_PAGE_SIZE;
       const accumulated: MarketCharacter[] = [];
       const accumulatedImportedMap: Map<string, string> = new Map<string, string>();
       let cursor: string = this.nextCursor;
       let stillHasMore: boolean = true;
 
-      // 循环拉取直到满足目标数量或远程无更多数据
-      while (accumulated.length < targetBatchSize && stillHasMore) {
-        if (opId !== this.operationId) {
-          return;
+      // 拉取下一页
+      const query: MarketQuery = this.buildQuery(cursor);
+      const result: MarketPageResult = await this.marketService.searchCharacters(query);
+      if (opId !== this.operationId) {
+        return;
+      }
+      // 跨页去重(相对已加载 items)
+      const seen: Set<string> = new Set<string>();
+      for (let i = 0; i < this.items.length; i++) {
+        seen.add(marketCharacterKey(this.items[i]));
+      }
+      const dedupedNewItems: MarketCharacter[] = [];
+      for (let i = 0; i < result.items.length; i++) {
+        const item: MarketCharacter = result.items[i];
+        const key: string = marketCharacterKey(item);
+        if (!seen.has(key)) {
+          dedupedNewItems.push(item);
+          seen.add(key);
         }
-        const query: MarketQuery = this.buildQuery(cursor);
-        const result: MarketPageResult = await this.marketService.searchCharacters(query);
-        if (opId !== this.operationId) {
-          return;
-        }
-        // 跨页去重(包括已加载 items 与本批已累积)
-        const seen: Set<string> = new Set<string>();
-        for (let i = 0; i < this.items.length; i++) {
-          seen.add(marketCharacterKey(this.items[i]));
-        }
-        for (let i = 0; i < accumulated.length; i++) {
-          seen.add(marketCharacterKey(accumulated[i]));
-        }
-        const dedupedNewItems: MarketCharacter[] = [];
-        for (let i = 0; i < result.items.length; i++) {
-          const item: MarketCharacter = result.items[i];
-          const key: string = marketCharacterKey(item);
-          if (!seen.has(key)) {
-            dedupedNewItems.push(item);
-            seen.add(key);
-          }
-        }
+      }
 
-        // 检查已导入状态(仅新条目)
-        const newMap: Map<string, string> = await this.marketService.checkImportedBatch(dedupedNewItems);
-        if (opId !== this.operationId) {
-          return;
-        }
-        // 合并到本批 importedMap
-        newMap.forEach((value: string, key: string) => {
-          accumulatedImportedMap.set(key, value);
-        });
+      // 检查已导入状态
+      const newMap: Map<string, string> = await this.marketService.checkImportedBatch(dedupedNewItems);
+      if (opId !== this.operationId) {
+        return;
+      }
+      // 合并到本批 importedMap
+      newMap.forEach((value: string, key: string) => {
+        accumulatedImportedMap.set(key, value);
+      });
 
-        // 应用本地过滤(仅中文 + 隐藏已导入)
-        const filtered: MarketCharacter[] = this.applyLocalFilters(dedupedNewItems, accumulatedImportedMap);
-        for (let i = 0; i < filtered.length; i++) {
-          accumulated.push(filtered[i]);
-        }
+      // 应用本地过滤(隐藏已导入)
+      const filtered: MarketCharacter[] = this.applyLocalFilters(dedupedNewItems, accumulatedImportedMap);
+      for (let i = 0; i < filtered.length; i++) {
+        accumulated.push(filtered[i]);
+      }
 
-        cursor = result.nextCursor;
-        stillHasMore = result.nextCursor.length > 0;
-
-        // 防止死循环:本次远程返回空数据时停止
-        if (result.items.length === 0) {
-          stillHasMore = false;
-          break;
-        }
-        // 非 chineseOnly 模式下一次请求即可
-        if (!this.chineseOnly) {
-          break;
-        }
+      cursor = result.nextCursor;
+      stillHasMore = result.nextCursor.length > 0;
+      // 本次远程返回空数据时停止
+      if (result.items.length === 0) {
+        stillHasMore = false;
       }
 
       if (opId !== this.operationId) {
@@ -297,6 +330,8 @@ export class MarketViewModel {
       this.importedMap = mergedMap;
       this.nextCursor = cursor;
       this.hasMore = stillHasMore;
+      // 持久整段列表缓存(含下滑加载的部分)
+      this.persistItemCache();
       // 翻译触发(新加载的条目)
       if (genId === this.translationGenerationId) {
         this.maybeTranslateVisible();
@@ -313,73 +348,6 @@ export class MarketViewModel {
         this.notifyStateChanged();
       }
     }
-  }
-
-  /**
-   * 在 refresh 后补足本地过滤后的目标数量。
-   * 循环调用 searchCharacters 拉取后续页,直到达到 targetCount 或无更多。
-   * 仅用于 chineseOnly 模式下本地过滤后不足一页的情况。
-   */
-  private async fillMoreToReach(opId: number, targetCount: number): Promise<void> {
-    let cursor: string = this.nextCursor;
-    let stillHasMore: boolean = this.hasMore;
-    while (this.items.length < targetCount && stillHasMore) {
-      if (opId !== this.operationId) {
-        return;
-      }
-      const query: MarketQuery = this.buildQuery(cursor);
-      const result: MarketPageResult = await this.marketService.searchCharacters(query);
-      if (opId !== this.operationId) {
-        return;
-      }
-      // 跨页去重
-      const seen: Set<string> = new Set<string>();
-      for (let i = 0; i < this.items.length; i++) {
-        seen.add(marketCharacterKey(this.items[i]));
-      }
-      const dedupedNewItems: MarketCharacter[] = [];
-      for (let i = 0; i < result.items.length; i++) {
-        const item: MarketCharacter = result.items[i];
-        const key: string = marketCharacterKey(item);
-        if (!seen.has(key)) {
-          dedupedNewItems.push(item);
-          seen.add(key);
-        }
-      }
-      const newMap: Map<string, string> = await this.marketService.checkImportedBatch(dedupedNewItems);
-      if (opId !== this.operationId) {
-        return;
-      }
-      // 合并到主 importedMap
-      const mergedMap: Map<string, string> = new Map<string, string>();
-      this.importedMap.forEach((value: string, key: string) => {
-        mergedMap.set(key, value);
-      });
-      newMap.forEach((value: string, key: string) => {
-        mergedMap.set(key, value);
-      });
-      this.importedMap = mergedMap;
-
-      const filtered: MarketCharacter[] = this.applyLocalFilters(dedupedNewItems, mergedMap);
-      if (filtered.length > 0) {
-        const mergedItems: MarketCharacter[] = [];
-        for (let i = 0; i < this.items.length; i++) {
-          mergedItems.push(this.items[i]);
-        }
-        for (let i = 0; i < filtered.length; i++) {
-          mergedItems.push(filtered[i]);
-        }
-        this.items = mergedItems;
-      }
-      cursor = result.nextCursor;
-      stillHasMore = result.nextCursor.length > 0;
-      if (result.items.length === 0) {
-        stillHasMore = false;
-        break;
-      }
-    }
-    this.nextCursor = cursor;
-    this.hasMore = stillHasMore;
   }
 
   // ===== 搜索 =====
@@ -507,25 +475,6 @@ export class MarketViewModel {
       await this.marketService.setHideImported(value);
     } catch (e) {
       Logger.warn(LOG_TAG, 'setHideImported save failed: ' + String(e));
-    }
-    await this.refresh();
-  }
-
-  /**
-   * 设置"仅中文角色"开关。
-   * 启用后本地过滤:标签含中文、或名称/简介中文字符占比>=30%。
-   * 不足一页时 loadMore 会循环拉取后续页。
-   */
-  async setChineseOnly(value: boolean): Promise<void> {
-    if (this.chineseOnly === value) {
-      return;
-    }
-    this.chineseOnly = value;
-    this.notifyStateChanged();
-    try {
-      await this.marketService.setChineseOnly(value);
-    } catch (e) {
-      Logger.warn(LOG_TAG, 'setChineseOnly save failed: ' + String(e));
     }
     await this.refresh();
   }
@@ -781,6 +730,30 @@ export class MarketViewModel {
   // ===== 内部方法 =====
 
   /**
+   * 记录一条"已浏览"角色卡到永久缓存。
+   * 由页面在打开角色详情时调用。
+   */
+  async markBrowsed(item: MarketCharacter): Promise<void> {
+    try {
+      await this.marketService.markCharacterBrowsed(item);
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'markBrowsed failed: ' + String(e));
+    }
+  }
+
+  /**
+   * 持久整段已加载列表到缓存(供下次重启直接展示)。
+   * 异步写入,失败不影响当前操作。
+   */
+  private persistItemCache(): void {
+    try {
+      void this.marketService.cacheList(this.items);
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'persistItemCache failed: ' + String(e));
+    }
+  }
+
+  /**
    * 加载用户偏好到 ViewModel 状态。
    */
   private async loadPreferences(): Promise<void> {
@@ -792,8 +765,6 @@ export class MarketViewModel {
       this.providerId = this.marketService.getCurrentProvider().providerId;
       this.searchInput = '';
       this.appliedSearch = '';
-      // 加载"仅中文"偏好
-      this.chineseOnly = await this.marketService.getChineseOnly();
       // 加载翻译偏好
       if (this.translationService !== null) {
         this.translateEnabled = await this.translationService.isTranslateEnabled();
@@ -879,7 +850,7 @@ export class MarketViewModel {
   }
 
   /**
-   * 应用本地过滤(仅中文 + 隐藏已导入)。
+   * 应用本地过滤(隐藏已导入)。
    * 由 refresh/loadMore 在写入 items 前调用。
    */
   private applyLocalFilters(
@@ -887,84 +858,10 @@ export class MarketViewModel {
     map: Map<string, string>
   ): MarketCharacter[] {
     let result: MarketCharacter[] = items;
-    if (this.chineseOnly) {
-      result = this.filterChineseOnly(result);
-    }
     if (this.hideImported) {
       result = this.filterImported(result, map);
     }
     return result;
-  }
-
-  /**
-   * 仅中文角色本地过滤。
-   * 判定标准(优先级):
-   * 1) 任一标签包含中文字符 → 通过
-   * 2) 名称中文字符占比 >= 30% → 通过
-   * 3) 简介中文字符占比 >= 30% → 通过
-   * 4) 否则 → 不通过(标记为未知语言,不显示)
-   */
-  private filterChineseOnly(items: MarketCharacter[]): MarketCharacter[] {
-    const result: MarketCharacter[] = [];
-    for (let i = 0; i < items.length; i++) {
-      if (this.isChineseCharacter(items[i])) {
-        result.push(items[i]);
-      }
-    }
-    return result;
-  }
-
-  /**
-   * 判断角色卡是否为中文角色。
-   */
-  private isChineseCharacter(item: MarketCharacter): boolean {
-    // 优先级 1:标签中含中文
-    for (let i = 0; i < item.tags.length; i++) {
-      if (this.containsChinese(item.tags[i])) {
-        return true;
-      }
-    }
-    // 优先级 2:名称中文字符占比 >= 30%
-    if (item.name.length > 0 && this.chineseRatio(item.name) >= 0.3) {
-      return true;
-    }
-    // 优先级 3:简介中文字符占比 >= 30%
-    if (item.summary.length > 0 && this.chineseRatio(item.summary) >= 0.3) {
-      return true;
-    }
-    return false;
-  }
-
-  /**
-   * 文本中是否包含 CJK 统一表意文字字符。
-   * Unicode 范围 0x4E00 ~ 0x9FFF。
-   */
-  private containsChinese(text: string): boolean {
-    for (let i = 0; i < text.length; i++) {
-      const code: number = text.charCodeAt(i);
-      if (code >= 0x4E00 && code <= 0x9FFF) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /**
-   * 计算中文字符占文本长度的比例(0~1)。
-   * 空文本返回 0。
-   */
-  private chineseRatio(text: string): number {
-    if (text.length === 0) {
-      return 0;
-    }
-    let count: number = 0;
-    for (let i = 0; i < text.length; i++) {
-      const code: number = text.charCodeAt(i);
-      if (code >= 0x4E00 && code <= 0x9FFF) {
-        count++;
-      }
-    }
-    return count / text.length;
   }
 
   /**

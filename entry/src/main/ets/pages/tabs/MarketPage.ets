@@ -6,8 +6,7 @@
  * 结构(自上而下):
  * - 顶部标题栏:标题"角色市场" + 来源标识
  * - 搜索框(胶囊样式,防抖 350ms)
- * - 分类标签栏(下划线 Tab 样式,横滑)
- * - 工具栏(单行横滑:排序 / 分隔线 / NSFW / 仅中文 / 隐藏已导入 / 翻译)
+ * - 三联下拉栏(分类 / 排序 / 筛选 触发器一行,面板向下展开悬浮于内容上方,不挤压卡片)
  * - 内容区:
  *   - 加载中:LoadingProgress
  *   - 加载失败:EmptyStateView + 重试按钮
@@ -77,7 +76,6 @@ export struct MarketPage {
   @State uiSort: MarketSort = MarketSort.Recommended;
   @State uiHideNsfw: boolean = true;
   @State uiHideImported: boolean = false;
-  @State uiChineseOnly: boolean = false;
   @State uiTranslateEnabled: boolean = false;
   @State uiError: string = '';
   @State refreshing: boolean = false;
@@ -85,6 +83,8 @@ export struct MarketPage {
   @State showNsfwConfirm: boolean = false;
   @State showTranslatePrivacy: boolean = false;
   @State selectedCategoryIndex: number = 0;
+  /** 当前展开的下拉面板: '' / 'category' / 'sort' / 'filter',同一时间最多展开一个 */
+  @State activeDropdown: string = '';
   /** 顶部状态栏避让高度 */
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   /** 当前有效主题 */
@@ -142,7 +142,6 @@ export struct MarketPage {
     this.uiSort = vm.sort;
     this.uiHideNsfw = vm.hideNsfw;
     this.uiHideImported = vm.hideImported;
-    this.uiChineseOnly = vm.chineseOnly;
     this.uiTranslateEnabled = vm.translateEnabled;
     this.uiError = vm.errorMessage;
     this.loadingMore = vm.loadingMore;
@@ -175,25 +174,42 @@ export struct MarketPage {
         // ===== 搜索框(胶囊) =====
         this.searchBar()
 
-        // ===== 分类标签栏(下划线 Tab) =====
-        this.categoryTabs()
-
-        // ===== 工具栏(排序 + 筛选,单行横滑) =====
-        this.toolbarBar()
+        // ===== 三联下拉栏(分类 / 排序 / 筛选) =====
+        this.dropdownBar()
 
         // ===== 错误提示 =====
         if (this.uiError.length > 0) {
           this.errorBanner()
         }
 
-        // ===== 主内容区 =====
-        if (this.isInitializing) {
-          this.loadingView()
-        } else if (this.viewModel === null) {
-          this.errorView($r('app.string.market_init_failed'), $r('app.string.market_not_initialized'))
-        } else {
-          this.marketContent()
+        // ===== 主内容区(下拉面板悬浮其上,不挤压卡片) =====
+        Stack({ alignContent: Alignment.TopStart }) {
+          Column() {
+            if (this.isInitializing) {
+              this.loadingView()
+            } else if (this.viewModel === null) {
+              this.errorView($r('app.string.market_init_failed'), $r('app.string.market_not_initialized'))
+            } else {
+              this.marketContent()
+            }
+          }
+          .width('100%')
+          .height('100%')
+
+          if (this.activeDropdown !== '') {
+            // 透明遮罩:点击面板外区域收起
+            Column()
+              .width('100%')
+              .height('100%')
+              .onClick(() => {
+                this.activeDropdown = '';
+              })
+
+            this.dropdownPanel()
+          }
         }
+        .width('100%')
+        .layoutWeight(1)
       }
       .width('100%')
       .height('100%')
@@ -309,87 +325,215 @@ export struct MarketPage {
     .alignItems(VerticalAlign.Center)
   }
 
-  // ===== 分类标签栏(下划线 Tab 样式) =====
+  // ===== 三联下拉栏(分类 / 排序 / 筛选,面板向下展开悬浮于内容上方) =====
 
   @Builder
-  categoryTabs(): void {
-    Scroll() {
-      Row() {
-        ForEach(MARKET_CATEGORIES, (cat: MarketCategoryDef, index: number) => {
-          Column() {
-            Text(cat.label)
-              .fontSize($r('app.float.app_font_body'))
-              .fontWeight(this.selectedCategoryIndex === index ? FontWeight.Bold : FontWeight.Normal)
-              .fontColor(this.selectedCategoryIndex === index
-                ? ThemePalette.accentColor(this.effectiveTheme)
-                : ThemePalette.textSecondaryColor(this.effectiveTheme))
-              .maxLines(1)
-
-            Row() {
-              Blank()
-              Row()
-                .width(18)
-                .height(3)
-                .borderRadius(2)
-                .backgroundColor(this.selectedCategoryIndex === index
-                  ? ThemePalette.accentColor(this.effectiveTheme)
-                  : Color.Transparent)
-                .margin({ top: 4 })
-              Blank()
-            }
-            .width(48)
-          }
-          .height(52)
-          .justifyContent(FlexAlign.Center)
-          .padding({ left: 10, right: 10 })
-          .onClick(() => {
-            this.onCategoryClick(index, cat.searchtag);
-          })
-        }, (cat: MarketCategoryDef, index: number) => cat.searchtag + '|' + index.toString())
-      }
+  dropdownBar(): void {
+    Row({ space: 8 }) {
+      this.dropdownTrigger($r('app.string.market_filter_category'), this.currentCategoryLabel(), 'category')
+      this.dropdownTrigger($r('app.string.market_filter_sort'), this.currentSortLabel(), 'sort')
+      this.dropdownTrigger($r('app.string.market_filter_toggle'), this.currentFilterBadge(), 'filter')
     }
-    .scrollable(ScrollDirection.Horizontal)
-    .scrollBar(BarState.Off)
-    .width('100%')
-    .padding({
-      left: $r('app.float.app_spacing_12'),
-      right: $r('app.float.app_spacing_12'),
-      top: $r('app.float.app_spacing_4'),
-      bottom: 2
-    })
-  }
-
-  // ===== 工具栏(排序 + 筛选,单行横滑) =====
-
-  @Builder
-  toolbarBar(): void {
-    Scroll() {
-      Row() {
-        this.sortChip($r('app.string.market_sort_recommended'), MarketSort.Recommended)
-        this.sortChip($r('app.string.market_sort_latest'), MarketSort.Latest)
-        this.sortChip($r('app.string.market_sort_top'), MarketSort.Top)
-
-        Divider()
-          .vertical(true)
-          .height(18)
-          .color(ThemePalette.dividerColor(this.effectiveTheme))
-          .margin({ left: 2, right: 10 })
-
-        this.nsfwChip()
-        this.chineseOnlyChip()
-        this.hideImportedChip()
-        this.translateChip()
-      }
-    }
-    .scrollable(ScrollDirection.Horizontal)
-    .scrollBar(BarState.Off)
     .width('100%')
     .padding({
       left: $r('app.float.app_spacing_16'),
       right: $r('app.float.app_spacing_16'),
       top: $r('app.float.app_spacing_4'),
-      bottom: $r('app.float.app_spacing_8')
+      bottom: $r('app.float.app_spacing_4')
     })
+  }
+
+  /**
+   * 下拉触发器:标签 + 当前值 + 旋转箭头,三列等宽。
+   */
+  @Builder
+  private dropdownTrigger(label: ResourceStr, value: ResourceStr, key: string): void {
+    Row() {
+      Text(label)
+        .fontSize($r('app.float.app_font_caption'))
+        .fontWeight(this.activeDropdown === key ? FontWeight.Medium : FontWeight.Normal)
+        .fontColor(this.activeDropdown === key
+          ? ThemePalette.accentColor(this.effectiveTheme)
+          : ThemePalette.textSecondaryColor(this.effectiveTheme))
+
+      Text(value)
+        .fontSize($r('app.float.app_font_caption'))
+        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .constraintSize({ maxWidth: 64 })
+        .margin({ left: 4 })
+
+      SymbolGlyph($r('sys.symbol.arrow_down'))
+        .fontSize(12)
+        .fontColor([ThemePalette.textSecondaryColor(this.effectiveTheme)])
+        .margin({ left: 3 })
+        .rotate({ angle: this.activeDropdown === key ? 180 : 0 })
+        .animation({ duration: 200, curve: Curve.EaseOut })
+    }
+    .layoutWeight(1)
+    .justifyContent(FlexAlign.Center)
+    .backgroundColor(this.activeDropdown === key
+      ? this.selectedChipBg()
+      : ThemePalette.surface2Color(this.effectiveTheme))
+    .borderRadius($r('app.float.app_radius_md'))
+    .padding({ left: 8, right: 8, top: 6, bottom: 6 })
+    .onClick(() => {
+      if (this.activeDropdown === key) {
+        this.activeDropdown = '';
+      } else {
+        this.activeDropdown = key;
+      }
+    })
+  }
+
+  /**
+   * 下拉面板:悬浮在内容区上方(Stack 覆盖层),不改变列表布局。
+   * 外层用 padding 包裹,避免 width('100%')+margin 溢出父容器边界导致超出屏幕。
+   */
+  @Builder
+  private dropdownPanel(): void {
+    Column() {
+      Column() {
+        if (this.activeDropdown === 'category') {
+          this.categoryPanel()
+        } else if (this.activeDropdown === 'sort') {
+          this.sortPanel()
+        } else {
+          this.filterPanel()
+        }
+      }
+      .width('100%')
+      .padding($r('app.float.app_spacing_12'))
+      .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+      .borderRadius($r('app.float.app_radius_lg'))
+      .border({ width: 1, color: ThemePalette.dividerColor(this.effectiveTheme) })
+    }
+    .width('100%')
+    .padding({
+      left: $r('app.float.app_spacing_16'),
+      right: $r('app.float.app_spacing_16')
+    })
+    .margin({ top: $r('app.float.app_spacing_4') })
+  }
+
+  /**
+   * 分类面板:全部分类 chips 换行平铺,选中即应用并收起。
+   */
+  @Builder
+  private categoryPanel(): void {
+    Scroll() {
+      Flex({ direction: FlexDirection.Row, wrap: FlexWrap.Wrap }) {
+        ForEach(MARKET_CATEGORIES, (cat: MarketCategoryDef, index: number) => {
+          Text(cat.label)
+            .fontSize($r('app.float.app_font_caption'))
+            .fontWeight(this.selectedCategoryIndex === index ? FontWeight.Medium : FontWeight.Normal)
+            .fontColor(this.selectedCategoryIndex === index
+              ? $r('app.color.app_on_accent')
+              : ThemePalette.textSecondaryColor(this.effectiveTheme))
+            .backgroundColor(this.selectedCategoryIndex === index
+              ? ThemePalette.accentColor(this.effectiveTheme)
+              : ThemePalette.surface2Color(this.effectiveTheme))
+            .borderRadius($r('app.float.app_radius_lg'))
+            .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+            .margin({ right: 8, bottom: 8 })
+            .onClick(() => {
+              this.onCategoryClick(index, cat.searchtag);
+              this.activeDropdown = '';
+            })
+        }, (cat: MarketCategoryDef, index: number) => cat.searchtag + '|' + index.toString())
+      }
+    }
+    .scrollable(ScrollDirection.Vertical)
+    .scrollBar(BarState.Off)
+    .constraintSize({ maxHeight: 240 })
+  }
+
+  /**
+   * 排序面板:三选一,选中即应用并收起。
+   */
+  @Builder
+  private sortPanel(): void {
+    Scroll() {
+      Row({ space: 8 }) {
+        this.sortChip($r('app.string.market_sort_recommended'), MarketSort.Recommended)
+        this.sortChip($r('app.string.market_sort_latest'), MarketSort.Latest)
+        this.sortChip($r('app.string.market_sort_top'), MarketSort.Top)
+      }
+      .width('100%')
+    }
+    .scrollable(ScrollDirection.Vertical)
+    .scrollBar(BarState.Off)
+    .constraintSize({ maxHeight: 160 })
+  }
+
+  /**
+   * 筛选面板:多选 chips 换行平铺,切换后保持展开,点遮罩收起。
+   */
+  @Builder
+  private filterPanel(): void {
+    Scroll() {
+      Flex({ direction: FlexDirection.Row, wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
+        this.nsfwChip()
+        this.hideImportedChip()
+        this.translateChip()
+      }
+      .width('100%')
+    }
+    .scrollable(ScrollDirection.Vertical)
+    .scrollBar(BarState.Off)
+    .constraintSize({ maxHeight: 160 })
+  }
+
+  /**
+   * 统计当前生效的筛选项数量(用于筛选触发器角标)。
+   * 默认状态(hideNsfw=true)不计为生效筛选。
+   */
+  private activeFilterCount(): number {
+    let count: number = 0;
+    if (!this.uiHideNsfw) {
+      count++;
+    }
+    if (this.uiHideImported) {
+      count++;
+    }
+    if (this.uiTranslateEnabled) {
+      count++;
+    }
+    return count;
+  }
+
+  /** 触发器右侧显示的当前分类名 */
+  private currentCategoryLabel(): string {
+    if (this.selectedCategoryIndex >= 0 && this.selectedCategoryIndex < MARKET_CATEGORIES.length) {
+      return MARKET_CATEGORIES[this.selectedCategoryIndex].label;
+    }
+    return MARKET_CATEGORIES[0].label;
+  }
+
+  /** 触发器右侧显示的当前排序文案 */
+  private currentSortLabel(): ResourceStr {
+    if (this.uiSort === MarketSort.Latest) {
+      return $r('app.string.market_sort_latest');
+    }
+    if (this.uiSort === MarketSort.Top) {
+      return $r('app.string.market_sort_top');
+    }
+    return $r('app.string.market_sort_recommended');
+  }
+
+  /** 筛选触发器角标:生效筛选项数量,无则空 */
+  private currentFilterBadge(): string {
+    const count: number = this.activeFilterCount();
+    if (count > 0) {
+      return count.toString();
+    }
+    return '';
+  }
+
+  /** 次级选中底色(selectedSurface,与分类面板的 accent 填充区分层级) */
+  private selectedChipBg(): ResourceColor {
+    return ThemePalette.forTheme(this.effectiveTheme).selectedSurface;
   }
 
   @Builder
@@ -397,43 +541,39 @@ export struct MarketPage {
     Text(label)
       .fontSize($r('app.float.app_font_caption'))
       .fontWeight(this.uiSort === sort ? FontWeight.Medium : FontWeight.Normal)
-      .fontColor(this.uiSort === sort ? $r('app.color.app_on_accent') : ThemePalette.textSecondaryColor(this.effectiveTheme))
-      .backgroundColor(this.uiSort === sort ? ThemePalette.accentColor(this.effectiveTheme) : ThemePalette.surface2Color(this.effectiveTheme))
+      .fontColor(this.uiSort === sort
+        ? ThemePalette.accentColor(this.effectiveTheme)
+        : ThemePalette.textSecondaryColor(this.effectiveTheme))
+      .backgroundColor(this.uiSort === sort
+        ? this.selectedChipBg()
+        : ThemePalette.surface2Color(this.effectiveTheme))
       .borderRadius($r('app.float.app_radius_md'))
-      .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-      .margin({ right: 8 })
+      .padding({ left: 10, right: 10, top: 5, bottom: 5 })
       .onClick(() => {
         this.onSortClick(sort);
+        this.activeDropdown = '';
       })
   }
 
   @Builder
   nsfwChip(): void {
+    // 显示 NSFW 时用危险色描边警示,与普通筛选 chip 区分(主题化,不硬编码)
     Text(this.uiHideNsfw ? $r('app.string.market_hide_nsfw') : $r('app.string.market_show_nsfw'))
       .fontSize($r('app.float.app_font_caption'))
       .fontWeight(FontWeight.Medium)
-      .fontColor(this.uiHideNsfw ? ThemePalette.textSecondaryColor(this.effectiveTheme) : $r('app.color.app_danger'))
-      .backgroundColor(this.uiHideNsfw ? ThemePalette.surface2Color(this.effectiveTheme) : '#FFE5E5')
+      .fontColor(this.uiHideNsfw
+        ? ThemePalette.textSecondaryColor(this.effectiveTheme)
+        : $r('app.color.app_danger'))
+      .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+      .border({
+        width: this.uiHideNsfw ? 0 : 1,
+        color: $r('app.color.app_danger')
+      })
       .borderRadius($r('app.float.app_radius_md'))
-      .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-      .margin({ right: 8 })
+      .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+      .margin({ right: 8, bottom: 8 })
       .onClick(() => {
         this.onNsfwClick();
-      })
-  }
-
-  @Builder
-  chineseOnlyChip(): void {
-    Text($r('app.string.market_chinese_only'))
-      .fontSize($r('app.float.app_font_caption'))
-      .fontWeight(this.uiChineseOnly ? FontWeight.Medium : FontWeight.Normal)
-      .fontColor(this.uiChineseOnly ? $r('app.color.app_on_accent') : ThemePalette.textSecondaryColor(this.effectiveTheme))
-      .backgroundColor(this.uiChineseOnly ? ThemePalette.accentColor(this.effectiveTheme) : ThemePalette.surface2Color(this.effectiveTheme))
-      .borderRadius($r('app.float.app_radius_md'))
-      .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-      .margin({ right: 8 })
-      .onClick(() => {
-        this.onChineseOnlyClick();
       })
   }
 
@@ -442,11 +582,15 @@ export struct MarketPage {
     Text(this.uiHideImported ? $r('app.string.market_hide_imported') : $r('app.string.market_show_imported'))
       .fontSize($r('app.float.app_font_caption'))
       .fontWeight(this.uiHideImported ? FontWeight.Medium : FontWeight.Normal)
-      .fontColor(this.uiHideImported ? $r('app.color.app_on_accent') : ThemePalette.textSecondaryColor(this.effectiveTheme))
-      .backgroundColor(this.uiHideImported ? ThemePalette.accentColor(this.effectiveTheme) : ThemePalette.surface2Color(this.effectiveTheme))
+      .fontColor(this.uiHideImported
+        ? ThemePalette.accentColor(this.effectiveTheme)
+        : ThemePalette.textSecondaryColor(this.effectiveTheme))
+      .backgroundColor(this.uiHideImported
+        ? this.selectedChipBg()
+        : ThemePalette.surface2Color(this.effectiveTheme))
       .borderRadius($r('app.float.app_radius_md'))
-      .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-      .margin({ right: 8 })
+      .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+      .margin({ right: 8, bottom: 8 })
       .onClick(() => {
         this.onHideImportedClick();
       })
@@ -457,10 +601,15 @@ export struct MarketPage {
     Text($r('app.string.market_translate_toggle'))
       .fontSize($r('app.float.app_font_caption'))
       .fontWeight(this.uiTranslateEnabled ? FontWeight.Medium : FontWeight.Normal)
-      .fontColor(this.uiTranslateEnabled ? $r('app.color.app_on_accent') : ThemePalette.textSecondaryColor(this.effectiveTheme))
-      .backgroundColor(this.uiTranslateEnabled ? ThemePalette.accentColor(this.effectiveTheme) : ThemePalette.surface2Color(this.effectiveTheme))
+      .fontColor(this.uiTranslateEnabled
+        ? ThemePalette.accentColor(this.effectiveTheme)
+        : ThemePalette.textSecondaryColor(this.effectiveTheme))
+      .backgroundColor(this.uiTranslateEnabled
+        ? this.selectedChipBg()
+        : ThemePalette.surface2Color(this.effectiveTheme))
       .borderRadius($r('app.float.app_radius_md'))
-      .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+      .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+      .margin({ right: 8, bottom: 8 })
       .onClick(() => {
         this.onTranslateClick();
       })
@@ -482,15 +631,6 @@ export struct MarketPage {
     }
     const target: boolean = !this.viewModel!.hideNsfw;
     this.viewModel!.setHideNsfw(target);
-  }
-
-  private onChineseOnlyClick(): void {
-    if (this.viewModel === null) {
-      return;
-    }
-    const target: boolean = !this.viewModel!.chineseOnly;
-    this.uiChineseOnly = target;
-    void this.viewModel!.setChineseOnly(target);
   }
 
   private onHideImportedClick(): void {
@@ -733,6 +873,10 @@ export struct MarketPage {
    * 将 MarketCharacter 序列化为 JSON 传入。
    */
   private openDetail(item: MarketCharacter): void {
+    // 记录"已浏览"角色卡到永久缓存(失败不影响跳转)
+    if (this.viewModel !== null) {
+      void this.viewModel!.markBrowsed(item);
+    }
     try {
       const baseJson: string = JSON.stringify(item);
       router.pushUrl({
