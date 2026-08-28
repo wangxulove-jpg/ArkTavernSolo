@@ -3342,10 +3342,10 @@ export class ChatService {
       }
     }
 
-    // v8.3 Phase 2: 使用 RecentMessageSelector 选择最近原始消息窗口
+    // 使用 RecentMessageSelector 选择最近原始消息窗口(缓存优先,append-only)
+    // - 窗口以最后一次记忆总结结束位置为锚(memoryEndPosition),新消息只追加、不滑动
     // - 与长期记忆范围去重:已被记忆覆盖且不在最近窗口的消息不注入原文
-    // - 默认保留最近 DEFAULT_RECENT_WINDOW_TARGET(30)条,per-chat 可配置
-    // - 保证最近 MIN_COMPLETE_TURNS(2)完整 User+Assistant 轮次
+    // - 刚总结完、窗口为空时兜底保留最近 MIN_COMPLETE_TURNS(2)完整轮次
     // - availableTokens 传一个宽松上限,让 RecentMessageSelector 主要做去重 + 窗口
     //   精确 Token 裁剪由后续 HistoryTrimmer 完成
     // - 为 null 时回退到旧行为(传全部 sourceMessages)

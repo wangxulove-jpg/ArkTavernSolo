@@ -28,7 +28,7 @@ export interface ContextBudgetConfig {
   readonly customReservedOutputTokens: number;
   /** 是否自动管理最近消息(超限时自动裁剪) */
   readonly autoManage: boolean;
-  /** 记忆总结后保留的最近完整对话条数(默认 30,范围 2-200) */
+  /** 记忆总结后保留条数基数(默认 30;总结后以此为窗口基数,新消息继续追加,非硬性上限) */
   readonly recentWindowTarget: number;
 }
 
@@ -67,9 +67,9 @@ export const SAFETY_MARGIN_RATIO: number = 0.03;
 export const MAX_SAFETY_MARGIN: number = 8192;
 
 /**
- * 历史默认目标保留条数(最近原始消息窗口)。
- * - 默认 30 条,可根据 Token 预算动态增减
- * - 不是绝对固定值,Token 充足时可多于 30 条
+ * 记忆总结后保留条数默认值(最近原始消息窗口基数)。
+ * - 默认 30 条:手动总结后以此为新窗口基数,新消息继续追加、不裁减
+ * - 直到下次手动总结,锚点前移并重置基数;不是硬性上限
  */
 export const DEFAULT_RECENT_WINDOW_TARGET: number = 30;
 

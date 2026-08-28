@@ -2,17 +2,18 @@
  * RecentMessageSelector 最近原始消息窗口选择服务
  *
  * 职责:
- * - 从最新向前选择最近原始消息,作为 PromptBuilder 的 Conversation 段
+ * - 以最后一次记忆总结结束位置为锚,选择其后的最近原始消息,作为 PromptBuilder 的 Conversation 段
  * - 与长期记忆范围去重:已被记忆覆盖且不在最近窗口的消息不注入原文
  * - 保留完整 User+Assistant 轮次,不拆开
- * - 根据 Token 预算动态调整保留条数
  *
- * 选择规则(优先级从高到低):
- * 1. 必须保留最后一条消息(当前用户输入或待生成目标)
- * 2. 必须保留最近若干完整 User+Assistant 轮次(MIN_COMPLETE_TURNS)
- * 3. 默认目标保留 DEFAULT_RECENT_WINDOW_TARGET 条
- * 4. Token 充足时可多于目标条数(最多全部未覆盖消息)
- * 5. Token 不足时可少于目标条数(但不低于最少完整轮次)
+ * 窗口规则(缓存优先,append-only):
+ * - 记忆存在时:窗口起点固定为 memoryEndPos + 1(最后一次总结覆盖后的第一条)
+ * - 之后新消息只追加、不滑动、不丢弃已选中的老消息 → 发送前缀稳定 → 维持缓存命中率
+ * - 直到下一次手动总结,锚点前移、窗口基数重置(保留条数 N 是总结后的基数,非硬性上限)
+ * - 无记忆时:窗口从 0 开始(全部保留,没有摘要可作替代表示)
+ *
+ * 兜底规则:
+ * - 刚总结完、窗口为空或很小时,至少保留最近若干完整 User+Assistant 轮次(MIN_COMPLETE_TURNS)与最后一条
  *
  * 去重规则:
  * - 若消息 position <= memoryEndPosition 且不在最近窗口内 → 不注入原文
@@ -86,25 +87,17 @@ export class RecentMessageSelector {
       ? options.availableTokens : 0;
     const memoryEndPos: number = options.memoryEndPosition;
 
-    // Step 1: 从后向前确定"最近窗口"的边界索引
-    // 最近窗口 = 最后 targetCount 条消息(或全部,如果不足 targetCount)
+    // Step 1: 确定"最近窗口"起点(以最后一次记忆总结结束位置为锚,append-only)
+    // - 记忆存在时:起点固定为 memoryEndPos+1(总结覆盖之后的第一条)
+    //   此后新消息只追加、不滑动、不丢弃,发送前缀稳定 → 维持缓存命中率
+    // - 无记忆时:从 0 开始,全部保留(没有摘要可作替代表示)
     const lastIndex: number = messages.length - 1;
-    const fixedWindowStart: number = Math.max(0, lastIndex - targetCount + 1);
-    // v8.3 Phase 2 fix: 窗口起始还需保护"记忆覆盖尾部到固定窗口"之间的间隙
-    // 若消息 0..memoryEndPos 已被记忆覆盖,则 memoryEndPos+1 是第一条未被覆盖的消息
-    // 必须将其纳入窗口,否则该消息既不在记忆中也不在窗口中,会被静默丢弃
-    const memorySafeStart: number = (memoryEndPos >= 0 && memoryEndPos < lastIndex)
-      ? memoryEndPos + 1
-      : 0;
-    const windowStartIndex: number = Math.min(fixedWindowStart, memorySafeStart);
+    const windowStartIndex: number = memoryEndPos >= 0 ? memoryEndPos + 1 : 0;
 
     // Step 2: 标记每条消息是否应保留(去重 + 窗口)
-    // v8.3 Phase 2 调整:
-    // - 窗口内的消息一律保留(即使被记忆覆盖,保证最近上下文连贯)
-    // - 窗口外的消息一律不保留(无论是否被记忆覆盖,去重自动实现)
-    // - 这样默认只注入最近 targetCount 条原文,早期原文由记忆摘要替代
-    // - "Token 充足时扩展窗口"的能力由 availableTokens 在 Step 4 控制
-    //   (当前实现:availableTokens 仅用于窗口内预算不足时丢弃,不扩展窗口)
+    // - 窗口起点之后的消息一律保留(即使被记忆覆盖,保证最近上下文连贯)
+    // - 窗口之外且被记忆覆盖的消息不保留(去重,由记忆摘要替代)
+    // - 窗口之外且未被记忆覆盖的消息不会出现(窗口起点即记忆覆盖后第一条,天然无间隙)
     const shouldKeep: boolean[] = new Array(messages.length).fill(false);
     let dedupedCount: number = 0;
     for (let i = 0; i < messages.length; i++) {
@@ -122,11 +115,16 @@ export class RecentMessageSelector {
       }
     }
 
-    // Step 3: 从后向前选择,确保完整 User+Assistant 轮次
-    // 先确定最少必须保留的范围(最近 minTurns 完整轮次 + 最后一条)
+    // Step 3: 兜底保留最近完整轮次 + 最后一条
+    // 刚手动总结完、窗口为空或很小时,保证模型仍能看到最新对话
+    // 最少保留范围按"全部消息"计算,不依赖窗口标记,避免窗口为空时兜底失效
+    const allKeep: boolean[] = new Array(messages.length).fill(true);
     const minKeepFromEnd: number = this.findMinKeepIndexFromEnd(
-      messages, shouldKeep, minTurns
+      messages, allKeep, minTurns
     );
+    for (let i = minKeepFromEnd; i <= lastIndex; i++) {
+      shouldKeep[i] = true;
+    }
 
     // Step 4: 从后向前累加 Token,在预算内尽量多保留
     const selectedIndices: number[] = [];

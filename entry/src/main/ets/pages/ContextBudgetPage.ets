@@ -728,7 +728,7 @@ struct ContextBudgetPage {
           Text('记忆总结后保留条数')
             .fontSize($r('app.float.app_font_body'))
             .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-          Text('记忆摘要与最近窗口之间无间隙地衔接')
+          Text('记忆总结后以此为窗口起点,后续消息只追加不裁减,利于缓存')
             .fontSize($r('app.float.app_font_caption'))
             .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
             .margin({ top: 2 })
