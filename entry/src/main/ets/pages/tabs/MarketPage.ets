@@ -81,7 +81,6 @@ export struct MarketPage {
   @State refreshing: boolean = false;
   @State loadingMore: boolean = false;
   @State showNsfwConfirm: boolean = false;
-  @State showTranslatePrivacy: boolean = false;
   @State selectedCategoryIndex: number = 0;
   /** 当前展开的下拉面板: '' / 'category' / 'sort' / 'filter',同一时间最多展开一个 */
   @State activeDropdown: string = '';
@@ -147,7 +146,6 @@ export struct MarketPage {
     this.loadingMore = vm.loadingMore;
     this.refreshing = vm.refreshing;
     this.showNsfwConfirm = vm.showNsfwConfirm;
-    this.showTranslatePrivacy = vm.showTranslatePrivacy;
     if (vm.tag.length === 0) {
       this.selectedCategoryIndex = 0;
     } else {
@@ -218,11 +216,6 @@ export struct MarketPage {
       // ===== NSFW 确认弹窗 =====
       if (this.showNsfwConfirm) {
         this.nsfwConfirmDialog()
-      }
-
-      // ===== 翻译隐私提示弹窗 =====
-      if (this.showTranslatePrivacy) {
-        this.translatePrivacyDialog()
       }
     }
     .width('100%')
@@ -646,7 +639,7 @@ export struct MarketPage {
     if (this.viewModel === null) {
       return;
     }
-    this.viewModel!.setTranslateEnabled(!this.viewModel!.translateEnabled);
+    this.viewModel!.toggleTranslate();
   }
 
   private onCategoryClick(index: number, searchtag: string): void {
@@ -954,67 +947,4 @@ export struct MarketPage {
     .backgroundColor('rgba(0,0,0,0.5)')
   }
 
-  // ===== 翻译隐私提示弹窗 =====
-
-  @Builder
-  translatePrivacyDialog(): void {
-    Stack() {
-      Column() {
-        Column() {
-          Text($r('app.string.market_translate_privacy_title'))
-            .fontSize(17)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .margin({ bottom: 12 })
-
-          Text($r('app.string.market_translate_privacy_message'))
-            .fontSize(14)
-            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-            .margin({ bottom: 20 })
-            .textAlign(TextAlign.Start)
-            .width('100%')
-
-          Button($r('app.string.market_translate_privacy_confirm'))
-            .fontSize(14)
-            .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
-            .fontColor($r('app.color.app_on_accent'))
-            .borderRadius(20)
-            .width('100%')
-            .height(40)
-            .margin({ bottom: 8 })
-            .onClick(() => {
-              if (this.viewModel !== null) {
-                void this.viewModel!.confirmEnableTranslate();
-              }
-              this.showTranslatePrivacy = false;
-            })
-
-          Button($r('app.string.market_translate_privacy_cancel'))
-            .fontSize(14)
-            .backgroundColor(Color.Transparent)
-            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-            .borderRadius(20)
-            .width('100%')
-            .height(40)
-            .onClick(() => {
-              if (this.viewModel !== null) {
-                this.viewModel!.cancelEnableTranslate();
-              }
-              this.showTranslatePrivacy = false;
-            })
-        }
-        .width('85%')
-        .padding(20)
-        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
-        .borderRadius(16)
-      }
-      .width('100%')
-      .height('100%')
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
-    }
-    .width('100%')
-    .height('100%')
-    .backgroundColor('rgba(0,0,0,0.5)')
-  }
 }

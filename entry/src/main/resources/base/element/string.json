@@ -133,6 +133,54 @@
       "value": "市场缓存"
     },
     {
+      "name": "settings_baidu_translate_section",
+      "value": "翻译服务"
+    },
+    {
+      "name": "settings_baidu_translate_app_id",
+      "value": "百度翻译 APP ID"
+    },
+    {
+      "name": "settings_baidu_translate_secret_key",
+      "value": "百度翻译密钥"
+    },
+    {
+      "name": "settings_baidu_translate_desc",
+      "value": "使用百度翻译API将市场角色卡翻译为中文，需在 fanyi-api.baidu.com 注册获取凭证（标准版免费500万字符/月）"
+    },
+    {
+      "name": "settings_baidu_translate_saved",
+      "value": "凭证已保存"
+    },
+    {
+      "name": "settings_baidu_translate_save_failed",
+      "value": "保存失败"
+    },
+    {
+      "name": "settings_baidu_translate_not_configured",
+      "value": "未配置"
+    },
+    {
+      "name": "settings_baidu_translate_configured",
+      "value": "已配置"
+    },
+    {
+      "name": "market_translate_no_credentials_title",
+      "value": "翻译服务未配置"
+    },
+    {
+      "name": "market_translate_no_credentials_message",
+      "value": "请先在 设置 > 翻译服务 中填入百度翻译API凭证，标准版免费（500万字符/月）。"
+    },
+    {
+      "name": "market_translate_no_credentials_go_settings",
+      "value": "去设置"
+    },
+    {
+      "name": "market_translate_no_credentials_cancel",
+      "value": "取消"
+    },
+    {
       "name": "settings_market_cache_clear",
       "value": "清除市场缓存"
     },
@@ -1359,6 +1407,10 @@
     {
       "name": "market_translate_toggle",
       "value": "翻译为中文"
+    },
+    {
+      "name": "market_translate_failed",
+      "value": "翻译失败，请检查模型配置"
     },
     {
       "name": "market_filter_category",

@@ -12,6 +12,7 @@
 /.appanalyzer
 .cache/
 .deveco/
+.trae/
 *.log
 /.tools/
 /screenshots/

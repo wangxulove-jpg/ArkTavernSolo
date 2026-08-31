@@ -191,8 +191,7 @@ struct MarketDetailPage {
 
       Blank()
 
-      // 中英文切换按钮(仅在已翻译时显示)
-      if (this.shouldShowLanguageToggle()) {
+      if (this.viewModel !== null && this.viewModel!.hasTranslation()) {
         Button(this.resolveLanguageToggleLabel())
           .fontSize($r('app.float.app_font_caption'))
           .backgroundColor(Color.Transparent)
@@ -204,8 +203,32 @@ struct MarketDetailPage {
               this.viewModel!.toggleLanguage();
             }
           })
+      } else if (this.viewModel !== null && this.viewModel!.canTranslate()) {
+        Button($r('app.string.market_translate_toggle'))
+          .fontSize($r('app.float.app_font_caption'))
+          .backgroundColor(Color.Transparent)
+          .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+          .height(40)
+          .padding({ left: 8, right: 8 })
+          .onClick(() => {
+            if (this.viewModel !== null) {
+              void this.viewModel!.translateDetail().then((): void => {
+                if (this.viewModel !== null && this.viewModel!.detailTranslation === null && !this.viewModel!.translating) {
+                  promptAction.showToast({
+                    message: $r('app.string.market_translate_failed'),
+                    duration: 2000
+                  });
+                }
+              });
+            }
+          })
+      } else if (this.viewModel !== null && this.viewModel!.translating) {
+        LoadingProgress()
+          .width(20)
+          .height(20)
+          .color(ThemePalette.accentColor(this.effectiveTheme))
+          .margin({ left: 12, right: 12 })
       } else {
-        // 占位,保持标题居中
         Column().width(40)
       }
     }
@@ -223,15 +246,6 @@ struct MarketDetailPage {
       return this.viewModel!.base!.name;
     }
     return '';
-  }
-
-  /**
-   * 是否显示中英文切换按钮(仅在翻译开关已开启且有翻译结果时显示)。
-   */
-  private shouldShowLanguageToggle(): boolean {
-    return this.viewModel !== null
-      && this.viewModel!.translateEnabled
-      && this.viewModel!.detailTranslation !== null;
   }
 
   /**

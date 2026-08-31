@@ -63,10 +63,8 @@ export class MarketDetailViewModel {
   detailTranslation: MarketDetailTranslation | null = null;
   /** 翻译进行中 */
   translating: boolean = false;
-  /** 当前视图:中文(true) / 原文(false)。默认中文。 */
-  viewChinese: boolean = true;
-  /** 翻译开关是否已开启(由 load 读取偏好) */
-  translateEnabled: boolean = false;
+  /** 当前视图:中文(true) / 原文(false)。默认原文。 */
+  viewChinese: boolean = false;
 
   private marketService: MarketService;
   private importService: MarketImportService;
@@ -98,7 +96,7 @@ export class MarketDetailViewModel {
     this.detail = null;
     this.detailTranslation = null;
     this.translating = false;
-    this.viewChinese = true;
+    this.viewChinese = false;
     this.loading = true;
     this.errorMessage = '';
     this.importError = '';
@@ -106,31 +104,14 @@ export class MarketDetailViewModel {
     this.importedCharacter = null;
     this.showDuplicateDialog = false;
     this.showImportSuccessDialog = false;
-    // 读取翻译开关偏好
-    if (this.translationService !== null) {
-      try {
-        this.translateEnabled = await this.translationService.isTranslateEnabled();
-      } catch (e) {
-        this.translateEnabled = false;
-      }
-    }
     try {
       const result: MarketCharacterDetail = await this.marketService.getCharacterDetail(base.remoteId);
       if (opId !== this.operationId) {
         return;
       }
       this.detail = result;
-      // 若为 NSFW 内容,弹出 NSFW 警告弹窗(不阻塞详情加载,但提示用户)
       if (result.base.nsfw) {
         this.showNsfwEntryDialog = true;
-      }
-      // 翻译开关已开启且非 NSFW(或 NSFW 已确认)时,自动触发详情翻译
-      if (this.translateEnabled && this.translationService !== null) {
-        // NSFW 未确认前不发送敏感文本进行翻译
-        const canTranslate: boolean = !result.base.nsfw || !this.showNsfwEntryDialog;
-        if (canTranslate) {
-          void this.translateDetail();
-        }
       }
     } catch (e) {
       if (opId !== this.operationId) {
@@ -171,19 +152,18 @@ export class MarketDetailViewModel {
    */
   dismissNsfwEntryDialog(): void {
     this.showNsfwEntryDialog = false;
-    // NSFW 确认后,若翻译开关已开启,触发翻译
-    if (this.translateEnabled && this.translationService !== null && this.detail !== null) {
-      void this.translateDetail();
-    }
   }
 
   // ===== 翻译 =====
 
-  /**
-   * 触发详情翻译。
-   * 复用列表阶段缓存(若已翻译列表字段,不重新翻译)。
-   * 失败时 detailTranslation 保持 null,UI 显示原文。
-   */
+  canTranslate(): boolean {
+    return this.translationService !== null && this.detail !== null && !this.translating;
+  }
+
+  hasTranslation(): boolean {
+    return this.detailTranslation !== null;
+  }
+
   async translateDetail(): Promise<void> {
     if (this.translationService === null) {
       return;
@@ -200,10 +180,8 @@ export class MarketDetailViewModel {
       }
       if (result !== null) {
         this.detailTranslation = result;
-        // 翻译成功后默认切到中文视图
         this.viewChinese = true;
       }
-      // 翻译失败时保持 detailTranslation=null,UI 显示原文
     } catch (e) {
       if (opId !== this.operationId) {
         return;

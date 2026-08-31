@@ -421,23 +421,18 @@ export class MarketCacheStore {
  * 远程角色更新时间或字段 hash 变化时,旧翻译自动失效。
  */
 export interface MarketTranslationCacheEntry {
-  /** Provider ID */
   readonly providerId: string;
-  /** 远程角色 ID */
   readonly remoteId: string;
-  /** 远程角色更新时间(用于失效检测) */
   readonly remoteUpdatedAt: number;
-  /** 原文字段 hash(用于失效检测) */
   readonly fieldHash: number;
-  /** 翻译后的名称 */
   readonly translatedName: string;
-  /** 翻译后的简介 */
   readonly translatedSummary: string;
-  /** 翻译后的标签(顺序与原文一致) */
   readonly translatedTags: string[];
-  /** 翻译后的创作者备注 */
   readonly translatedCreatorNotes: string;
-  /** 翻译时间戳 */
+  readonly translatedDescription: string;
+  readonly translatedPersonality: string;
+  readonly translatedScenario: string;
+  readonly translatedFirstMessagePreview: string;
   readonly translatedAt: number;
 }
 

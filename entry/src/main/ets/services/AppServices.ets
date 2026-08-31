@@ -390,7 +390,7 @@ export class AppServices {
         } else {
           Logger.warn(LOG_TAG, 'appContext is null, marketImportService not created');
         }
-        // 创建 MarketTranslationService(复用 ModelService + MarketCacheStore)
+        // 创建 MarketTranslationService(使用免费翻译 + MarketCacheStore)
         services.marketTranslationService = new MarketTranslationService(
           services.modelService,
           services.marketService.getCacheStore()

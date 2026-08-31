@@ -47,6 +47,8 @@ export class MarketViewModel {
   // ===== 查询参数 =====
   searchInput: string = '';
   appliedSearch: string = '';
+  /** 翻译后的搜索词(中文搜索时自动译为英文传给服务端) */
+  effectiveSearch: string = '';
   sort: MarketSort = MarketSort.Recommended;
   hideNsfw: boolean = true;
   hideImported: boolean = false;
@@ -62,9 +64,6 @@ export class MarketViewModel {
   /** NSFW 警告弹窗:用户尝试关闭 NSFW 隐藏时弹出 */
   showNsfwConfirm: boolean = false;
   private pendingNsfwValue: boolean = true;
-
-  /** 翻译隐私提示弹窗:首次开启翻译时弹出 */
-  showTranslatePrivacy: boolean = false;
 
   // ===== 翻译状态 =====
   /** "翻译为中文"开关状态(默认关闭) */
@@ -197,8 +196,19 @@ export class MarketViewModel {
     this.nextCursor = '';
     this.hasMore = true;
     this.cancelDebounce();
-    // 清空内存翻译(避免显示陈旧翻译)
+    // 翻译内存翻译(避免显示陈旧翻译)
     this.translations = new Map<string, MarketTranslationResult>();
+    // 中文搜索自动翻译为英文
+    if (containsChinese(this.appliedSearch) && this.translationService !== null) {
+      try {
+        this.effectiveSearch = await this.translationService.translateQueryToEnglish(this.appliedSearch);
+      } catch (e) {
+        Logger.warn(LOG_TAG, 'translate search query failed: ' + String(e));
+        this.effectiveSearch = this.appliedSearch;
+      }
+    } else {
+      this.effectiveSearch = this.appliedSearch;
+    }
     try {
       const query: MarketQuery = this.buildQuery('');
       const result: MarketPageResult = await this.marketService.searchCharacters(query);
@@ -401,6 +411,7 @@ export class MarketViewModel {
   async clearSearch(): Promise<void> {
     this.searchInput = '';
     this.appliedSearch = '';
+    this.effectiveSearch = '';
     this.notifyStateChanged();
     this.cancelDebounce();
     await this.refresh();
@@ -531,31 +542,14 @@ export class MarketViewModel {
     if (this.translateEnabled === value) {
       return;
     }
-    if (value) {
-      // 开启前弹出隐私提示
-      this.showTranslatePrivacy = true;
-      this.notifyStateChanged();
-      return;
-    }
-    // 关闭不需要确认
-    void this.applyTranslateEnabled(false);
+    void this.applyTranslateEnabled(value);
   }
 
   /**
-   * 确认开启翻译(用户阅读隐私提示后)。
+   * 直接切换翻译开关(由 UI 按钮调用)。
    */
-  async confirmEnableTranslate(): Promise<void> {
-    this.showTranslatePrivacy = false;
-    this.notifyStateChanged();
-    await this.applyTranslateEnabled(true);
-  }
-
-  /**
-   * 取消开启翻译。
-   */
-  cancelEnableTranslate(): void {
-    this.showTranslatePrivacy = false;
-    this.notifyStateChanged();
+  toggleTranslate(): void {
+    this.setTranslateEnabled(!this.translateEnabled);
   }
 
   /**
@@ -765,6 +759,7 @@ export class MarketViewModel {
       this.providerId = this.marketService.getCurrentProvider().providerId;
       this.searchInput = '';
       this.appliedSearch = '';
+      this.effectiveSearch = '';
       // 加载翻译偏好
       if (this.translationService !== null) {
         this.translateEnabled = await this.translationService.isTranslateEnabled();
@@ -817,7 +812,7 @@ export class MarketViewModel {
    */
   private buildQuery(cursor: string): MarketQuery {
     return {
-      search: this.appliedSearch,
+      search: this.effectiveSearch,
       sort: this.sort,
       tag: this.tag,
       creator: this.creator,
@@ -870,4 +865,17 @@ export class MarketViewModel {
   private formatError(e: Object): string {
     return '加载失败: ' + String(e);
   }
+}
+
+function containsChinese(text: string): boolean {
+  for (let i: number = 0; i < text.length; i++) {
+    const code: number = text.charCodeAt(i);
+    if (code >= 0x4E00 && code <= 0x9FFF) {
+      return true;
+    }
+    if (code >= 0x3400 && code <= 0x4DBF) {
+      return true;
+    }
+  }
+  return false;
 }
