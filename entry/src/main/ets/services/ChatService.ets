@@ -124,8 +124,20 @@ export const STATUS_INSTRUCTION_PREFS_KEY: string = 'status_instruction_enabled'
 /** 自动记忆总结开关 Preferences key(全局,跨会话,默认 false) */
 export const MEMORY_AUTO_SUMMARY_PREFS_KEY: string = 'memory_auto_summary_enabled';
 
+/** 代写(🎭3候选)引导指令 Preferences key(全局,跨会话;空=用内置默认中文提示词) */
+export const IMPRES_GUIDE_KEY: string = 'impres_guide_prompt';
+
+/** 续写(⚡单次)引导指令 Preferences key(全局,跨会话;空=用内置默认中文提示词) */
+export const CONTINUE_GUIDE_KEY: string = 'continue_guide_prompt';
+
 /** delta 持久化节流间隔(毫秒) */
 const PERSISTENCE_THROTTLE_MS: number = 400;
+
+/** 续写单次请求解析结果:用户下一句发言 + 角色回应 */
+interface AutoContinueTurn {
+  user: string;
+  assistant: string;
+}
 
 /** delta 持久化触发的最小字符增量 */
 const PERSISTENCE_MIN_CHARS: number = 64;
@@ -1146,11 +1158,31 @@ export class ChatService {
     });
 
     let impersonateContent: string =
-      'You are ' + userName + ', the human player. ' + charName + ' is the character talking to you.\n\nTask: Write 3 DIFFERENT short replies you (' + userName + ') might give next. Each reply must be a complete, standalone sentence or action — NOT a continuation or paragraph of the same idea. The 3 replies should be distinct alternatives (e.g. different tones, different actions), not parts of one long response.\n\nRules:\n- Speak in first person as ' + userName + '\n- Use asterisks for actions: *smiles*, *walks away*\n- Each line = one complete independent reply\n- Do NOT write as ' + charName + '\n- Do NOT split one reply across multiple lines';
+      '你是' + userName + '，是正在和' + charName + '对话的人类玩家。\n\n' +
+      '任务：以' + userName + '的身份，写出 3 条各不相同、简短的下一条发言。每条都必须是一句完整、可以单独成立的话或动作，' +
+      '而不是同一个意思的继续或扩充。3 条应体现不同的语气或行动，彼此是不同选择。\n\n' +
+      '规则：\n' +
+      '- 以' + userName + '的第一人称发言\n' +
+      '- 动作用星号括起来，例如：*微笑*、*转身走开*\n' +
+      '- 每条占一行，是一条完整独立的回复\n' +
+      '- 不要替' + charName + '发言\n' +
+      '- 不要把一个回复拆成多行';
     if (this.currentChat !== null && this.currentChat.userPersonaSummary.length > 0) {
       impersonateContent += '\n\n' + userName + '的性格特征：' + this.currentChat.userPersonaSummary;
     }
-    impersonateContent += '\n\nFormat:\n1.\n2.\n3.';
+    // 用户自定义代写引导(全局),非空时追加为额外引导方向
+    if (this.appPreferences !== null) {
+      try {
+        const guide: string = await this.appPreferences.getString(IMPRES_GUIDE_KEY, '');
+        if (guide.trim().length > 0) {
+          impersonateContent += '\n\n额外引导：' + guide.trim();
+        }
+      } catch (e) {
+        Logger.warn(LOG_TAG, 'load impres guide failed: '
+          + (e instanceof Error ? e.message : String(e)));
+      }
+    }
+    impersonateContent += '\n\n格式：\n1.\n2.\n3.';
 
     const impersonateSystem: ChatMessage = {
       id: 'sys-impersonate',
@@ -1269,11 +1301,18 @@ export class ChatService {
   }
 
   /**
-   * AutoContinue: AI 先以 {{user}} 身份生成消息,再自动生成角色回复。
+   * 续写(AutoContinue):单次请求 + 完整上下文。
    *
-   * 两步串行:
-   * Step 1: 调用 generateImpersonateCandidates() 生成候选,自动选用第一条
-   * Step 2: 以普通 User 消息发送选中的候选,然后 AI 生成 Assistant 回复
+   * 流程:
+   * 1. 复用 createPresetRequestSnapshot + buildRequestMessages 构建与正常发送一致的
+   *    完整上下文(预设/世界书/人物卡/记忆/宏/状态指令),保持稳定 System 前缀以命中缓存。
+   * 2. 在末尾追加中文续写指令(读 CONTINUE_GUIDE_KEY,支持用户自定义引导方向),
+   *    要求模型先以 {{user}} 写下一句发言,再以 {{char}} 回应这条发言。
+   *    不做角色对调,避免破坏前缀缓存。
+   * 3. 单次非流式 sendChat → 解析 (userText, assistantText)。
+   * 4. userMsg + assistantMsg 以最终状态一次性落地并 emit。
+   *
+   * 指令只进瞬时请求,不落库、不进入历史消息。
    */
   async autoContinue(callbacks: ChatServiceCallbacks): Promise<void> {
     if (this.disposed) {
@@ -1289,78 +1328,184 @@ export class ChatService {
     }
 
     this.lastCallbacks = callbacks;
-
-    let userContent: string = '';
-    try {
-      const candidates: ImpersonateCandidate[] =
-        await this.generateImpersonateCandidates();
-      if (candidates.length === 0) {
-        this.setState(ChatState.Failed, callbacks);
-        callbacks.onError('代写生成失败,请重试');
-        return;
-      }
-      userContent = candidates[0].content;
-    } catch (e) {
-      const msg: string = e instanceof Error ? e.message : String(e);
-      Logger.error(LOG_TAG, 'autoContinue impersonate failed: ' + msg);
-      this.setState(ChatState.Failed, callbacks);
-      callbacks.onError('代写生成失败,请重试');
-      return;
-    }
-
     this.generationOperationId++;
 
-    const userMsg: ChatMessage = {
-      id: 'msg-' + generateUuid(),
-      role: ChatRole.User,
-      content: userContent,
-      createdAt: Date.now(),
-      status: ChatMessageStatus.Completed,
-      source: ChatMessageSource.Conversation
-    };
+    try {
+      // 1. 构建完整上下文(稳定前缀,命中主线缓存)
+      const snapshot: PromptPresetRequestSnapshot = await this.createPresetRequestSnapshot();
+      const baseMessages: ChatMessage[] =
+        await this.buildRequestMessages(snapshot.presetSystemPrompt);
 
-    const assistantId: string = 'msg-' + generateUuid();
-    const assistantMsg: ChatMessage = {
-      id: assistantId,
-      role: ChatRole.Assistant,
-      content: '',
-      createdAt: Date.now(),
-      isStreaming: true,
-      status: ChatMessageStatus.Streaming,
-      source: ChatMessageSource.Conversation,
-      senderType: 'character',
-      senderCharacterId: this.character !== null ? this.character.id : ''
-    };
+      const config: ProviderConfig | null = await this.modelService.getCurrentConfig();
+      if (config === null) {
+        throw new Error('未配置模型');
+      }
+      const modelName: string = config.modelName.trim();
+      if (modelName.length === 0) {
+        throw new Error('模型名称为空');
+      }
 
-    if (this.persistenceService !== null && this.currentChatId !== undefined) {
-      try {
+      // 2. 组装中文续写指令(默认 + 用户自定义引导),追加到消息末尾
+      const userName: string = await this.resolveUserName();
+      const charName: string =
+        this.character !== null ? resolveCharacterDisplayName(this.character) : 'Assistant';
+      let continueContent: string =
+        '任务：先以' + userName + '的身份，自然地说出下一句对' + charName + '说的话，' +
+        '然后再以' + charName + '的身份，对这句话给出回应。\n\n' +
+        '规则：\n' +
+        '- 用户那句话要简短自然，是一句完整发言\n' +
+        '- 角色回应要符合剧情和角色性格\n' +
+        '- 不要解释，只输出结果\n\n' +
+        '严格按以下 JSON 格式输出，不要用 markdown 代码块包裹，不要输出任何其他内容：\n' +
+        '{"user":"用户下一条发言","assistant":"角色对该发言的回应"}';
+      if (this.appPreferences !== null) {
+        try {
+          const guide: string = await this.appPreferences.getString(CONTINUE_GUIDE_KEY, '');
+          if (guide.trim().length > 0) {
+            continueContent += '\n\n额外引导：' + guide.trim();
+          }
+        } catch (e) {
+          Logger.warn(LOG_TAG, 'load continue guide failed: '
+            + (e instanceof Error ? e.message : String(e)));
+        }
+      }
+      const continueSystem: ChatMessage = {
+        id: 'sys-auto-continue',
+        role: ChatRole.System,
+        content: continueContent,
+        createdAt: Date.now(),
+        status: ChatMessageStatus.Completed,
+        source: ChatMessageSource.ExternalSystem
+      };
+      const requestMessages: ChatMessage[] = [...baseMessages, continueSystem];
+
+      const settings: EffectiveGenerationSettings = snapshot.generationSettings;
+      const request: ChatRequest = {
+        model: modelName,
+        messages: requestMessages,
+        temperature: settings.temperature !== undefined ? settings.temperature : 0.8,
+        topP: settings.topP !== undefined ? settings.topP : 0.9,
+        maxTokens: settings.maxOutputTokens !== undefined ? settings.maxOutputTokens : 4096,
+        stream: false
+      };
+
+      // 3. 单次非流式调用
+      const response: ChatResponse = await this.modelService.sendChat(request);
+      Logger.info(LOG_TAG, 'autoContinue raw response len=' + response.content.length);
+      const parsed: AutoContinueTurn | null =
+        this.parseAutoContinueTurn(response.content);
+      if (parsed === null || parsed.user.trim().length === 0
+        || parsed.assistant.trim().length === 0) {
+        callbacks.onError('续写生成失败,请重试');
+        this.setState(ChatState.Failed, callbacks);
+        return;
+      }
+
+      // 4. 以最终状态一次性落地用户 + 角色
+      const userMsg: ChatMessage = {
+        id: 'msg-' + generateUuid(),
+        role: ChatRole.User,
+        content: parsed.user.trim(),
+        createdAt: Date.now(),
+        status: ChatMessageStatus.Completed,
+        source: ChatMessageSource.Conversation
+      };
+      const assistantId: string = 'msg-' + generateUuid();
+      const assistantMsg: ChatMessage = {
+        id: assistantId,
+        role: ChatRole.Assistant,
+        content: parsed.assistant.trim(),
+        createdAt: Date.now(),
+        isStreaming: false,
+        status: ChatMessageStatus.Completed,
+        source: ChatMessageSource.Conversation,
+        senderType: 'character',
+        senderCharacterId: this.character !== null ? this.character.id : ''
+      };
+
+      if (this.persistenceService !== null) {
         const appendResult: AppendUserAndAssistantResult =
           await this.persistenceService.appendUserAndStreamingAssistant(
             this.currentChatId, userMsg, assistantMsg
           );
         this.currentSequenceNumber = appendResult.assistantSequenceNumber;
-        this.lastPersistedContentLength = 0;
-        this.pendingPersistAssistantId = assistantId;
-      } catch (e) {
-        const errMsg: string = e instanceof Error ? e.message : String(e);
-        Logger.error(LOG_TAG, 'autoContinue persist failed: ' + errMsg);
-        this.setState(ChatState.Failed, callbacks);
-        callbacks.onError('消息保存失败,请重试');
-        return;
+      }
+
+      this.messages = [...this.messages, userMsg, assistantMsg];
+      this.currentAssistantId = assistantId;
+      this.setState(ChatState.Completed, callbacks);
+      this.emitMessages(callbacks);
+      this.persistChatActivity();
+    } catch (e) {
+      const msg: string = e instanceof Error ? e.message : String(e);
+      Logger.error(LOG_TAG, 'autoContinue failed: ' + msg);
+      this.setState(ChatState.Failed, callbacks);
+      callbacks.onError('续写生成失败,请重试');
+    }
+  }
+
+  /**
+   * 解析续写响应:优先 JSON 对象 {"user":...,"assistant":...},回退按关键词切分。
+   * @returns 解析出的 (user, assistant) 两段;无法解析时返回 null
+   */
+  private parseAutoContinueTurn(raw: string): AutoContinueTurn | null {
+    const trimmed: string = raw.trim();
+    if (trimmed.length === 0) {
+      return null;
+    }
+    // 优先 JSON
+    const jsonStart: number = trimmed.indexOf('{');
+    const jsonEnd: number = trimmed.lastIndexOf('}');
+    if (jsonStart >= 0 && jsonEnd > jsonStart) {
+      const jsonStr: string = trimmed.substring(jsonStart, jsonEnd + 1);
+      try {
+        const obj: Record<string, Object> = JSON.parse(jsonStr) as Record<string, Object>;
+        const u: string = typeof obj['user'] === 'string' ? obj['user'] as string : '';
+        const a: string = typeof obj['assistant'] === 'string' ? obj['assistant'] as string : '';
+        if (u.trim().length > 0 || a.trim().length > 0) {
+          return { user: u, assistant: a };
+        }
+      } catch (_e) {
+        // JSON 解析失败,走关键词回退
       }
     }
-
-    this.messages = [...this.messages, userMsg, assistantMsg];
-    this.currentAssistantId = assistantId;
-    this.activeGeneration = {
-      operationId: this.generationOperationId,
-      kind: ChatGenerationKind.AutoContinue,
-      chatId: this.currentChatId,
-      assistantMessageId: assistantId
-    };
-    this.setState(ChatState.Sending, callbacks);
-    this.emitMessages(callbacks);
-    this.doStream(assistantId, callbacks, this.activeGeneration);
+    // 回退:按 用户发言/角色回应 关键词切分
+    const userMarkers: string[] = ['用户发言', '"user"', 'user:'];
+    const assistMarkers: string[] = ['角色回应', '"assistant"', 'assistant:'];
+    for (let i = 0; i < userMarkers.length; i++) {
+      const ui: number = trimmed.indexOf(userMarkers[i]);
+      if (ui < 0) {
+        continue;
+      }
+      let start: number = ui + userMarkers[i].length;
+      if (start < trimmed.length
+        && (trimmed.charAt(start) === '：' || trimmed.charAt(start) === ':')) {
+        start++;
+      }
+      let bestAssist: number = -1;
+      let bestAssistLen: number = 0;
+      for (let j = 0; j < assistMarkers.length; j++) {
+        const ai: number = trimmed.indexOf(assistMarkers[j], start);
+        if (ai >= 0 && (bestAssist < 0 || ai < bestAssist)) {
+          bestAssist = ai;
+          bestAssistLen = assistMarkers[j].length;
+        }
+      }
+      if (bestAssist < 0) {
+        continue;
+      }
+      const userText: string = trimmed.substring(start, bestAssist).trim();
+      let asStart: number = bestAssist + bestAssistLen;
+      if (asStart < trimmed.length
+        && (trimmed.charAt(asStart) === '：' || trimmed.charAt(asStart) === ':')) {
+        asStart++;
+      }
+      const assistantText: string = trimmed.substring(asStart).trim();
+      if (userText.length > 0 || assistantText.length > 0) {
+        return { user: userText, assistant: assistantText };
+      }
+    }
+    return null;
   }
 
   /**

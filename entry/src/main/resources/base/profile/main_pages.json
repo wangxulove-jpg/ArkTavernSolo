@@ -24,6 +24,7 @@
     "pages/PersonaEditPage",
     "pages/SyncSettingsPage",
     "pages/TtsSettingsPage",
-    "pages/EdgeTtsTestPage"
+    "pages/EdgeTtsTestPage",
+    "pages/ContinueGuideSettingsPage"
   ]
 }

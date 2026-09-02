@@ -52,6 +52,8 @@ export struct ChatMoreMenuSheet {
   onGoMemory: () => void = () => {};
   /** 前往上下文管理 */
   onGoContextBudget: () => void = () => {};
+  /** 前往续写/代写引导设置 */
+  onGoAutoWriteGuide: () => void = () => {};
   /** v9: 打开本对话称呼覆盖编辑(回调决定具体 UI 形式) */
   onEditUserNameOverride: () => void = () => {};
   /** 切换用户身份(打开 Persona 选择) */
@@ -157,6 +159,14 @@ export struct ChatMoreMenuSheet {
           return;
         }
         this.onGoContextBudget();
+      })
+
+      // 续写/代写引导(引导方向可编辑)
+      this.menuRow('续写/代写引导', this.busy, false, (): void => {
+        if (this.busy) {
+          return;
+        }
+        this.onGoAutoWriteGuide();
       })
 
       // 本对话称呼(v9:对话级用户称呼覆盖)
