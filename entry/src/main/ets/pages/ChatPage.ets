@@ -1088,6 +1088,7 @@ struct ChatPage {
             onGoChatBackground: (): void => { this.navigateToChatBackgroundSettings(); },
             onGoMemory: (): void => { this.navigateToMemoryManagement(); },
             onGoContextBudget: (): void => { this.navigateToContextBudget(); },
+            onGoAutoWriteGuide: (): void => { this.navigateToAutoWriteGuide(); },
             onEditUserNameOverride: (): void => {
               this.openUserNameOverrideDialog();
             },
@@ -2436,6 +2437,9 @@ struct ChatPage {
                 colorTheme: this.getCurrentColorTheme(),
                 bubbleOpacity: this.chatBubbleOpacity,
                 isDarkMode: this.isDarkMode,
+                onInteractiveAction: (text: string): void => {
+                  this.handleInteractiveAction(text);
+                },
                 onLongPress: (target: ChatMessage): void => {
                   this.actionSheetMsg = target;
                   this.showActionSheet = true;
@@ -3489,6 +3493,32 @@ struct ChatPage {
   }
 
   /**
+   * 处理气泡内交互动作(点击分支选项)。
+   * 把选项文字作为当前输入并走既有发送流程发给 AI。
+   */
+  private handleInteractiveAction(text: string): void {
+    if (this.viewModel === null) {
+      return;
+    }
+    if (this.isBudgetExceeded()) {
+      this.notifyBudgetBlocked();
+      return;
+    }
+    const vm: ChatViewModel = this.viewModel!;
+    if (vm.isGenerating) {
+      return;
+    }
+    // 先写入输入,再走既有发送流程(send() 内部会自行校验 canSend)
+    vm.inputText = text;
+    vm.send();
+    try {
+      inputMethod.getController().stopInputSession();
+    } catch (_e) {
+      // 输入法未显示或已隐藏,忽略
+    }
+  }
+
+  /**
    * v8.1: 当前上下文是否超出输入预算。
    * 基于 budgetViewModel.stats 与 effectiveAvailable 计算。
    */
@@ -3928,6 +3958,15 @@ struct ChatPage {
       url: 'pages/ContextBudgetPage',
       params: { chatId: chatId }
     });
+  }
+
+  /**
+   * 前往续写/代写引导设置页。
+   * 进入设置页,关闭更多菜单。
+   */
+  private navigateToAutoWriteGuide(): void {
+    this.showMoreMenu = false;
+    router.pushUrl({ url: 'pages/ContinueGuideSettingsPage' });
   }
 
   // ===== T-CHAT.1: 聊天归档导出 =====

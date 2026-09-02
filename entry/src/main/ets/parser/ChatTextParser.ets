@@ -906,3 +906,363 @@ function canMerge(a: ChatTextSegment, b: ChatTextSegment): boolean {
     && a.listLevel === b.listLevel
     && !b.lineStart; // 行首标记不合并
 }
+
+// ===== 交互分块渲染(ChatRenderChunk)=====
+//
+// 支持 SillyTavern 风格的富文本：
+// - <details><summary>标题</summary>内容</details> → 可点击折叠块
+// - <branches>[选项1]\n[选项2]</branches> → 可点击选项
+// - <思考>/<变量思考>/<upstore> 指令块 → 隐藏
+// - {{roll 1d20}} / {{roll::2d6+3}} 骰子宏 → 随机结果
+// - <div>/<p>/<span>/<br>/<hr> 等 HTML 标签 → 消毒为换行/分隔线
+
+/**
+ * 渲染分块。
+ * ChatRichText 据此在"纯文本"与"文本 + 交互块"两种布局间切换。
+ */
+/** 文本分块 */
+export interface TextChatRenderChunk {
+  readonly type: 'text';
+  readonly segments: ChatTextSegment[];
+}
+/** 折叠分块(<details>) */
+export interface CollapsibleChatRenderChunk {
+  readonly type: 'collapsible';
+  readonly id: string;
+  readonly title: string;
+  /** 折叠内容(原文,由嵌套渲染再次解析) */
+  readonly content: string;
+}
+/** 分支选项分块(<branches>) */
+export interface BranchesChatRenderChunk {
+  readonly type: 'branches';
+  readonly id: string;
+  readonly options: string[];
+}
+
+/** 渲染分块联合 */
+export type ChatRenderChunk = TextChatRenderChunk | CollapsibleChatRenderChunk | BranchesChatRenderChunk;
+
+/** 交互块占位符前缀/后缀(仅用于解析中间态) */
+const BLOCK_PLACEHOLDER: string = '\uE200';
+const BLOCK_PLACEHOLDER_END: string = '\uE201';
+/** 匹配单个占位符 "索引" */
+const BLOCK_PLACEHOLDER_PATTERN: RegExp = new RegExp('^' + BLOCK_PLACEHOLDER + '(\\d+)' + BLOCK_PLACEHOLDER_END + '$');
+
+/** 命中的交互块(原始内容) */
+interface SourceBlock {
+  readonly tag: string;
+  readonly content: string;
+}
+
+interface BlockMarker {
+  readonly open: boolean;
+  readonly tag: string;
+  readonly start: number;
+  readonly end: number;
+}
+
+/** 交互块抽取结果 */
+interface InteractiveExtraction {
+  readonly residual: string;
+  readonly blocks: SourceBlock[];
+}
+
+/** 匹配到的成对括号下标 */
+interface BlockPair {
+  readonly open: number;
+  readonly close: number;
+}
+
+/** <details> 解析结果 */
+interface CollapsibleParsed {
+  readonly title: string;
+  readonly body: string;
+}
+
+/** 需要整体隐藏的指令块标签(含内容删除) */
+const INSTRUCTION_TAGS: string[] = ['思考', '变量思考', 'upstore', 'thought', 'reasoning'];
+
+/** 块级 HTML 标签:其开始/结束标签都当作换行边界 */
+const BLOCK_HTML_TAGS: string =
+  'div|p|section|article|ul|ol|li|tr|td|table|thead|tbody|h1|h2|h3|h4|h5|h6|blockquote|center|form|nav|header|footer';
+
+/**
+ * 解析聊天内容为渲染分块列表。
+ * 失败时降级为单个文本块(原始内容)。
+ */
+export function parseChatChunks(
+  content: string,
+  options: ChatTextParserOptions = DEFAULT_PARSER_OPTIONS
+): ChatRenderChunk[] {
+  if (content.length === 0) {
+    return [];
+  }
+  try {
+    const extracted: InteractiveExtraction = extractInteractiveBlocks(content);
+    if (extracted.blocks.length === 0) {
+      const textChunk: TextChatRenderChunk = {
+        type: 'text',
+        segments: parseLightTextPipeline(extracted.residual, options)
+      };
+      return [textChunk];
+    }
+
+    const chunks: ChatRenderChunk[] = [];
+    // 按占位符切成段,占位符处还原交互块,其余走文本管线
+    const parts: string[] = extracted.residual.split(/(\uE200\d+\uE201)/g);
+    for (let i = 0; i < parts.length; i++) {
+      const part: string = parts[i];
+      if (part.length === 0) {
+        continue;
+      }
+      const ph: RegExpMatchArray | null = part.match(BLOCK_PLACEHOLDER_PATTERN);
+      if (ph !== null) {
+        const idx: number = parseInt(ph[1], 10);
+        if (idx >= 0 && idx < extracted.blocks.length) {
+          const block: SourceBlock = extracted.blocks[idx];
+          if (block.tag === 'details') {
+            const col: CollapsibleParsed = parseCollapsibleBody(block.content);
+            const c: CollapsibleChatRenderChunk = {
+              type: 'collapsible',
+              id: 'cb' + idx,
+              title: col.title,
+              content: col.body
+            };
+            chunks.push(c);
+          } else if (block.tag === 'branches') {
+            const b: BranchesChatRenderChunk = {
+              type: 'branches',
+              id: 'br' + idx,
+              options: parseBranchOptions(block.content)
+            };
+            chunks.push(b);
+          }
+        }
+      } else {
+        const segs: ChatTextSegment[] = parseLightTextPipeline(part, options);
+        if (segs.length > 0) {
+          const t: TextChatRenderChunk = { type: 'text', segments: segs };
+          chunks.push(t);
+        }
+      }
+    }
+    return chunks;
+  } catch (_e) {
+    // 安全降级:整条按普通文本显示,不丢字
+    const fallback: TextChatRenderChunk = { type: 'text', segments: [createSegment(content)] };
+    return [fallback];
+  }
+}
+
+/**
+ * 文本管线:隐藏指令块 → 掷骰宏 → HTML 消毒 → Markdown 解析。
+ * 供纯文本块与折叠块内部统一复用。
+ */
+function parseLightTextPipeline(text: string, options: ChatTextParserOptions): ChatTextSegment[] {
+  let s: string = text;
+  s = stripInstructionBlocks(s);
+  s = resolveDiceMacros(s);
+  s = sanitizeHtmlTags(s);
+  if (s.length === 0) {
+    return [];
+  }
+  return parseChatText(s, options);
+}
+
+/**
+ * 抽取外层已闭合的 <details> 与 <branches> 块,用占位符替换。
+ * 未闭合(流式中)的块不会被抽取,保留为普通文本。
+ */
+function extractInteractiveBlocks(input: string): InteractiveExtraction {
+  const tagRe: RegExp = /<\/(details|branches)\s*>|<(details|branches)\b[^>]*>/gi;
+  const markers: BlockMarker[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = tagRe.exec(input)) !== null) {
+    // m[1] 是闭合标签的 tag 名, m[2] 是开始标签的 tag 名
+    const closeTag: string = m[1] as string;
+    const openTag: string = m[2] as string;
+    const start: number = m.index as number;
+    const end: number = start + m[0].length;
+    if (openTag !== undefined) {
+      const mk: BlockMarker = { open: true, tag: openTag.toLowerCase(), start: start, end: end };
+      markers.push(mk);
+    } else if (closeTag !== undefined) {
+      const mk: BlockMarker = { open: false, tag: closeTag.toLowerCase(), start: start, end: end };
+      markers.push(mk);
+    }
+  }
+
+  // 用栈匹配同标签的外层对(忽略跨标签嵌套,按同标签匹配)
+  const stack: number[] = [];
+  const pairs: BlockPair[] = [];
+  for (let i = 0; i < markers.length; i++) {
+    const mk: BlockMarker = markers[i];
+    if (mk.open) {
+      stack.push(i);
+      continue;
+    }
+    for (let j = stack.length - 1; j >= 0; j--) {
+      if (markers[stack[j]].tag === mk.tag) {
+        const pr: BlockPair = { open: stack[j], close: i };
+        pairs.push(pr);
+        stack.splice(j, 1);
+        break;
+      }
+    }
+  }
+
+  // 只保留最外层对(剔除嵌套在其它对内部的)
+  const outer: BlockPair[] = [];
+  for (let i = 0; i < pairs.length; i++) {
+    let nested: boolean = false;
+    for (let j = 0; j < pairs.length; j++) {
+      if (i !== j && pairs[j].open < pairs[i].open && pairs[j].close > pairs[i].close) {
+        nested = true;
+        break;
+      }
+    }
+    if (!nested) {
+      outer.push(pairs[i]);
+    }
+  }
+  outer.sort((a: BlockPair, b: BlockPair): number => a.open - b.open);
+
+  const blocks: SourceBlock[] = [];
+  let residual: string = '';
+  let cursor: number = 0;
+  for (let i = 0; i < outer.length; i++) {
+    const p: BlockPair = outer[i];
+    const om: BlockMarker = markers[p.open];
+    const cm: BlockMarker = markers[p.close];
+    if (om.start < cursor) {
+      continue;
+    }
+    residual += input.slice(cursor, om.start);
+    const idx: number = blocks.length;
+    residual += BLOCK_PLACEHOLDER + idx + BLOCK_PLACEHOLDER_END;
+    const sb: SourceBlock = { tag: om.tag, content: input.slice(om.end, cm.start) };
+    blocks.push(sb);
+    cursor = cm.end;
+  }
+  residual += input.slice(cursor);
+  const r: InteractiveExtraction = { residual: residual, blocks: blocks };
+  return r;
+}
+
+/**
+ * 解析 <details> 内容:剥离开头的 <summary>标题</summary>。
+ */
+function parseCollapsibleBody(contentRaw: string): CollapsibleParsed {
+  const summaryRe: RegExp = /^\s*<summary\b[^>]*>([\s\S]*?)<\/summary\s*>/i;
+  const m: RegExpExecArray | null = summaryRe.exec(contentRaw);
+  if (m !== null) {
+    const title: string = sanitizeHtmlTags(m[1] as string).trim();
+    const body: string = contentRaw.slice((m.index as number) + m[0].length);
+    const r: CollapsibleParsed = { title: title, body: body };
+    return r;
+  }
+  const r2: CollapsibleParsed = { title: '', body: contentRaw };
+  return r2;
+}
+
+/**
+ * 解析 <branches> 内容:按行切分选项,空的去掉,去掉 [channel=?] 前缀。
+ */
+function parseBranchOptions(contentRaw: string): string[] {
+  const out: string[] = [];
+  const lines: string[] = contentRaw.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    let line: string = lines[i].trim();
+    if (line.length === 0) {
+      continue;
+    }
+    line = line.replace(/^\[channel=[^\]]+\]\s*/i, '');
+    if (line.length > 0) {
+      out.push(line);
+    }
+  }
+  return out;
+}
+
+/**
+ * 隐藏指令块:<思考>…</思考>、<变量思考>…</变量思考>、<upstore>…</upstore> 等。
+ * 整块删除(含内容与可能的前导换行)。未闭合时保守保留(降级为普通文本)。
+ */
+function stripInstructionBlocks(input: string): string {
+  let s: string = input;
+  for (let i = 0; i < INSTRUCTION_TAGS.length; i++) {
+    const tag: string = INSTRUCTION_TAGS[i];
+    const pat: RegExp = new RegExp('\\s*<' + tag + '\\b[^>]*>[\\s\\S]*?</' + tag + '>', 'gi');
+    s = s.replace(pat, '');
+  }
+  s = s.replace(/[\n]+\s*$/, '\n');
+  return s;
+}
+
+/**
+ * 解析骰子宏 {{roll 1d20}} / {{roll:1d6}} / {{roll::2d6+3}}。
+ * 输出掷骰结果(整数,含修饰项)。非法公式保持原样。
+ */
+function resolveDiceMacros(input: string): string {
+  const pat: RegExp = /\{\{\s*roll\s*[:\s]*([0-9]+d[0-9]+(?:[+-][0-9]+)?)\s*\}\}/gi;
+  return input.replace(pat, (_match: string, formula: string): string => rollDice(formula));
+}
+
+function rollDice(formula: string): string {
+  const clean: string = formula.replace(/\s/g, '');
+  const diceRe: RegExp = /^(\d+)d(\d+)([+-]\d+)?$/;
+  const m: RegExpExecArray | null = diceRe.exec(clean);
+  if (m === null) {
+    return formula;
+  }
+  let count: number = parseInt(m[1], 10);
+  const sides: number = parseInt(m[2], 10);
+  const mod: number = m[3] !== undefined ? parseInt(m[3], 10) : 0;
+  if (sides < 1) {
+    return formula;
+  }
+  if (count < 1) {
+    count = 1;
+  }
+  if (count > 100) {
+    count = 100;
+  }
+  let sum: number = 0;
+  for (let i = 0; i < count; i++) {
+    sum += 1 + Math.floor(Math.random() * sides);
+  }
+  return String(sum + mod);
+}
+
+/**
+ * HTML 消毒:整体删除 style/script/head/title 块;
+ * <br>→换行、<hr>→分隔线、块级标签→换行边界;
+ * 剥除其余标签保留文字;解码常见 HTML 实体;收敛连续空行。
+ */
+function sanitizeHtmlTags(input: string): string {
+  let s: string = input;
+  s = s.replace(/<(style|script|head|title)[^>]*>[\s\S]*?<\/\1>/gi, '');
+  s = s.replace(/<br\s*\/?>/gi, '\n');
+  s = s.replace(/<hr\s*\/?>/gi, '\n---\n');
+  s = s.replace(new RegExp('</?(' + BLOCK_HTML_TAGS + ')[^>]*>', 'gi'), '\n');
+  s = s.replace(/<[^>]+>/g, '');
+  s = decodeHtmlEntities(s);
+  s = s.replace(/\n{3,}/g, '\n\n');
+  s = s.replace(/^\n+|\n+$/g, '');
+  return s;
+}
+
+/**
+ * 解码常见 HTML 实体。
+ */
+function decodeHtmlEntities(input: string): string {
+  return input
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/gi, "'")
+    .replace(/&amp;/gi, '&');
+}

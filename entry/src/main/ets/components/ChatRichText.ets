@@ -25,17 +25,19 @@
  *   })
  */
 
-import { ChatTextSegment, parseChatText, ChatTextParserOptions } from '../parser/ChatTextParser';
+import { ChatTextSegment, parseChatChunks, ChatRenderChunk, ChatTextParserOptions } from '../parser/ChatTextParser';
 import { getCharacterColor } from '../utils/ChatPalette';
 import { ChatTextStyle } from '../utils/ChatTextStyleSettings';
 import { ChatMarkdownColorTheme } from '../utils/ChatTextColorTheme';
+import { ChatCollapsibleBlock } from './ChatCollapsibleBlock';
+import { ChatBranchBlock } from './ChatBranchBlock';
 
 /** 发送者类型 */
 export type ChatSenderType = 'user' | 'assistant' | 'character' | 'narrator' | 'system';
 
 /** 缓存条目 */
 interface CacheEntry {
-  readonly segments: ChatTextSegment[];
+  readonly chunks: ChatRenderChunk[];
   readonly contentHash: number;
 }
 
@@ -70,9 +72,11 @@ export struct ChatRichText {
   @Prop @Watch('onThemeChange') colorTheme: ChatMarkdownColorTheme | null = null;
   /** 是否可选择(长按复制) */
   @Prop selectable: boolean = true;
+  /** 交互动作回调(分支选项点击时触发,由上层注入"把选项作为消息发送给 AI") */
+  onInteractiveAction?: (text: string) => void;
 
-  /** 当前解析的片段(状态) */
-  @State private segments: ChatTextSegment[] = [];
+  /** 当前解析的渲染分块(状态) */
+  @State private chunks: ChatRenderChunk[] = [];
 
   // ===== 流式打字机状态 =====
   /** 是否处于打字机揭示中(流式或排空期间为 true,完整显示为 false) */
@@ -241,7 +245,7 @@ export struct ChatRichText {
   private doParse(): void {
     const text: string = this.displayedContent;
     if (text.length === 0) {
-      this.segments = [];
+      this.chunks = [];
       return;
     }
 
@@ -262,7 +266,7 @@ export struct ChatRichText {
 
     // 打字机揭示中(流式或排空):跳过缓存,直接解析当前已揭示文本
     if (this.typing) {
-      this.segments = parseChatText(text, options);
+      this.chunks = parseChatChunks(text, options);
       return;
     }
 
@@ -274,19 +278,19 @@ export struct ChatRichText {
       // LRU:命中时移到末尾(Map 保持插入顺序)
       ChatRichText.cache.delete(cacheKey);
       ChatRichText.cache.set(cacheKey, cached);
-      this.segments = cached.segments;
+      this.chunks = cached.chunks;
       return;
     }
 
     // 解析并写入缓存
-    const parsed: ChatTextSegment[] = parseChatText(text, options);
+    const parsed: ChatRenderChunk[] = parseChatChunks(text, options);
     this.evictCacheIfNeeded();
     ChatRichText.cache.set(cacheKey, {
-      segments: parsed,
+      chunks: parsed,
       contentHash: contentHash
     });
 
-    this.segments = parsed;
+    this.chunks = parsed;
   }
 
   /**
@@ -433,15 +437,18 @@ export struct ChatRichText {
   }
 
   build() {
-    if (this.segments.length === 0) {
+    if (this.chunks.length === 0) {
       // 空内容占位
       Text('')
         .fontSize(this.settings !== null ? this.settings.fontSize : 16)
         .height(0)
-    } else {
-      // 使用 Text + ForEach Span 的方式渲染富文本
+    } else if (this.chunks.length === 1 && this.chunks[0].type === 'text') {
+      // 常用路径(纯文本,含流式打字机):单个 Text 直接读 @State this.chunks[0].segments。
+      // 不套外层 @Builder(按值传参不刷新)、不套外层 ForEach(稳定 key 复用不刷新)。
+      // Text 节点随 chunks 变化原地更新,Span key 随长度变化触发逐字重绘,流式平滑又刷新;
+      // 且不强制宽度,文本随气泡 maxWidth 自动换行(不溢出)。
       Text() {
-        ForEach(this.segments, (seg: ChatTextSegment, index: number) => {
+        ForEach(this.chunks[0].segments, (seg: ChatTextSegment, index: number) => {
           Span(seg.text)
             .fontColor(this.getSegmentColor(seg))
             .fontSize(this.getSegmentFontSize(this.settings !== null ? this.settings.fontSize : 16, seg))
@@ -455,6 +462,57 @@ export struct ChatRichText {
       }
       .lineHeight((this.settings !== null ? this.settings.fontSize : 16) * (this.settings !== null ? this.settings.lineHeight : 1.5))
       .copyOption(this.selectable ? CopyOptions.LocalDevice : CopyOptions.None)
+    } else {
+      // 含交互块(折叠块/分支选项):Column + ForEach over chunks。
+      // 此时交互块一般已闭合(内容基本定型),不再需要逐字流式,稳定/变化 key 均可。
+      Column({ space: 6 }) {
+        ForEach(this.chunks, (chunk: ChatRenderChunk, index: number) => {
+          if (chunk.type === 'text') {
+            Text() {
+              ForEach(chunk.segments, (seg: ChatTextSegment, spanIndex: number) => {
+                Span(seg.text)
+                  .fontColor(this.getSegmentColor(seg))
+                  .fontSize(this.getSegmentFontSize(this.settings !== null ? this.settings.fontSize : 16, seg))
+                  .fontWeight(seg.bold ? FontWeight.Bold : FontWeight.Normal)
+                  .fontStyle(seg.italic ? FontStyle.Italic : FontStyle.Normal)
+                  .decoration({
+                    type: seg.strike ? TextDecorationType.LineThrough : TextDecorationType.None,
+                    color: this.getSegmentColor(seg)
+                  })
+              }, (seg: ChatTextSegment, spanIndex: number) => spanIndex.toString() + '_' + seg.text.length.toString())
+            }
+            .lineHeight((this.settings !== null ? this.settings.fontSize : 16) * (this.settings !== null ? this.settings.lineHeight : 1.5))
+            .copyOption(this.selectable ? CopyOptions.LocalDevice : CopyOptions.None)
+          } else if (chunk.type === 'collapsible') {
+            // 展开内容用尾随闭包注入 contentBuilder,嵌套 ChatRichText 复用同一渲染管线
+            ChatCollapsibleBlock({
+              title: chunk.title
+            }) {
+              ChatRichText({
+                content: chunk.content,
+                senderType: this.senderType,
+                senderCharacterId: this.senderCharacterId,
+                isStreaming: false,
+                settings: this.settings,
+                colorTheme: this.colorTheme,
+                selectable: true,
+                onInteractiveAction: this.onInteractiveAction
+              })
+            }
+          } else {
+            ChatBranchBlock({
+              options: chunk.options,
+              onSelect: this.onInteractiveAction
+            })
+          }
+        }, (chunk: ChatRenderChunk, index: number) => {
+          if (chunk.type === 'text') {
+            return 't' + index.toString() + '_' + chunk.segments.length.toString();
+          }
+          return chunk.id;
+        })
+      }
+      .alignItems(HorizontalAlign.Start)
     }
   }
 }

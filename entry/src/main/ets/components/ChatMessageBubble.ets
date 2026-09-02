@@ -48,6 +48,8 @@ export struct ChatMessageBubble {
   characterName: string = '';
   /** 是否显示 Assistant 头像(空会话开场白也用此组件时不显示) */
   showAvatar: boolean = true;
+  /** 点击气泡内的分支选项/交互按钮时,把选项文本回调给上层发送给 AI */
+  onInteractiveAction?: (text: string) => void;
   /** 长按消息回调 */
   onLongPress?: (msg: ChatMessage) => void;
   /** 点击 Assistant 头像回调(可选) */
@@ -153,7 +155,8 @@ export struct ChatMessageBubble {
           isStreaming: false,
           settings: this.settings,
           colorTheme: this.colorTheme,
-          selectable: true
+          selectable: true,
+          onInteractiveAction: this.onInteractiveAction
         })
       }
       .constraintSize({ maxWidth: '80%' })
@@ -177,7 +180,8 @@ export struct ChatMessageBubble {
           isStreaming: false,
           settings: this.settings,
           colorTheme: this.colorTheme,
-          selectable: true
+          selectable: true,
+          onInteractiveAction: this.onInteractiveAction
         })
       }
       .constraintSize({ maxWidth: '88%' })
@@ -244,7 +248,8 @@ export struct ChatMessageBubble {
             isStreaming: this.renderState.isStreaming,
             settings: this.settings,
             colorTheme: this.colorTheme,
-            selectable: true
+            selectable: true,
+            onInteractiveAction: this.onInteractiveAction
           })
         }
 
@@ -407,7 +412,8 @@ export struct ChatMessageBubble {
           isStreaming: this.renderState.isStreaming,
           settings: this.settings,
           colorTheme: this.colorTheme,
-          selectable: true
+          selectable: true,
+          onInteractiveAction: this.onInteractiveAction
         })
       }
       .constraintSize({ maxWidth: '80%' })

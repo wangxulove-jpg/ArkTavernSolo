@@ -55,6 +55,22 @@ struct AiCardRevisePage {
     {
       label: '丰富性格与语气',
       text: '请丰富 personality 与对话风格,使角色说话方式、语气、口癖更加鲜明有辨识度。'
+    },
+    {
+      label: '开场白：状态折叠栏',
+      text: '重写 first_mes,并在结尾加一个可折叠状态栏:用 <details><summary>当前状态</summary>属性/装备/位置等状态信息</details> 包裹(平时只显示标题行,点击才展开)。并把"每次回复都要持续输出并更新同一个格式的折叠状态栏,放在正文末尾,位置结构保持一致"写进 system_prompt 或 post_history_instructions,确保后续每次对话都保留状态栏,不只出现在开场白。'
+    },
+    {
+      label: '开场白：分支选项',
+      text: '重写 first_mes:开头一段贴合角色与场景的开局描写后,生成 3~5 个互补的剧情起始选项,用 <branches>\n[选项一]\n[选项二]\n[选项三]\n</branches> 包裹,每行一个选项,让用户点击选择如何开局;并在 system_prompt / post_history_instructions 要求角色在后续每次行动后继续用 <branches> 提供下一组选项,延续这种交互形式。'
+    },
+    {
+      label: '开场白：隐藏引导',
+      text: '重写 first_mes:把需要引导 AI 的幕后说明(如世界观、节奏、判定规则)用 <思考>…</思考> 或 <变量思考>…</变量思考> 包裹(不会显示给用户),正文只保留玩家能看到的内容,末尾用 <branches> 收 3~5 个开局选项,并让角色后续持续用 <branches> 延续选项交互。'
+    },
+    {
+      label: '开场白：轻量面板',
+      text: '重写 first_mes:把状态/信息做成轻量 HTML 结构(<div>/<p>/<span style="color:...">/<br>/<hr>),App 会渲染成可读排版(标签转成换行与分隔线);不要写依赖背景色的完整网页,避免正文杂乱。'
     }
   ];
   /** 顶部状态栏避让高度 */

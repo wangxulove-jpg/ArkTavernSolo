@@ -1110,7 +1110,30 @@ function buildReviseSystemPrompt(): string {
     + '\n- **只输出**标准 Tavern Card V3 JSON,不要输出 Markdown 代码块标记、解释、标题或其他任何文字'
     + '\n- JSON 必须可被 JSON.parse 直接解析'
     + '\n- 必须包含 spec="chara_card_v3"、spec_version="3.0" 和 data 对象'
-    + buildOptimizeJsonStructure();
+    + buildOptimizeJsonStructure()
+    + buildRenderCapabilityNote();
+}
+
+/**
+ * 本 App 聊天渲染能力说明。
+ *
+ * 让修改/生成角色卡时,AI 知道 App 能把 first_mes / 世界书内容安全渲染成
+ * Markdown、可折叠块、分支选项、轻量 HTML 与隐藏指令块,从而按需使用这些能力。
+ * 这些能力对 AI 是可选引导,不是强制;AI 应按建议判断是否使用。
+ */
+function buildRenderCapabilityNote(): string {
+  return '\n\n【本 App 的聊天渲染能力,可在 first_mes(开场白)与正文中安全使用】'
+    + '\n- Markdown:`**加粗**`、`### 小标题`、`1. 列表`、`| 栏位 | 值 |` 表格等都会正常排版'
+    + '\n- 折叠块:`<details><summary>标题</summary>正文</details>`(平时收起,点击展开;适合放角色状态/属性/物品/面板等,避免刷屏)'
+    + '\n- 分支选项:`<branches>\n[选项1]\n[选项2]\n[选项3]\n</branches>` 每行一个 `[...]` 选项,渲染为可点击选项,用户点击后作为其发言发送'
+    + '\n- 隐藏指令块:`<思考>...</思考>`、`<变量思考>...</变量思考>`、`<upstore>...</upstore>` 仅用于引导,不会显示给用户'
+    + '\n- 轻量 HTML:`<div>/<p>/<span style="color:...">/<strong>/<br>/<hr>` 会渲染为可读排版(标签剥离、换行与分隔线保留,背景/边框样式不显示),可用于判定框/面板结构'
+    + '\n- 骰子宏:`{{roll 1d20}}`、`{{roll::2d6+3}}` 会解析为随机掷骰结果'
+    + '\n\n延续性要求(重要):若角色卡的首条消息(first_mes)使用了折叠状态栏/分支选项等展示形式,'
+    + '请把这些展示形式作为该角色**持续遵循的界面规范**:建议在 system_prompt 或 post_history_instructions 中明确要求'
+    + '角色在后续**每次回复都持续输出并更新**同样格式的折叠状态栏 / 分支选项,位置与结构保持一致,'
+    + '不能只在开场白出现一次就丢失。'
+    + '\n注意:是否使用上述能力以用户的修改建议为准;若建议涉及"状态栏/选项/面板",用上面语法;普通叙事保持自然文字即可。';
 }
 
 /**
