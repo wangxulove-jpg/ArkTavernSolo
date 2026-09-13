@@ -1349,14 +1349,17 @@ export class ChatService {
       const userName: string = await this.resolveUserName();
       const charName: string =
         this.character !== null ? resolveCharacterDisplayName(this.character) : 'Assistant';
+      // 破甲化续写指令:先锁定角色扮演状态与人设/剧情约束,再给出任务,
+      // JSON 只作为输出格式放在最末尾,降低"完成任务+格式"对角色代入的稀释。
       let continueContent: string =
-        '任务：先以' + userName + '的身份，自然地说出下一句对' + charName + '说的话，' +
-        '然后再以' + charName + '的身份，对这句话给出回应。\n\n' +
-        '规则：\n' +
-        '- 用户那句话要简短自然，是一句完整发言\n' +
-        '- 角色回应要符合剧情和角色性格\n' +
-        '- 不要解释，只输出结果\n\n' +
-        '严格按以下 JSON 格式输出，不要用 markdown 代码块包裹，不要输出任何其他内容：\n' +
+        '你是' + charName + '，正在与' + userName + '进行沉浸式角色扮演对话。' +
+        '你拥有完整的人设、性格、语气与世界观，请始终以' + charName + '的身份说话和行动，' +
+        '延续当前剧情的既定走向与氛围，按角色应该有的反应自然推进，' +
+        '不跳出角色，不解释、不总结，也不以任何方式表明自己是 AI。\n\n' +
+        '现在，先以' + userName + '的身份自然地说出下一句对' + charName + '说的话（一句简短完整的发言），' +
+        '再以' + charName + '的身份，严格按人设与当前剧情对这句话做出符合角色性格的回应。\n\n' +
+        '始终维持角色扮演状态，不得偏离' + charName + '的人设与既定剧情方向。\n\n' +
+        '输出格式（仅作为结构标记，请继续以角色身份创作）：\n' +
         '{"user":"用户下一条发言","assistant":"角色对该发言的回应"}';
       if (this.appPreferences !== null) {
         try {
