@@ -247,6 +247,8 @@ struct ChatPage {
   @State aiMode: string = 'worldbook';
   /** 待确认的世界书变更集(非空时显示预览) */
   @State pendingChangeSet: AiLorebookChangeSet | null = null;
+  /** 变更预览中展开中的提案项 key(点击展开/收起关键词与内容) */
+  @State expandedAiPreviewKey: string = '';
   /** 世界书条目展开中的 ID(点击展开/收起内容) */
   @State expandedEntryId: string = '';
   /** 世界书面板展示数据(由 viewModel.lorebookPanelData 同步) */
@@ -1293,6 +1295,11 @@ struct ChatPage {
       .backgroundBlurStyle(BlurStyle.Regular, {
         policy: BlurStyleActivePolicy.ALWAYS_ACTIVE
       })
+      // 顶部栏 Column 默认 alignItems=Center,面板宽度小于 100% 会被水平居中;
+      // 左对齐到顶部栏下方,避免浮在画面中间。
+      .alignSelf(ItemAlign.Start)
+      // 裁剪到圆角背景框内:条目/AI 区再高也不会画出背景框外。
+      .clip(true)
       .margin({ top: 4 })
     }
   }
@@ -1366,9 +1373,11 @@ struct ChatPage {
       .padding({ bottom: 8 })
     }
     .width('100%')
-    .height('100%')
-    .scrollBar(BarState.Auto)
-    .edgeEffect(EdgeEffect.Spring)
+      // layoutWeight 占满顶部栏/AI 区之后的剩余高度:条目只在面板内滚动,
+      // 不会把内容顶出圆角背景框以外。
+      .layoutWeight(1)
+      .scrollBar(BarState.Auto)
+      .edgeEffect(EdgeEffect.Spring)
   }
 
   @Builder
@@ -1546,39 +1555,13 @@ struct ChatPage {
         } else {
           Scroll() {
             Column() {
-              ForEach(this.pendingChangeSet!.adds, (a: AiLorebookAdd) => {
-                Row() {
-                  Text('新增')
-                    .fontSize(10)
-                    .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-                  Text(a.name)
-                    .fontSize(11)
-                    .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-                    .layoutWeight(1)
-                    .margin({ left: 6 })
-                    .maxLines(1)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
-                }
-                .width('100%')
-                .margin({ top: 2 })
-              }, (a: AiLorebookAdd) => 'add-' + a.lorebookId + '-' + a.name)
-              ForEach(this.pendingChangeSet!.updates, (u: AiLorebookUpdate) => {
-                Row() {
-                  Text('修改')
-                    .fontSize(10)
-                    .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-                  Text(u.name !== undefined ? u.name : u.entryId)
-                    .fontSize(11)
-                    .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-                    .layoutWeight(1)
-                    .margin({ left: 6 })
-                    .maxLines(1)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
-                }
-                .width('100%')
-                .margin({ top: 2 })
-              }, (u: AiLorebookUpdate) => 'upd-' + u.lorebookId + '-' + u.entryId)
-              ForEach(this.pendingChangeSet!.deletes, (d: AiLorebookDelete) => {
+              ForEach(this.pendingChangeSet!.adds, (a: AiLorebookAdd, index: number) => {
+                this.aiPreviewAddRow(a, index)
+              }, (a: AiLorebookAdd, index: number) => 'add-' + a.lorebookId + '-' + a.name + '-' + String(index))
+              ForEach(this.pendingChangeSet!.updates, (u: AiLorebookUpdate, index: number) => {
+                this.aiPreviewUpdateRow(u, index)
+              }, (u: AiLorebookUpdate, index: number) => 'upd-' + u.lorebookId + '-' + u.entryId + '-' + String(index))
+              ForEach(this.pendingChangeSet!.deletes, (d: AiLorebookDelete, index: number) => {
                 Row() {
                   Text('删除')
                     .fontSize(10)
@@ -1592,8 +1575,11 @@ struct ChatPage {
                     .textOverflow({ overflow: TextOverflow.Ellipsis })
                 }
                 .width('100%')
-                .margin({ top: 2 })
-              }, (d: AiLorebookDelete) => 'del-' + d.lorebookId + '-' + d.entryId)
+                .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                .backgroundColor('rgba(255,255,255,0.04)')
+                .borderRadius(8)
+                .margin({ top: 4 })
+              }, (d: AiLorebookDelete, index: number) => 'del-' + d.lorebookId + '-' + d.entryId + '-' + String(index))
             }
             .width('100%')
           }
@@ -1629,6 +1615,119 @@ struct ChatPage {
       .borderRadius(10)
       .margin({ top: 8 })
     }
+  }
+
+  /** 变更预览:新增条目行(点击展开关键词与内容,便于确认前审阅)。 */
+  @Builder
+  aiPreviewAddRow(a: AiLorebookAdd, index: number) {
+    Column() {
+      Row() {
+        Text('新增')
+          .fontSize(10)
+          .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+        Text(a.name)
+          .fontSize(11)
+          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+          .layoutWeight(1)
+          .margin({ left: 6 })
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(this.expandedAiPreviewKey === 'add-' + String(index) ? '收起' : '展开')
+          .fontSize(10)
+          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+          .opacity(0.8)
+      }
+      .width('100%')
+
+      if (this.expandedAiPreviewKey === 'add-' + String(index)) {
+        // 关键词
+        if (a.keys.length > 0) {
+          Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
+            ForEach(a.keys, (k: string) => {
+              Text(k)
+                .fontSize(10)
+                .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+                .backgroundColor('rgba(255,255,255,0.06)')
+                .borderRadius(8)
+                .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+                .margin({ right: 5, top: 4 })
+            }, (k: string) => k)
+          }
+          .width('100%')
+        }
+        // 内容
+        Text(a.content)
+          .fontSize(11)
+          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+          .width('100%')
+          .margin({ top: 4 })
+      }
+    }
+    .width('100%')
+    .padding({ left: 8, right: 8, top: 5, bottom: 5 })
+    .backgroundColor('rgba(255,255,255,0.04)')
+    .borderRadius(8)
+    .margin({ top: 4 })
+    .onClick(() => {
+      const k: string = 'add-' + String(index);
+      this.expandedAiPreviewKey = this.expandedAiPreviewKey === k ? '' : k;
+    })
+  }
+
+  /** 变更预览:修改条目行(点击展开被修改的字段与内容)。 */
+  @Builder
+  aiPreviewUpdateRow(u: AiLorebookUpdate, index: number) {
+    Column() {
+      Row() {
+        Text('修改')
+          .fontSize(10)
+          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+        Text(u.name !== undefined ? u.name : u.entryId)
+          .fontSize(11)
+          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+          .layoutWeight(1)
+          .margin({ left: 6 })
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(this.expandedAiPreviewKey === 'upd-' + String(index) ? '收起' : '展开')
+          .fontSize(10)
+          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+          .opacity(0.8)
+      }
+      .width('100%')
+
+      if (this.expandedAiPreviewKey === 'upd-' + String(index)) {
+        if (u.name !== undefined) {
+          Text('名称：' + u.name)
+            .fontSize(11)
+            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+            .width('100%')
+            .margin({ top: 4 })
+        }
+        if (u.content !== undefined && u.content.length > 0) {
+          Text(u.content)
+            .fontSize(11)
+            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+            .width('100%')
+            .margin({ top: 4 })
+        } else if (u.name === undefined) {
+          Text('（未提供具体字段，请直接应用）')
+            .fontSize(11)
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            .width('100%')
+            .margin({ top: 4 })
+        }
+      }
+    }
+    .width('100%')
+    .padding({ left: 8, right: 8, top: 5, bottom: 5 })
+    .backgroundColor('rgba(255,255,255,0.04)')
+    .borderRadius(8)
+    .margin({ top: 4 })
+    .onClick(() => {
+      const k: string = 'upd-' + String(index);
+      this.expandedAiPreviewKey = this.expandedAiPreviewKey === k ? '' : k;
+    })
   }
 
   // ===== T-7.x: 世界书面板逻辑 =====
