@@ -418,7 +418,7 @@ struct CharacterListPage {
   /** 卡片阴影:使用中 Tavern 主题换金色辉光,其余用暖色投影 */
   private cardShadow(char: Character): ShadowOptions {
     if (this.viewModel!.isCurrent(char) && this.effectiveTheme === 'tavern') {
-      return { radius: 18, color: '#47E3C27A', offsetX: 0, offsetY: 4 };
+      return { radius: 18, color: '#47D4A23B', offsetX: 0, offsetY: 4 };
     }
     return { radius: 18, color: '#99000000', offsetX: 0, offsetY: 6 };
   }

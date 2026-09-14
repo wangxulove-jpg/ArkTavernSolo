@@ -136,7 +136,7 @@ const TAVERN_COLORS: ThemeColors = {
   textPrimary: '#F7EBDD',
   textSecondary: '#C0AF99',
   textTertiary: '#968574',
-  accent: '#E3C27A',
+  accent: '#D4A23B',
   onAccent: '#1A1510',
   iconPrimary: '#F7EBDD',
   iconSecondary: '#968574',
