@@ -729,6 +729,7 @@ struct TtsSettingsPage {
               .padding({ left: 12, right: 12 })
               .trackColor($r('app.color.app_divider'))
               .selectedColor($r('app.color.app_accent'))
+              .sliderInteractionMode(SliderInteraction.SLIDE_ONLY)
               .onChange((value: number) => { this.saveTtsSpeed(value); })
 
             Row() {
@@ -756,6 +757,7 @@ struct TtsSettingsPage {
               .padding({ left: 12, right: 12 })
               .trackColor($r('app.color.app_divider'))
               .selectedColor($r('app.color.app_accent'))
+              .sliderInteractionMode(SliderInteraction.SLIDE_ONLY)
               .onChange((value: number) => { this.saveTtsVolume(value); })
 
             Row() {
@@ -783,6 +785,7 @@ struct TtsSettingsPage {
               .padding({ left: 12, right: 12 })
               .trackColor($r('app.color.app_divider'))
               .selectedColor($r('app.color.app_accent'))
+              .sliderInteractionMode(SliderInteraction.SLIDE_ONLY)
               .onChange((value: number) => { this.saveTtsPitch(value); })
 
             Row() {

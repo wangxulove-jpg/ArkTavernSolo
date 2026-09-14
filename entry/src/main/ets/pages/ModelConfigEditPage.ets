@@ -590,6 +590,7 @@ struct ModelConfigEditPage {
         .selectedColor(ThemePalette.accentColor(this.effectiveTheme))
         .trackColor(ThemePalette.surface2Color(this.effectiveTheme))
         .blockColor(ThemePalette.accentColor(this.effectiveTheme))
+        .sliderInteractionMode(SliderInteraction.SLIDE_ONLY)
         .onChange((v: number, mode: SliderChangeMode) => {
           onChange(v);
         })

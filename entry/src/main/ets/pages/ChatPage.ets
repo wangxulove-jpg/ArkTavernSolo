@@ -1857,6 +1857,7 @@ struct ChatPage {
               style: SliderStyle.OutSet
             })
               .blockColor(ThemePalette.accentColor(this.effectiveTheme))
+            .sliderInteractionMode(SliderInteraction.SLIDE_ONLY)
               .trackColor(ThemePalette.surface2Color(this.effectiveTheme))
               .selectedColor(ThemePalette.accentColor(this.effectiveTheme))
               .width('100%')
@@ -1907,6 +1908,7 @@ struct ChatPage {
               style: SliderStyle.OutSet
             })
               .blockColor(ThemePalette.accentColor(this.effectiveTheme))
+            .sliderInteractionMode(SliderInteraction.SLIDE_ONLY)
               .trackColor(ThemePalette.surface2Color(this.effectiveTheme))
               .selectedColor(ThemePalette.accentColor(this.effectiveTheme))
               .width('100%')
@@ -1957,6 +1959,7 @@ struct ChatPage {
               style: SliderStyle.OutSet
             })
               .blockColor(ThemePalette.accentColor(this.effectiveTheme))
+            .sliderInteractionMode(SliderInteraction.SLIDE_ONLY)
               .trackColor(ThemePalette.surface2Color(this.effectiveTheme))
               .selectedColor(ThemePalette.accentColor(this.effectiveTheme))
               .width('100%')
