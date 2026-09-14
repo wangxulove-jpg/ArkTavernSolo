@@ -27,8 +27,8 @@ export interface AppDialogAction {
 export struct AppDialog {
   /** 是否显示 */
   visible: boolean = true;
-  /** 标题(空则不显示) */
-  title: string = '';
+  /** 标题(空则不显示,支持 Resource/string) */
+  title: ResourceStr = '';
   /** 布局:'bottom' 贴底 / 'center' 居中卡片 */
   layout: string = 'bottom';
   /** 底部按钮行(空不渲染) */
@@ -53,7 +53,7 @@ export struct AppDialog {
 
   @Builder
   titleText() {
-    if (this.title.length > 0) {
+    if (this.hasTitle()) {
       Text(this.title)
         .fontSize(17)
         .fontWeight(FontWeight.Medium)
@@ -62,6 +62,11 @@ export struct AppDialog {
         .textAlign(TextAlign.Start)
         .margin({ bottom: 16 })
     }
+  }
+
+  /** title 是否为空(string '' 视为无;Resource 视为有) */
+  private hasTitle(): boolean {
+    return this.title !== '';
   }
 
   @Builder

@@ -27,6 +27,8 @@ import { PressableCard } from '../../components/PressableCard';
 import { CharacterImageView } from '../../components/CharacterImageView';
 import { AppTopBar } from '../../components/ui/AppTopBar';
 import { AppInputField } from '../../components/ui/AppInputField';
+import { AppDialog } from '../../components/ui/AppDialog';
+import { AppButton } from '../../components/ui/AppButton';
 import { router, promptAction } from '@kit.ArkUI';
 import { picker } from '@kit.CoreFileKit';
 import { fileIo } from '@kit.CoreFileKit';
@@ -808,135 +810,79 @@ export struct CharacterRootView {
 
   @Builder
   deleteConfirmDialog() {
-    Stack() {
-      Column() {
-        Column() {
-          // 标题
-          Text($r('app.string.character_delete_confirm_title'))
-            .fontSize(17)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .margin({ bottom: 12 })
-
-          // 提示内容(含角色名)
-          Text(this.formatDeleteMessage(this.deleteTarget!.name))
-            .fontSize(14)
-            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-            .margin({ bottom: 20 })
-
-          // 按钮行
-          Row() {
-            Button($r('app.string.character_delete_confirm_cancel'))
-              .fontSize(14)
-              .backgroundColor(Color.Transparent)
-              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-              .layoutWeight(1)
-              .height(40)
-              .onClick(() => {
-                this.cancelDelete();
-              })
-
-            Button($r('app.string.character_delete_confirm_ok'))
-              .fontSize(14)
-              .backgroundColor($r('app.color.app_danger'))
-              .fontColor(Color.White)
-              .borderRadius(20)
-              .layoutWeight(1)
-              .height(40)
-              .margin({ left: 12 })
-              .onClick(() => {
-                this.confirmDelete();
-              })
+    AppDialog({
+      visible: true,
+      title: $r('app.string.character_delete_confirm_title'),
+      layout: 'center',
+      actions: [
+        {
+          label: $r('app.string.character_delete_confirm_cancel'),
+          style: 'secondary',
+          enabled: true,
+          onTap: () => {
+            this.cancelDelete();
           }
-          .width('100%')
+        },
+        {
+          label: $r('app.string.character_delete_confirm_ok'),
+          style: 'danger',
+          enabled: true,
+          onTap: () => {
+            this.confirmDelete();
+          }
         }
-        .width('80%')
-        .padding(20)
-        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
-        .borderRadius(16)
+      ],
+      onClose: () => {
+        // 点击外部取消
+        this.cancelDelete();
       }
-      .width('100%')
-      .height('100%')
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
+    }) {
+      Text(this.formatDeleteMessage(this.deleteTarget!.name))
+        .fontSize(14)
+        .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
     }
-    .width('100%')
-    .height('100%')
-    .backgroundColor('rgba(0,0,0,0.5)')
-    .onClick(() => {
-      // 点击外部取消
-      this.cancelDelete();
-    })
   }
 
   // ===== 导出格式选择弹窗 =====
 
   @Builder
   exportFormatDialog() {
-    Stack() {
+    AppDialog({
+      visible: true,
+      title: $r('app.string.character_export_choose_format'),
+      layout: 'center',
+      actions: [],
+      onClose: () => {
+        // 点击外部取消
+        this.cancelExport();
+      }
+    }) {
       Column() {
-        Column() {
-          // 标题
-          Text($r('app.string.character_export_choose_format'))
-            .fontSize(17)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .margin({ bottom: 16 })
+        AppButton({
+          variant: 'primary',
+          label: $r('app.string.character_export_png'),
+          onPress: () => {
+            this.chooseExportPng();
+          }
+        }).margin({ bottom: 8 })
 
-          // PNG 选项
-          Button($r('app.string.character_export_png'))
-            .fontSize(15)
-            .fontColor($r('app.color.app_on_accent'))
-            .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
-            .borderRadius($r('app.float.app_radius_md'))
-            .width('100%')
-            .height(44)
-            .margin({ bottom: 8 })
-            .onClick(() => {
-              this.chooseExportPng();
-            })
+        AppButton({
+          variant: 'secondary',
+          label: $r('app.string.character_export_json'),
+          onPress: () => {
+            this.chooseExportJson();
+          }
+        }).margin({ bottom: 8 })
 
-          // JSON 选项
-          Button($r('app.string.character_export_json'))
-            .fontSize(15)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-            .borderRadius($r('app.float.app_radius_md'))
-            .width('100%')
-            .height(44)
-            .margin({ bottom: 8 })
-            .onClick(() => {
-              this.chooseExportJson();
-            })
-
-          // 取消
-          Button($r('app.string.character_export_cancel'))
-            .fontSize(15)
-            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-            .backgroundColor(Color.Transparent)
-            .borderRadius($r('app.float.app_radius_md'))
-            .width('100%')
-            .height(44)
-            .onClick(() => {
-              this.cancelExport();
-            })
-        }
-        .width('80%')
-        .padding(20)
-        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
-        .borderRadius(16)
+        AppButton({
+          variant: 'text',
+          label: $r('app.string.character_export_cancel'),
+          onPress: () => {
+            this.cancelExport();
+          }
+        })
       }
       .width('100%')
-      .height('100%')
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
     }
-    .width('100%')
-    .height('100%')
-    .backgroundColor('rgba(0,0,0,0.5)')
-    .onClick(() => {
-      // 点击外部取消
-      this.cancelExport();
-    })
   }
 }
