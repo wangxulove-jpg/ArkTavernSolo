@@ -16,8 +16,8 @@ import { PressableCard } from '../PressableCard';
 export struct AppEntryCard {
   /** 标题 */
   title: ResourceStr = '';
-  /** 描述(空不显示) */
-  desc: string = '';
+  /** 描述(空不显示,支持 Resource/string) */
+  desc: ResourceStr = '';
   /** 右侧图形:'chevron' | 'switch' */
   trail: string = 'chevron';
   /** switch 态的当前值 */
@@ -46,45 +46,52 @@ export struct AppEntryCard {
     }
   }
 
-  build() {
-    PressableCard({ onPress: () => {
-      this.onPress();
-    } }) {
-      Row() {
-        Column() {
-          Text(this.title)
-            .fontSize($r('app.float.app_font_body'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
-            .textAlign(TextAlign.Start)
+  /** desc 是否为空(string '' 视为无;Resource 视为有) */
+  private hasDesc(): boolean {
+    return this.desc !== '';
+  }
 
-          if (this.desc.length > 0) {
-            Text(this.desc)
-              .fontSize($r('app.float.app_font_caption'))
-              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-              .maxLines(2)
+  build() {
+    Column() {
+      PressableCard({ onPress: () => {
+        this.onPress();
+      } }) {
+        Row() {
+          Column() {
+            Text(this.title)
+              .fontSize($r('app.float.app_font_body'))
+              .fontWeight(FontWeight.Medium)
+              .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+              .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .margin({ top: 2 })
               .width('100%')
               .textAlign(TextAlign.Start)
-          }
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
 
-        this.trailingView()
+            if (this.hasDesc()) {
+              Text(this.desc)
+                .fontSize($r('app.float.app_font_caption'))
+                .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+                .maxLines(2)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .margin({ top: 2 })
+                .width('100%')
+                .textAlign(TextAlign.Start)
+            }
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+
+          this.trailingView()
+        }
+        .width('100%')
+        .padding({
+          left: $r('app.float.app_spacing_16'),
+          right: $r('app.float.app_spacing_16'),
+          top: $r('app.float.app_spacing_16'),
+          bottom: $r('app.float.app_spacing_16')
+        })
+        .alignItems(VerticalAlign.Center)
       }
-      .width('100%')
-      .padding({
-        left: $r('app.float.app_spacing_16'),
-        right: $r('app.float.app_spacing_16'),
-        top: $r('app.float.app_spacing_16'),
-        bottom: $r('app.float.app_spacing_16')
-      })
-      .alignItems(VerticalAlign.Center)
     }
     .width('100%')
   }

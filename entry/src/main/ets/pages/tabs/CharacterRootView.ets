@@ -25,6 +25,8 @@ import { AppServices } from '../../services/AppServices';
 import { EmptyStateView } from '../../components/EmptyStateView';
 import { PressableCard } from '../../components/PressableCard';
 import { CharacterImageView } from '../../components/CharacterImageView';
+import { AppTopBar } from '../../components/ui/AppTopBar';
+import { AppInputField } from '../../components/ui/AppInputField';
 import { router, promptAction } from '@kit.ArkUI';
 import { picker } from '@kit.CoreFileKit';
 import { fileIo } from '@kit.CoreFileKit';
@@ -350,8 +352,33 @@ export struct CharacterRootView {
   build() {
     Stack() {
       Column() {
-        // ===== 顶部标题栏 =====
-        this.headerBar()
+        // ===== 顶部标题栏(统一 AppTopBar,右侧导入按钮) =====
+        AppTopBar({ title: $r('app.string.tab_characters') }) {
+          Button($r('app.string.character_import'))
+            .fontSize($r('app.float.app_font_body'))
+            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+            .backgroundColor(Color.Transparent)
+            .height(48)
+            .padding({ left: 16, right: 16 })
+            .onClick(() => {
+              // 导航到 AddCharacterPage(新建角色 / 文件导入二选一)
+              router.pushUrl({ url: 'pages/AddCharacterPage' });
+            })
+        }
+
+        // 搜索角色卡(统一 AppInputField 胶囊,本地过滤不修改数据库)
+        Column() {
+          AppInputField({
+            text: this.searchText,
+            placeholder: $r('app.string.character_search_placeholder'),
+            shape: 'capsule',
+            onChange: (value: string) => {
+              this.searchText = value;
+            }
+          })
+        }
+        .width('100%')
+        .padding({ left: 20, right: 20, top: 8, bottom: 8 })
 
         // ===== 错误提示 =====
         if (this.viewModel !== null && this.viewModel!.errorMessage.length > 0) {
@@ -397,85 +424,6 @@ export struct CharacterRootView {
     .height('100%')
     // 背景层分离:不设 backgroundColor,让 Index 根背景透出。
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
-  }
-
-  // ===== 标题栏 =====
-
-  @Builder
-  headerBar() {
-    Column() {
-      Row() {
-        Text($r('app.string.tab_characters'))
-          .fontSize($r('app.float.app_font_title'))
-          .fontWeight(FontWeight.Bold)
-          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-        Blank()
-
-        Button($r('app.string.character_import'))
-          .fontSize($r('app.float.app_font_body'))
-          .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-          .backgroundColor(Color.Transparent)
-          .height(48)
-          .padding({ left: 16, right: 16 })
-          .onClick(() => {
-            // 导航到 AddCharacterPage(新建角色 / 文件导入二选一)
-            router.pushUrl({ url: 'pages/AddCharacterPage' });
-          })
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
-
-      // 搜索角色卡(本地过滤,不修改数据库)
-      Row() {
-        SymbolGlyph($r('sys.symbol.magnifyingglass'))
-          .fontSize(16)
-          .fontColor([ThemePalette.textTertiaryColor(this.effectiveTheme)])
-          .margin({ right: 8 })
-
-        TextInput({
-          placeholder: $r('app.string.character_search_placeholder'),
-          text: this.searchText
-        })
-          .fontSize(14)
-          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-          .placeholderColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-          .backgroundColor(Color.Transparent)
-          .height(36)
-          .padding({ left: 0, right: 0 })
-          .layoutWeight(1)
-          .onChange((value: string) => {
-            this.searchText = value;
-          })
-
-        if (this.searchText.length > 0) {
-          SymbolGlyph($r('sys.symbol.xmark_circle_fill'))
-            .fontSize(16)
-            .fontColor([ThemePalette.textTertiaryColor(this.effectiveTheme)])
-            .onClick(() => {
-              this.searchText = '';
-            })
-        }
-      }
-      .width('100%')
-      .height(40)
-      .padding({ left: 12, right: 12 })
-      .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-      .borderRadius($r('app.float.app_radius_md'))
-      .alignItems(VerticalAlign.Center)
-      .margin({ top: $r('app.float.app_spacing_8') })
-    }
-    .width('100%')
-    // 顶部 padding = 状态栏高度 + 间距 8(避开状态栏,与其他 Tab 统一起点)
-    .padding({
-      left: $r('app.float.app_spacing_20'),
-      right: $r('app.float.app_spacing_20'),
-      top: this.statusBarHeight + 8,
-      bottom: $r('app.float.app_spacing_8')
-    })
-    // 背景层分离:顶栏不设 backgroundColor,透出 Index 根背景,避免色块拼接感。
   }
 
   // ===== 角色列表(支持左滑) =====

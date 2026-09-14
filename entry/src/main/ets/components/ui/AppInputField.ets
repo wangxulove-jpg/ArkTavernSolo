@@ -16,8 +16,8 @@ import { ThemePalette } from '../../theme/ThemePalette';
 export struct AppInputField {
   /** 输入值(父持 @State,onChange 回写) */
   text: string = '';
-  /** 占位符 */
-  placeholder: string = '';
+  /** 占位符(Resource/string) */
+  placeholder: ResourceStr = '';
   /** 顶部小标题(空则不显示) */
   label: string = '';
   /** 帮助文案(正常态,空不显示) */
@@ -26,12 +26,10 @@ export struct AppInputField {
   errorMsg: string = '';
   /** 多行(TextArea) */
   multiline: boolean = false;
-  /** 输入类型(单行) */
-  type: InputType = InputType.Normal;
   /** 形状:'rounded' | 'capsule' */
   shape: string = 'rounded';
   /** 是否可编辑 */
-  enabled: boolean = true;
+  editable: boolean = true;
   /** 输入回调 */
   onChange: (value: string) => void = (value: string) => {
   };
@@ -86,8 +84,7 @@ export struct AppInputField {
     } else {
       TextInput({
         placeholder: this.placeholder,
-        text: this.text,
-        type: this.type
+        text: this.text
       })
         .fontSize($r('app.float.app_font_body'))
         .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
@@ -146,7 +143,7 @@ export struct AppInputField {
       }
     }
     .width('100%')
-    .enabled(this.enabled)
+    .enabled(this.editable)
     .alignItems(HorizontalAlign.Start)
   }
 }

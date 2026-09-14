@@ -37,6 +37,7 @@ import { MarketSort } from '../../models/MarketQuery';
 import { MarketCharacter, marketCharacterKey } from '../../models/MarketCharacter';
 import { MarketCharacterCard, MarketCardClickParams } from '../../components/MarketCharacterCard';
 import { EmptyStateView } from '../../components/EmptyStateView';
+import { AppTopBar } from '../../components/ui/AppTopBar';
 import { router } from '@kit.ArkUI';
 import { ThemePalette } from '../../theme/ThemePalette';
 
@@ -166,8 +167,16 @@ export struct MarketPage {
   build() {
     Stack() {
       Column() {
-        // ===== 顶部标题栏 =====
-        this.headerBar()
+        // ===== 顶部标题栏(统一 AppTopBar,右侧来源标识) =====
+        AppTopBar({ title: $r('app.string.market_title') }) {
+          // 来源标识(第一版固定 chub)
+          Text('Chub')
+            .fontSize($r('app.float.app_font_caption'))
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+            .borderRadius($r('app.float.app_radius_sm'))
+            .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+        }
 
         // ===== 搜索框(胶囊) =====
         this.searchBar()
@@ -221,38 +230,6 @@ export struct MarketPage {
     .width('100%')
     .height('100%')
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
-  }
-
-  // ===== 顶部标题栏 =====
-
-  @Builder
-  headerBar(): void {
-    Row() {
-      Text($r('app.string.market_title'))
-        .fontSize($r('app.float.app_font_title'))
-        .fontWeight(FontWeight.Bold)
-        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-      Blank()
-
-      // 来源标识(第一版固定 chub)
-      Text('Chub')
-        .fontSize($r('app.float.app_font_caption'))
-        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-        .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-        .borderRadius($r('app.float.app_radius_sm'))
-        .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-    }
-    .width('100%')
-    .padding({
-      left: $r('app.float.app_spacing_20'),
-      right: $r('app.float.app_spacing_20'),
-      top: this.statusBarHeight + 8,
-      bottom: $r('app.float.app_spacing_8')
-    })
-    .alignItems(VerticalAlign.Center)
   }
 
   // ===== 搜索框 =====

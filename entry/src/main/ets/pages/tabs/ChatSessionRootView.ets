@@ -25,6 +25,7 @@ import { ChatSessionListViewModel, ChatSessionListItem, formatSessionTimestamp, 
 import { AppServices } from '../../services/AppServices';
 import { EmptyStateView } from '../../components/EmptyStateView';
 import { PressableCard } from '../../components/PressableCard';
+import { AppTopBar } from '../../components/ui/AppTopBar';
 import { CharacterImageView } from '../../components/CharacterImageView';
 import { promptAction, router } from '@kit.ArkUI';
 
@@ -271,7 +272,20 @@ export struct ChatSessionRootView {
     Stack() {
       Column() {
         // 顶栏:标题"对话记录" + T-CHAT.1 导入入口
-        this.headerBar()
+        AppTopBar({ title: $r('app.string.tab_sessions') }) {
+          // T-CHAT.1: 导入聊天按钮(顶栏右侧,紧凑)
+          Button($r('app.string.character_import'))
+            .fontSize($r('app.float.app_font_caption'))
+            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+            .borderRadius($r('app.float.app_radius_sm'))
+            .height(28)
+            .padding({ left: 10, right: 10 })
+            .enabled(!this.archiveBusy)
+            .onClick(() => {
+              this.startImportFlow();
+            })
+        }
 
         // 错误提示
         if (this.viewModel !== null && this.viewModel!.errorMessage.length > 0) {
@@ -329,45 +343,6 @@ export struct ChatSessionRootView {
     .height('100%')
     // 背景层分离:不设 backgroundColor,让 Index 根背景透出。
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
-  }
-
-  /** 顶部标题栏:对话记录 + 紧凑导入按钮 */
-  @Builder
-  headerBar() {
-    Row() {
-      Text($r('app.string.tab_sessions'))
-        .fontSize($r('app.float.app_font_title'))
-        .fontWeight(FontWeight.Bold)
-        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .layoutWeight(1)
-
-      // T-CHAT.1: 导入聊天按钮(顶栏右侧,紧凑)
-      Button($r('app.string.character_import'))
-        .fontSize($r('app.float.app_font_caption'))
-        .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-        .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-        .borderRadius($r('app.float.app_radius_sm'))
-        .height(28)
-        .padding({ left: 10, right: 10 })
-        .enabled(!this.archiveBusy)
-        .onClick(() => {
-          this.startImportFlow();
-        })
-    }
-    .width('100%')
-    .padding({
-      left: $r('app.float.app_spacing_20'),
-      right: $r('app.float.app_spacing_20'),
-      // 顶部 padding = 状态栏高度 + 间距 4(与对话设置等二级页 titleBar 保持一致)
-      top: this.statusBarHeight + 4,
-      bottom: $r('app.float.app_spacing_8')
-    })
-    // 顶栏背景色与二级页 titleBar 一致:surface1 色块延伸覆盖状态栏区域,
-    // 与内容区(pageBg)形成分层
-    .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
-    .alignItems(VerticalAlign.Center)
   }
 
   /** 会话列表区:直接展示全部单人会话(左滑操作) */
