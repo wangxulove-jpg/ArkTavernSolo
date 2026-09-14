@@ -61,6 +61,8 @@ export interface ThemeColors {
   readonly warning: string;
   readonly error: string;
   readonly info: string;
+  /** 危险色(破坏性操作:删除/清空等按钮) */
+  readonly danger: string;
 }
 
 /** 浅色(与 base/element/color.json 对齐) */
@@ -88,7 +90,8 @@ const LIGHT_COLORS: ThemeColors = {
   success: '#2E7D32',
   warning: '#E67E22',
   error: '#D32F2F',
-  info: '#1976D2'
+  info: '#1976D2',
+  danger: '#D32F2F'
 };
 
 /** 深色(与 dark/element/color.json 对齐) */
@@ -116,7 +119,8 @@ const DARK_COLORS: ThemeColors = {
   success: '#81C784',
   warning: '#FFB74D',
   error: '#EF5350',
-  info: '#82B1FF'
+  info: '#82B1FF',
+  danger: '#EF5350'
 };
 
 /** 酒馆棕(深色奇幻酒馆质感,参考用户世界模式 UI 概念视觉语言) */
@@ -144,7 +148,8 @@ const TAVERN_COLORS: ThemeColors = {
   success: '#6B9E47',
   warning: '#D49B43',
   error: '#E07A5A',
-  info: '#5B8AB5'
+  info: '#5B8AB5',
+  danger: '#E07A5A'
 };
 
 /**
@@ -249,6 +254,21 @@ export class ThemePalette {
       return TAVERN_COLORS.goldenStrong;
     }
     return $r('app.color.app_golden_strong');
+  }
+
+  /**
+   * 危险色(ResourceColor,破坏性操作)。
+   * - Tavern → 酒馆棕危险色
+   * - 其余 → 资源限定符 app_danger
+   *
+   * @param effectiveTheme EffectiveTheme 字符串值
+   * @returns ResourceColor
+   */
+  static dangerColor(effectiveTheme: string): ResourceColor {
+    if (effectiveTheme === 'tavern') {
+      return TAVERN_COLORS.danger;
+    }
+    return $r('app.color.app_danger');
   }
 
   /**
