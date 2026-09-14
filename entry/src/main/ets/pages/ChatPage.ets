@@ -983,12 +983,6 @@ struct ChatPage {
         Column() {
           this.topBar()
 
-          // CHAT-STATUS-1A: 角色状态卡片
-          this.statusWorldPanel()
-
-          // 显示设置面板(气泡不透明度)
-          this.chatAppearancePanel()
-
           // 错误提示条
           if (this.viewModel !== null && this.viewModel!.errorMessage.length > 0) {
             Text(this.viewModel!.errorMessage)
@@ -1202,6 +1196,12 @@ struct ChatPage {
         .onClick(() => {
           this.chatAppearancePanelVisible = !this.chatAppearancePanelVisible;
         })
+        .bindSheet($$this.chatAppearancePanelVisible, this.appearanceSheetContent(), {
+          height: SheetSize.MEDIUM,
+          dragBar: false,
+          showClose: false,
+          backgroundColor: ThemePalette.surface1Color(this.effectiveTheme)
+        })
 
         Stack() {
           SymbolGlyph($r('sys.symbol.book'))
@@ -1224,6 +1224,15 @@ struct ChatPage {
           }
         })
         .key('chat.worldbook.toggle')
+        .bindSheet($$this.statusPanelVisible, this.statusWorldSheetContent(), {
+          height: '56%',
+          dragBar: false,
+          showClose: false,
+          backgroundColor: ThemePalette.surface1Color(this.effectiveTheme),
+          onWillDisappear: () => {
+            // 保持不变,由 $$ 双向绑定自动回写 statusPanelVisible = false
+          }
+        })
 
         Stack() {
           SymbolGlyph($r('sys.symbol.more'))
@@ -1272,36 +1281,22 @@ struct ChatPage {
   // ===== CHAT-STATUS-1A / T-7.x: 状态/世界书滑动面板 =====
 
   @Builder
-  statusWorldPanel() {
-    if (this.statusPanelVisible) {
-      Column() {
-        // 顶部栏:标题 + AI 入口 + 关闭
-        this.worldbookHeader()
+  statusWorldSheetContent() {
+    Column() {
+      // 顶部栏:标题 + AI 入口 + 关闭
+      this.worldbookHeader()
 
-        // AI 操作区(置于顶部,键盘弹出时不会被遮挡)
-        this.aiActionArea()
+      // AI 操作区(置于顶部,键盘弹出时不会被遮挡)
+      this.aiActionArea()
 
-        // 世界书内容(单页,无 Swiper)
-        this.worldbookPageContent()
+      // 世界书内容(单页,无 Swiper)
+      this.worldbookPageContent()
 
-        // 世界书变更预览(确认/取消)
-        this.aiPreviewArea()
-      }
-      .width('92%')
-      .height('56%')
-      .padding({ left: 14, right: 14, top: 12, bottom: 12 })
-      .borderRadius(20)
-      .border({ width: 0.5, color: ThemePalette.surface2Color(this.effectiveTheme) })
-      .backgroundBlurStyle(BlurStyle.Regular, {
-        policy: BlurStyleActivePolicy.ALWAYS_ACTIVE
-      })
-      // 顶部栏 Column 默认 alignItems=Center,面板宽度小于 100% 会被水平居中;
-      // 左对齐到顶部栏下方,避免浮在画面中间。
-      .alignSelf(ItemAlign.Start)
-      // 裁剪到圆角背景框内:条目/AI 区再高也不会画出背景框外。
-      .clip(true)
-      .margin({ top: 4 })
+      // 世界书变更预览(确认/取消)
+      this.aiPreviewArea()
     }
+    .width('100%')
+    .padding({ left: 14, right: 14, top: 12, bottom: 12 })
   }
 
   @Builder
@@ -1812,13 +1807,10 @@ struct ChatPage {
   // ===== 显示设置面板(气泡不透明度 + 字体配色) =====
 
   @Builder
-  chatAppearancePanel() {
-    if (this.chatAppearancePanelVisible) {
-      // 面板容器:靠右,不覆盖整屏,半透明背景,无全屏遮罩
-      Row() {
-        Scroll() {
-          Column() {
-            // 标题行
+  appearanceSheetContent() {
+    Scroll() {
+      Column() {
+        // 标题行
             Row() {
               Text('显示设置')
                 .fontSize($r('app.float.app_font_body'))
@@ -2160,19 +2152,9 @@ struct ChatPage {
           .width('100%')
           .padding(16)
         }
-        .width('70%')
-        .height('70%')
         .scrollBar(BarState.Auto)
-        .backgroundColor(this.isDarkMode ? '#CC2A2A2A' : '#E6FFFFFF')
-        .borderRadius(16)
-        .shadow({ radius: 12, color: 'rgba(0,0,0,0.15)', offsetX: 0, offsetY: 4 })
+        .width('100%')
       }
-      .width('100%')
-      .justifyContent(FlexAlign.End)
-      .padding({ right: 12, top: this.statusBarHeight + 52 })
-      .hitTestBehavior(HitTestMode.Transparent)
-    }
-  }
 
   /**
    * 色盘选择器覆盖层(全屏遮罩 + 居中卡片)。
