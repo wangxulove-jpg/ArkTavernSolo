@@ -39,6 +39,10 @@ import {
   validateChatArchiveJson
 } from '../parser/ChatArchiveValidator';
 import {
+  isDzmmChatArchive,
+  parseDzmmChatArchive
+} from '../parser/DzmmArchiveParser';
+import {
   ARCHIVE_FORMAT,
   ARCHIVE_VERSION,
   MAX_ARCHIVE_FILE_SIZE,
@@ -163,21 +167,31 @@ export class ChatArchiveImportService {
     Logger.info(LOG_TAG, 'buildPreview size=' + String(fileBytes.length) + ' sha=' + sha256Prefix);
 
     // 3. UTF-8 解码 + JSON 解析 + Schema 校验
+    //    格式分流:DZMM 导出与 ArkTavern 原生归档走不同解析器,二者互相排斥。
     const jsonText: string = this.decodeUtf8(fileBytes);
-    const validationResult = validateChatArchiveJson(jsonText);
-    if (!validationResult.ok || validationResult.archive === null) {
-      const firstError: ChatArchiveValidationError = validationResult.errors[0];
-      const errMsg: string = firstError !== undefined
-        ? firstError.message
-        : '归档校验失败';
-      Logger.warn(LOG_TAG, 'validate failed code=' + (firstError !== undefined ? firstError.code : 'unknown'));
-      throw new Error(errMsg);
+    let archive: ArkTavernChatArchive;
+    let hasUnknownFields: boolean = false;
+    if (isDzmmChatArchive(jsonText, null)) {
+      // DZMM 导出:由独立转换器转成标准 ArkTavernChatArchive 后复用下方统计/去重/落库
+      archive = parseDzmmChatArchive(jsonText);
+      Logger.info(LOG_TAG, 'format=dzmm convs=1');
+    } else {
+      const validationResult = validateChatArchiveJson(jsonText);
+      if (!validationResult.ok || validationResult.archive === null) {
+        const firstError: ChatArchiveValidationError = validationResult.errors[0];
+        const errMsg: string = firstError !== undefined
+          ? firstError.message
+          : '归档校验失败';
+        Logger.warn(LOG_TAG, 'validate failed code=' + (firstError !== undefined ? firstError.code : 'unknown'));
+        throw new Error(errMsg);
+      }
+      archive = validationResult.archive;
+      hasUnknownFields = validationResult.hasUnknownFields;
     }
-    const archive: ArkTavernChatArchive = validationResult.archive;
 
     // 4. 计算预览统计
     const stats: ChatArchivePreviewStats = this.computePreviewStats(
-      archive, fileName, fileBytes.length, currentCharacterId, sha256Full, validationResult.hasUnknownFields
+      archive, fileName, fileBytes.length, currentCharacterId, sha256Full, hasUnknownFields
     );
 
     // 5. 重复检测(基于现有 Chat 列表 + 对话指纹)
@@ -503,7 +517,7 @@ export class ChatArchiveImportService {
             const archMsg: ArchiveMessage = sortedMessages[i];
             const localMsgId: string = generateUuid();
             messageIdMap.set(archMsg.sourceMessageId, localMsgId);
-            const localMsg: ChatMessage = this.archiveMessageToLocal(archMsg, localMsgId);
+            const localMsg: ChatMessage = this.archiveMessageToLocal(archMsg, localMsgId, targetCharacterId);
             const sequenceNumber: number = i + 1;
             await this.messageRepository.insertWithStore(store, localMsg, localChatId, sequenceNumber);
           }
@@ -673,13 +687,38 @@ export class ChatArchiveImportService {
   /**
    * 解析归档消息为本地 ChatMessage(重新生成本地 ID)。
    * 关键字段映射:role / content / status / source / senderType / visibility / 时间 / 数组字段。
+   *
+   * senderType 兜底规则(本地库强约束:senderType='character' 时 senderCharacterId 必填):
+   * - 归档为 character 且 senderCharacterId 非空:原样保留
+   * - 归档为 character 但 senderCharacterId 为空(如 DZMM 无角色实体):
+   *   已绑定目标角色则用目标角色 ID 填充;未绑定则降级为 'user'(保证落库通过)
+   * - 其他类型(user / narrator):保持不变
    */
-  private archiveMessageToLocal(archMsg: ArchiveMessage, localMsgId: string): ChatMessage {
+  private archiveMessageToLocal(
+    archMsg: ArchiveMessage,
+    localMsgId: string,
+    targetCharacterId: string
+  ): ChatMessage {
     const role: ChatRole = this.archiveRoleToLocal(archMsg.role);
     const status: ChatMessageStatus = this.archiveStatusToLocal(archMsg.status);
     const source: ChatMessageSource = this.archiveSourceToLocal(archMsg.source);
-    const senderType: MessageSenderType = this.archiveSenderTypeToLocal(archMsg.senderType);
     const visibility: MessageVisibility = this.archiveVisibilityToLocal(archMsg.visibility);
+
+    // senderType / senderCharacterId 兜底
+    let senderType: MessageSenderType = this.archiveSenderTypeToLocal(archMsg.senderType);
+    let senderCharacterId: string | undefined =
+      archMsg.senderCharacterId.length > 0 ? archMsg.senderCharacterId : undefined;
+    if (senderType === 'character') {
+      if (senderCharacterId === undefined || senderCharacterId.length === 0) {
+        if (targetCharacterId.length > 0) {
+          senderCharacterId = targetCharacterId;
+        } else {
+          // 未绑定角色:character 消息不允许空 senderCharacterId,降级为普通用户侧消息
+          senderType = 'user';
+          senderCharacterId = undefined;
+        }
+      }
+    }
 
     let base: ChatMessage = createChatMessage(localMsgId, role, archMsg.content, archMsg.createdAt);
     base = mergeChatMessage(base, {
@@ -688,7 +727,7 @@ export class ChatArchiveImportService {
       errorMessage: archMsg.errorMessage.length > 0 ? archMsg.errorMessage : undefined,
       source: source,
       senderType: senderType,
-      senderCharacterId: archMsg.senderCharacterId.length > 0 ? archMsg.senderCharacterId : undefined,
+      senderCharacterId: senderCharacterId,
       sceneId: archMsg.sceneId.length > 0 ? archMsg.sceneId : undefined,
       generationBatchId: archMsg.generationBatchId.length > 0 ? archMsg.generationBatchId : undefined,
       visibility: visibility,
