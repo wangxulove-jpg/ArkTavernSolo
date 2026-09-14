@@ -22,9 +22,9 @@ export struct AppSectionHeader {
       .width('100%')
       .textAlign(TextAlign.Start)
       .padding({
-        left: $r('app.float.app_spacing_20'),
-        right: $r('app.float.app_spacing_20'),
-        top: $r('app.float.app_spacing_16'),
+        left: $r('app.float.app_spacing_16'),
+        right: $r('app.float.app_spacing_16'),
+        top: $r('app.float.app_spacing_24'),
         bottom: $r('app.float.app_spacing_8')
       })
   }

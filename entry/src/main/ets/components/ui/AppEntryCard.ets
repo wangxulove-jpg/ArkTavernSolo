@@ -94,5 +94,12 @@ export struct AppEntryCard {
       }
     }
     .width('100%')
+    // 卡片留白节奏:左右 16vp 距屏幕边(通用规约),上下 8vp 使相邻卡片间隔 16vp 呼吸
+    .padding({
+      left: $r('app.float.app_spacing_16'),
+      right: $r('app.float.app_spacing_16'),
+      top: $r('app.float.app_spacing_8'),
+      bottom: $r('app.float.app_spacing_8')
+    })
   }
 }

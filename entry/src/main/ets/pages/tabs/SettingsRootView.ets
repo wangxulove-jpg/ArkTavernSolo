@@ -40,8 +40,8 @@ export struct SettingsRootView {
               .width('100%')
               .textAlign(TextAlign.Start)
               .padding({
-                left: $r('app.float.app_spacing_20'),
-                right: $r('app.float.app_spacing_20'),
+                left: $r('app.float.app_spacing_16'),
+                right: $r('app.float.app_spacing_16'),
                 bottom: $r('app.float.app_spacing_12')
               })
 
