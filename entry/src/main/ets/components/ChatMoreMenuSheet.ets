@@ -16,13 +16,14 @@
  */
 
 import { ThemePalette } from '../theme/ThemePalette';
-import { AppDialog } from './ui/AppDialog';
 
 @Component
 export struct ChatMoreMenuSheet {
   @StorageProp('effectiveTheme') effectiveTheme: string = 'dark';
-  /** 是否显示 */
+  /** 是否显示(由 ChatPage 外层 if 挂载驱动) */
   visible: boolean = false;
+  /** bindSheet 显示开关(组件挂载后置真,驱动底部滑出动画) */
+  @State isShow: boolean = false;
   /** 当前角色名 */
   characterName: string = '';
   /** 当前模型名 */
@@ -79,23 +80,38 @@ export struct ChatMoreMenuSheet {
   /** T-CHAT.1: 当前角色 ID(空表示无角色,隐藏"导出该角色全部聊天") */
   @Prop currentCharacterId: string = '';
 
+  aboutToAppear(): void {
+    // 组件挂载(chatPage 外层 if 为真)时触发 bindSheet 向上滑出
+    this.isShow = true;
+  }
+
   build() {
-    AppDialog({
-      visible: this.visible,
-      title: '对话设置',
-      layout: 'bottom',
-      actions: [],
-      onClose: () => {
-        this.onClose();
-      }
-    }) {
-      this.sheetContent()
-    }
+    Column()
+      .width('100%')
+      .height(0)
+      .backgroundColor(Color.Transparent)
+      .bindSheet(this.isShow, this.sheetContent(), {
+        height: SheetSize.FIT_CONTENT,
+        dragBar: false,
+        showClose: false,
+        backgroundColor: ThemePalette.surface1Color(this.effectiveTheme),
+        onDisappear: () => {
+          this.isShow = false;
+          this.onClose();
+        }
+      })
   }
 
   @Builder
   sheetContent() {
     Column() {
+      Text('对话设置')
+        .fontSize($r('app.float.app_font_caption'))
+        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+        .margin({ top: 8, bottom: 8 })
+        .width('100%')
+        .textAlign(TextAlign.Start)
+
       // 模型信息
       this.infoRow('模型', this.modelName.length > 0 ? this.modelName : '未配置', true, (): void => {
         this.onGoModelSettings();
