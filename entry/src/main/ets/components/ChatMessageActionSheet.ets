@@ -9,6 +9,8 @@
  * 复用 ChatViewModel 的 canXxx 能力判定(由 ChatPage 传入),不在组件内做业务判定。
  * 点击操作后通过 onAction 回调返回 action 字符串,由 ChatPage 执行实际逻辑。
  *
+ * 用 bindSheet 实现底部半模态:入场自带系统"底部向上滑出"动画(替代 AppDialog 自绘过渡)。
+ *
  * 不依赖:
  * - ChatViewModel(由父组件传入数据 + 回调)
  * - 网络/数据库
@@ -17,7 +19,6 @@
 import { ChatMessage } from '../models/ChatMessage';
 import { ChatRole } from '../models/ChatRole';
 import { ThemePalette } from '../theme/ThemePalette';
-import { AppDialog } from './ui/AppDialog';
 
 /** 操作类型 */
 export type MessageAction =
@@ -41,8 +42,10 @@ interface ActionItem {
 @Component
 export struct ChatMessageActionSheet {
   @StorageProp('effectiveTheme') effectiveTheme: string = 'dark';
-  /** 是否显示 */
+  /** 是否显示(由 ChatPage 外层 if 挂载驱动) */
   visible: boolean = false;
+  /** bindSheet 显示开关(组件挂载后置真,驱动底部滑出动画) */
+  @State isShow: boolean = false;
   /** 目标消息 */
   msg: ChatMessage | null = null;
   /** 是否可编辑(User) */
@@ -58,28 +61,56 @@ export struct ChatMessageActionSheet {
   /** 是否可从此处创建独立对话 */
   canForkChat: boolean = false;
   /** 关闭回调 */
-  onClose: () => void = () => {};
+  onClose: () => void = () => {
+  };
   /** 操作点击回调 */
-  onAction: (action: MessageAction) => void = (_: MessageAction) => {};
+  onAction: (action: MessageAction) => void = (_: MessageAction) => {
+  };
+
+  aboutToAppear(): void {
+    // 组件挂载(chatPage 外层 if 为真)时触发 bindSheet 向上滑出
+    this.isShow = true;
+  }
 
   build() {
-    AppDialog({
-      visible: this.visible,
-      title: this.getTitle(),
-      layout: 'bottom',
-      actions: [],
-      onClose: () => {
-        this.onClose();
-      }
-    }) {
-      Column() {
-        ForEach(this.buildActions(), (item: ActionItem) => {
-          this.actionRow(item)
-        })
-      }
+    Column()
       .width('100%')
-      .padding({ left: 16, right: 16 })
+      .height(0)
+      .backgroundColor(Color.Transparent)
+      .bindSheet(this.isShow, this.sheetContent(), {
+        height: SheetSize.FIT_CONTENT,
+        dragBar: false,
+        showClose: false,
+        backgroundColor: ThemePalette.surface1Color(this.effectiveTheme),
+        onDisappear: () => {
+          this.isShow = false;
+          this.onClose();
+        }
+      })
+  }
+
+  @Builder
+  sheetContent() {
+    Column() {
+      // 标题
+      Text(this.getTitle())
+        .fontSize($r('app.float.app_font_caption'))
+        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+        .margin({ top: 8, bottom: 8 })
+        .width('100%')
+        .textAlign(TextAlign.Start)
+
+      // 操作列表
+      ForEach(this.buildActions(), (item: ActionItem) => {
+        this.actionRow(item)
+      })
+
+      // 底部安全区留白
+      Blank().height(12)
     }
+    .width('100%')
+    .padding({ left: 16, right: 16 })
+    .alignItems(HorizontalAlign.Start)
   }
 
   @Builder
