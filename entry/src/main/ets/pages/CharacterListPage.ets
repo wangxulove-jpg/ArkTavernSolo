@@ -24,6 +24,7 @@ import { picker } from '@kit.CoreFileKit';
 import { promptAction, router } from '@kit.ArkUI';
 import { image } from '@kit.ImageKit';
 import { ThemePalette } from '../theme/ThemePalette';
+import { AppDialog } from '../components/ui/AppDialog';
 
 @Entry
 @Component
@@ -653,59 +654,38 @@ struct CharacterListPage {
 
   @Builder
   deleteConfirmDialog() {
-    Column() {
-      Column() {
-        Text('确认删除')
-          .fontSize(17)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-          .margin({ bottom: 12 })
-
-        Text('确定删除角色"' + this.viewModel!.deleteTarget!.name + '"吗?此操作不可撤销。')
-          .fontSize(14)
-          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-          .margin({ bottom: 20 })
-
-        Row() {
-          Button('取消')
-            .fontSize(14)
-            .backgroundColor(Color.Transparent)
-            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-            .layoutWeight(1)
-            .height(40)
-            .onClick(() => {
-              this.viewModel!.deleteTarget = null;
-            })
-
-          Button('删除')
-            .fontSize(14)
-            .backgroundColor($r('app.color.app_danger'))
-            .fontColor(Color.White)
-            .borderRadius(20)
-            .layoutWeight(1)
-            .height(40)
-            .margin({ left: 12 })
-            .onClick(() => {
-              const id: string = this.viewModel!.deleteTarget!.id;
-              this.viewModel!.deleteTarget = null;
-              this.viewModel!.deleteCharacter(id);
-            })
+    AppDialog({
+      visible: true,
+      title: '确认删除',
+      layout: 'center',
+      actions: [
+        {
+          label: '取消',
+          style: 'secondary',
+          enabled: true,
+          onTap: () => {
+            this.viewModel!.deleteTarget = null;
+          }
+        },
+        {
+          label: '删除',
+          style: 'danger',
+          enabled: true,
+          onTap: () => {
+            const id: string = this.viewModel!.deleteTarget!.id;
+            this.viewModel!.deleteTarget = null;
+            this.viewModel!.deleteCharacter(id);
+          }
         }
-        .width('100%')
+      ],
+      onClose: () => {
+        this.viewModel!.deleteTarget = null;
       }
-      .width('80%')
-      .padding(20)
-      .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
-      .borderRadius(16)
+    }) {
+      Text('确定删除角色"' + this.viewModel!.deleteTarget!.name + '"吗?此操作不可撤销。')
+        .fontSize(14)
+        .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
     }
-    .width('100%')
-    .height('100%')
-    .justifyContent(FlexAlign.Center)
-    .alignItems(HorizontalAlign.Center)
-    .backgroundColor('rgba(0,0,0,0.5)')
-    .onClick(() => {
-      this.viewModel!.deleteTarget = null;
-    })
   }
 
   // ===== 编辑对话框(半屏覆盖) =====
