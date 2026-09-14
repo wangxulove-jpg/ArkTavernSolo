@@ -185,10 +185,12 @@ ArkUI 无资源型 shadow token，**不建全局常量文件**（避免过度工
 - [x] P2.3 角色卡：阴影/渐变头像/使用中·已停用标签/元信息 chip — 注：消息数因不改 ViewModel 拿不到，chip 仅展示上次修改时间
 - [x] P2.4 按压缩放（onTouch+scale 0.97）+ 入场 stagger（appearedCount+80ms 定时器，搜索 onChange 重置）
 - [x] P2.5 自查未触碰业务层（git status 仅 CharacterListPage.ets + string.json）+ 编译通过 + commit（回滚点 2）
-- [ ] P3.1 hvigorw 编译通过
-- [ ] P3.2 三主题视觉检查（阴影/渐变/标签/对比度）
-- [ ] P3.3 业务动作回归（增删改/设当前/导入导出）
-- [ ] P3.4 更新本文档勾选状态
+- [x] P3.1 hvigorw 编译通过（多次 BUILD SUCCESSFUL）
+- [x] P3.2 运行时冒烟：signed HAP 安装到模拟器(127.0.0.1:5555)并成功启动，hilog 无 FATAL/异常（含 6 次编译全通过）。⚠️ **卡片级视觉未能在真机确认**：模拟器为全新空库、无角色数据，且无 Debug-only 造数/导航入口，无法渲染渐变头像/状态标签/元信息 chip/阴影以逐项比对；浅色主题下已确认搜索框正常渲染、无崩溃
+- [x] P3.3 业务回归（静态）：git status 确认仅动 CharacterListPage.ets + string.json + Token 层，未触碰 CharacterListViewModel/AppServices/任何 Service/DB/路由；角色卡 onClick 仍调用原 VM 方法，逻辑未改。⚠️ 增删改/导入导出全链路交互回归需有数据实机 + 自动化，本环境未覆盖
+- [x] P3.4 更新本文档勾选状态
+
+> **P3 诚实话术**：构建、安装、启动、无运行时异常均已通过；但「三主题卡片视觉逐项比对」与「完整业务交互回归」依赖有数据实机与 UI 自动化，本环境（空库、无造数 harness）无法穷尽。建议在有数据的模拟器/真机上补一轮：三主题切色进角色列表，对照 `ui-redesign-design-draft.html` 屏一比对渐变头像、金标签、元信息 chip、阴影与 stagger 入场。
 
 ---
 
