@@ -63,24 +63,22 @@ export struct ChatMessageActionSheet {
   onAction: (action: MessageAction) => void = (_: MessageAction) => {};
 
   build() {
-    if (this.visible && this.msg !== null) {
-      AppDialog({
-        visible: true,
-        title: this.getTitle(),
-        layout: 'bottom',
-        actions: [],
-        onClose: () => {
-          this.onClose();
-        }
-      }) {
-        Column() {
-          ForEach(this.buildActions(), (item: ActionItem) => {
-            this.actionRow(item)
-          })
-        }
-        .width('100%')
-        .padding({ left: 16, right: 16 })
+    AppDialog({
+      visible: this.visible,
+      title: this.getTitle(),
+      layout: 'bottom',
+      actions: [],
+      onClose: () => {
+        this.onClose();
       }
+    }) {
+      Column() {
+        ForEach(this.buildActions(), (item: ActionItem) => {
+          this.actionRow(item)
+        })
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16 })
     }
   }
 

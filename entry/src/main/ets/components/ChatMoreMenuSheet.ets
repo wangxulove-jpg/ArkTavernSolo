@@ -80,18 +80,16 @@ export struct ChatMoreMenuSheet {
   @Prop currentCharacterId: string = '';
 
   build() {
-    if (this.visible) {
-      AppDialog({
-        visible: true,
-        title: '对话设置',
-        layout: 'bottom',
-        actions: [],
-        onClose: () => {
-          this.onClose();
-        }
-      }) {
-        this.sheetContent()
+    AppDialog({
+      visible: this.visible,
+      title: '对话设置',
+      layout: 'bottom',
+      actions: [],
+      onClose: () => {
+        this.onClose();
       }
+    }) {
+      this.sheetContent()
     }
   }
 

@@ -72,9 +72,7 @@ export struct ChatSessionListPanel {
       .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
 
       // 删除确认对话框(覆盖在面板之上)
-      if (this.viewModel.showDeleteSessionConfirm) {
-        this.deleteConfirmDialog();
-      }
+      this.deleteConfirmDialog();
     }
     .width('100%')
     .height('100%')
@@ -253,7 +251,7 @@ export struct ChatSessionListPanel {
   @Builder
   deleteConfirmDialog() {
     AppDialog({
-      visible: true,
+      visible: this.viewModel.showDeleteSessionConfirm,
       title: '',
       layout: 'center',
       actions: [

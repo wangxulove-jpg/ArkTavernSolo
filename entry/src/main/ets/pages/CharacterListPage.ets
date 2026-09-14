@@ -208,9 +208,7 @@ struct CharacterListPage {
           })
 
         // 删除确认对话框
-        if (this.viewModel!.deleteTarget !== null) {
-          this.deleteConfirmDialog();
-        }
+        this.deleteConfirmDialog();
 
         // 编辑对话框
         if (this.viewModel!.showEditDialog) {
@@ -655,7 +653,7 @@ struct CharacterListPage {
   @Builder
   deleteConfirmDialog() {
     AppDialog({
-      visible: true,
+      visible: this.viewModel!.deleteTarget !== null,
       title: '确认删除',
       layout: 'center',
       actions: [

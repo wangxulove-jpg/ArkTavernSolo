@@ -431,15 +431,11 @@ export struct CharacterRootView {
       // 背景层分离:不设 backgroundColor,让 Index 根背景透出。
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
 
-      // ===== 删除二次确认弹窗(浮层,Stack alignContent 居中)=====
-      if (this.deleteTarget !== null) {
-        this.deleteConfirmDialog()
-      }
+      // ===== 删除二次确认弹窗(浮层)=====
+      this.deleteConfirmDialog()
 
-      // ===== 导出格式选择弹窗(浮层,Stack alignContent 居中)=====
-      if (this.exportTarget !== null) {
-        this.exportFormatDialog()
-      }
+      // ===== 导出格式选择弹窗(浮层)=====
+      this.exportFormatDialog()
     }
     .width('100%')
     .height('100%')
@@ -830,7 +826,7 @@ export struct CharacterRootView {
   @Builder
   deleteConfirmDialog() {
     AppDialog({
-      visible: true,
+      visible: this.deleteTarget !== null,
       title: $r('app.string.character_delete_confirm_title'),
       layout: 'center',
       actions: [
@@ -867,7 +863,7 @@ export struct CharacterRootView {
   @Builder
   exportFormatDialog() {
     AppDialog({
-      visible: true,
+      visible: this.exportTarget !== null,
       title: $r('app.string.character_export_choose_format'),
       layout: 'center',
       actions: [],
