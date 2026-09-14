@@ -281,6 +281,32 @@ export class MemoryService {
     }
   }
 
+  /**
+   * v8.4: 获取"手动记忆总结"章节边界(所有 chapter memory 的最大 endPosition,无章节返回 -1)。
+   * 章节只由手动总结(forceGenerateChapterMemory)追加,不被滚动/自动总结扩展,
+   * 因此作为"最近原始消息窗口"锚点来源:边界稳定不滑动,直到下一次手动总结。
+   */
+  async getChapterBoundaryPosition(branchId: string): Promise<number> {
+    if (branchId.length === 0) {
+      return -1;
+    }
+    try {
+      const chapters: ChatMemory[] = await this.memoryPersistence.listValidByBranchAndType(
+        branchId, 'chapter'
+      );
+      let maxEnd: number = -1;
+      for (let i = 0; i < chapters.length; i++) {
+        if (chapters[i].endPosition > maxEnd) {
+          maxEnd = chapters[i].endPosition;
+        }
+      }
+      return maxEnd;
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'getChapterBoundaryPosition failed: ' + String(e));
+      return -1;
+    }
+  }
+
   // ===== 触发检查 =====
 
   /**

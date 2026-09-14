@@ -2688,6 +2688,7 @@ export class ChatService {
             + (result.error !== undefined ? ' err=' + result.error : ''));
         } else {
           this.notifyMemoryChanged();
+          // v8.4: 窗口锚点由章节边界与保留条数动态派生,总结成功后无需额外持久化
         }
       })
       .catch((e: Object): void => {
@@ -3490,6 +3491,42 @@ export class ChatService {
       }
     }
 
+    // v8.4: 窗口锚点改为"动态派生",由手动总结章节边界与保留条数实时计算。
+    // - anchor = 章节边界(chapterBoundary) - recentWindowTarget
+    //   => 窗口起点 = anchor + 1 = 章节边界往前 recentWindowTarget 条原文
+    // - 章节只由手动记忆总结追加,不被自动/滚动记忆扩展 => 边界稳定,窗口不滑动
+    // - 修改「记忆总结后保留条数」立即生效(无需重新手动总结)
+    // - 未手动总结过(无章节)或消息不足时 anchor<0 => 全部原文
+    // - 仅当记忆实际可用(memoryLayers 已加载)时才应用;防止记忆被清除/禁用后截断前缀
+    let recentWindowTarget: number = DEFAULT_RECENT_WINDOW_TARGET;
+    if (this.contextBudgetService !== null && this.currentChatId !== undefined
+      && this.currentChatId.length > 0) {
+      try {
+        const budgetConfig: ContextBudgetConfig =
+          await this.contextBudgetService.getBudget(this.currentChatId);
+        if (budgetConfig.recentWindowTarget > 0) {
+          recentWindowTarget = budgetConfig.recentWindowTarget;
+        }
+      } catch (_e) {
+        // 读取失败用默认值
+      }
+    }
+    if (memoryLayers !== undefined && this.memoryService !== null
+      && this.activeBranchId.length > 0) {
+      try {
+        const chapterBoundary: number =
+          await this.memoryService.getChapterBoundaryPosition(this.activeBranchId);
+        const derivedAnchor: number = chapterBoundary - recentWindowTarget;
+        memoryEndPosition = derivedAnchor >= 0 ? derivedAnchor : -1;
+        Logger.info(LOG_TAG, 'buildRequestMessages | window anchor derived'
+          + ' chapterBoundary=' + chapterBoundary
+          + ' recentWindowTarget=' + recentWindowTarget
+          + ' anchor=' + memoryEndPosition);
+      } catch (e) {
+        Logger.warn(LOG_TAG, 'load chapter boundary failed: ' + String(e));
+      }
+    }
+
     // 使用 RecentMessageSelector 选择最近原始消息窗口(缓存优先,append-only)
     // - 窗口以最后一次记忆总结结束位置为锚(memoryEndPosition),新消息只追加、不滑动
     // - 与长期记忆范围去重:已被记忆覆盖且不在最近窗口的消息不注入原文
@@ -3500,19 +3537,7 @@ export class ChatService {
     let conversationMessages: ChatMessage[] = sourceMessages;
     if (this.recentMessageSelector !== null && this.tokenCounter !== null) {
       try {
-        // 从 per-chat 配置读取 recentWindowTarget(若可用)
-        let recentWindowTarget: number = DEFAULT_RECENT_WINDOW_TARGET;
-        if (this.contextBudgetService !== null && this.currentChatId !== undefined) {
-          try {
-            const budgetConfig: ContextBudgetConfig =
-              await this.contextBudgetService.getBudget(this.currentChatId);
-            if (budgetConfig.recentWindowTarget > 0) {
-              recentWindowTarget = budgetConfig.recentWindowTarget;
-            }
-          } catch (_e) {
-            // 读取失败用默认值
-          }
-        }
+        // recentWindowTarget 已在上方解析,直接复用(窗口锚点派生也使用同一值)
         const selection: ContextHistorySelection = this.recentMessageSelector.select(
           sourceMessages,
           {

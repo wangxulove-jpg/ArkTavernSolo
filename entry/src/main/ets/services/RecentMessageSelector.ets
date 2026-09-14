@@ -92,7 +92,10 @@ export class RecentMessageSelector {
     //   此后新消息只追加、不滑动、不丢弃,发送前缀稳定 → 维持缓存命中率
     // - 无记忆时:从 0 开始,全部保留(没有摘要可作替代表示)
     const lastIndex: number = messages.length - 1;
-    const windowStartIndex: number = memoryEndPos >= 0 ? memoryEndPos + 1 : 0;
+    // 防御:锚点异常越过消息末尾(如分支切换、消息删除后残留)时,按无锚点处理,窗口从 0 开始
+    const validAnchor: number =
+      memoryEndPos >= 0 && memoryEndPos <= lastIndex ? memoryEndPos : -1;
+    const windowStartIndex: number = validAnchor >= 0 ? validAnchor + 1 : 0;
 
     // Step 2: 标记每条消息是否应保留(去重 + 窗口)
     // - 窗口起点之后的消息一律保留(即使被记忆覆盖,保证最近上下文连贯)
