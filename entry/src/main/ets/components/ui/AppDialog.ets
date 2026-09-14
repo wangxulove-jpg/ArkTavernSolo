@@ -17,7 +17,7 @@ import { AppButton } from './AppButton';
 
 /** 弹窗底部按钮项 */
 export interface AppDialogAction {
-  label: string;
+  label: ResourceStr;
   style: string;
   enabled: boolean;
   onTap: () => void;

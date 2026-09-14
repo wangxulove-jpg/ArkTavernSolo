@@ -25,6 +25,7 @@
 import { ChatViewModel } from '../viewmodels/ChatViewModel';
 import { Chat } from '../models/Chat';
 import { ThemePalette } from '../theme/ThemePalette';
+import { AppDialog } from './ui/AppDialog';
 
 @Component
 export struct ChatSessionListPanel {
@@ -251,15 +252,32 @@ export struct ChatSessionListPanel {
 
   @Builder
   deleteConfirmDialog() {
-    Stack() {
-      Column()
-        .width('100%')
-        .height('100%')
-        .backgroundColor('rgba(0,0,0,0.4)')
-        .onClick(() => {
-          this.viewModel.cancelDeleteSession();
-        })
-
+    AppDialog({
+      visible: true,
+      title: '',
+      layout: 'center',
+      actions: [
+        {
+          label: $r('app.string.chat_edit_message_cancel'),
+          style: 'secondary',
+          enabled: true,
+          onTap: () => {
+            this.viewModel.cancelDeleteSession();
+          }
+        },
+        {
+          label: $r('app.string.character_action_delete'),
+          style: 'danger',
+          enabled: this.viewModel.canOperateSessions,
+          onTap: () => {
+            this.viewModel.confirmDeleteSession();
+          }
+        }
+      ],
+      onClose: () => {
+        this.viewModel.cancelDeleteSession();
+      }
+    }) {
       Column() {
         Text('删除该会话及其中的全部消息?')
           .fontSize(15)
@@ -269,41 +287,8 @@ export struct ChatSessionListPanel {
           .fontSize(13)
           .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
           .margin({ bottom: 20 })
-
-        Row() {
-          Button($r('app.string.chat_edit_message_cancel'))
-            .fontSize(14)
-            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .borderRadius(20)
-            .height(40)
-            .layoutWeight(1)
-            .margin({ right: 8 })
-            .onClick(() => {
-              this.viewModel.cancelDeleteSession();
-            })
-
-          Button($r('app.string.character_action_delete'))
-            .fontSize(14)
-            .backgroundColor($r('app.color.app_danger'))
-            .fontColor($r('app.color.app_on_accent'))
-            .borderRadius(20)
-            .height(40)
-            .layoutWeight(1)
-            .enabled(this.viewModel.canOperateSessions)
-            .onClick(() => {
-              this.viewModel.confirmDeleteSession();
-            })
-        }
-        .width('100%')
       }
-      .width('80%')
-      .padding(20)
-      .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
-      .borderRadius(16)
+      .width('100%')
     }
-    .width('100%')
-    .height('100%')
-    .alignContent(Alignment.Center)
   }
 }
