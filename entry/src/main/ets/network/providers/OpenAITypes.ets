@@ -291,6 +291,77 @@ export function extractErrorDetail(obj: Record<string, Object>): OpenAIErrorDeta
  * @param choiceObj choices 数组中的一个元素
  * @returns 解析结果,success=false 时 error 描述原因
  */
+
+/**
+ * 从 message 对象解析最终正文文本。
+ *
+ * 兼容各服务商差异:
+ * - OpenAI 标准: message.content 为字符串
+ * - Gemini OpenAI 兼容层: 思考型模型的 message.content 可能为 null,
+ *   思考内容放在 message.thinking_content;content 也可能为多段数组
+ *   (如 [{"type":"text","text":"..."}])
+ * - 部分代理把思考字段命名为 message.reasoning
+ *
+ * @param messageObj message 对象
+ * @returns 正文文本;无法解析时返回 undefined
+ */
+function resolveMessageContent(messageObj: Record<string, Object>): string | undefined {
+  const content: string | undefined = getStringField(messageObj, 'content');
+  if (content !== undefined) {
+    return content;
+  }
+  // content 非字符串(如 string[] 多段)时,直接尝试拼接全部文本段
+  const contentVal: Object | undefined = messageObj['content'] as Object | undefined;
+  if (contentVal !== undefined && contentVal !== null && Array.isArray(contentVal)) {
+    const partsText: string | undefined = extractTextFromParts(contentVal as Object[]);
+    if (partsText !== undefined) {
+      return partsText;
+    }
+  }
+  // 回退: 思考字段(Gemini thinking_content / 部分代理 reasoning)
+  const thinking: string | undefined = getStringField(messageObj, 'thinking_content');
+  if (thinking !== undefined && thinking.trim().length > 0) {
+    return thinking;
+  }
+  const reasoning: string | undefined = getStringField(messageObj, 'reasoning');
+  if (reasoning !== undefined && reasoning.trim().length > 0) {
+    return reasoning;
+  }
+  return undefined;
+}
+
+/**
+ * 从 content 多段数组([{"type":"text","text":"..."}])提取文本并拼接。
+ * 支持嵌套数组。无任何文本段时返回 undefined。
+ */
+function extractTextFromParts(parts: Object[]): string | undefined {
+  let acc: string = '';
+  for (let i = 0; i < parts.length; i++) {
+    const part: Object = parts[i];
+    if (part !== null && typeof part === 'object') {
+      const record: Record<string, Object> = part as Record<string, Object>;
+      const text: string | undefined = getStringField(record, 'text');
+      if (text !== undefined) {
+        acc += text;
+        continue;
+      }
+      const subVal: Object | undefined = record['content'] as Object | undefined;
+      if (subVal !== undefined && subVal !== null && Array.isArray(subVal)) {
+        const sub: string | undefined = extractTextFromParts(subVal as Object[]);
+        if (sub !== undefined) {
+          acc += sub;
+        }
+      }
+    } else if (Array.isArray(part)) {
+      const sub: string | undefined = extractTextFromParts(part as Object[]);
+      if (sub !== undefined) {
+        acc += sub;
+      }
+    }
+  }
+  return acc.length > 0 ? acc : undefined;
+}
+
 export function extractChoice(choiceObj: Object): ChoiceExtractResult {
   if (!isObject(choiceObj)) {
     return { success: false, error: 'choice is not an object', choice: undefined };
@@ -302,7 +373,7 @@ export function extractChoice(choiceObj: Object): ChoiceExtractResult {
     return { success: false, error: 'choice.message is missing or not an object', choice: undefined };
   }
 
-  const content: string | undefined = getStringField(messageObj, 'content');
+  const content: string | undefined = resolveMessageContent(messageObj);
   if (content === undefined) {
     return { success: false, error: 'choice.message.content is missing or not a string', choice: undefined };
   }

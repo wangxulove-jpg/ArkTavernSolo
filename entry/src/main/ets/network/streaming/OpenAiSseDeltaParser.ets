@@ -185,8 +185,12 @@ function parseChoice(choice: Object): OpenAiDeltaResult {
     // content 为 null 时视为无内容(OpenAI 首帧 delta.role 事件)
   }
 
-  // 提取 delta.reasoning_content(思考模型如 DeepSeek-R1/QwQ)
-  const reasoningVal: Object | undefined = delta['reasoning_content'];
+  // 提取 delta.reasoning_content(思考模型如 DeepSeek-R1/QwQ);
+  // delta.thinking_content(Gemini OpenAI 兼容层)归为同一通道
+  let reasoningVal: Object | undefined = delta['reasoning_content'];
+  if (reasoningVal === undefined || reasoningVal === null) {
+    reasoningVal = delta['thinking_content'] as Object | undefined;
+  }
   let reasoningContent: string | undefined = undefined;
 
   if (reasoningVal !== undefined && reasoningVal !== null) {

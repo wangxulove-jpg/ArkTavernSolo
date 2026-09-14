@@ -6,7 +6,7 @@
  *
  * 当前正式支持:
  * - OpenAICompatible / OpenAI / DeepSeek / MiMo / OpenRouter → OpenAIProvider
- * - Claude / Gemini → UnsupportedProvider
+ * - Claude → UnsupportedProvider(Gemini 复用 OpenAI 兼容端点)
  *
  * 设计原则:
  * - 不缓存 Provider 实例
@@ -90,7 +90,8 @@ export function isOpenAICompatibleType(type: ProviderType): boolean {
     || type === ProviderType.Qwen
     || type === ProviderType.Kimi
     || type === ProviderType.Volcengine
-    || type === ProviderType.MiniMax;
+    || type === ProviderType.MiniMax
+    || type === ProviderType.Gemini;
 }
 
 /**

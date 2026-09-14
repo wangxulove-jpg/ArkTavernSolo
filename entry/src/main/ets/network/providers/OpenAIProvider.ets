@@ -580,7 +580,9 @@ function parseSuccessResponse(responseBody: string, providerId: string): ChatRes
         { causeMessage: result.error }
       );
     }
-    Logger.error(LOG_TAG, 'Response extraction failed providerId=' + providerId + ' error=' + result.error);
+    // 可观测性:失败时打印原始响应体(截断),便于定位服务商响应结构差异(Gemini 等)
+    Logger.error(LOG_TAG, 'Response extraction failed providerId=' + providerId + ' error=' + result.error
+      + ' body=' + truncateErrorMessage(responseBody, 2000));
     throw createNetworkError(
       NetworkErrorType.Parse,
       'Invalid response structure: ' + result.error

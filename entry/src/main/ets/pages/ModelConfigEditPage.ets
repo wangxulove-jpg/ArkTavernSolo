@@ -46,6 +46,7 @@ const PROVIDER_OPTIONS: ProviderOption[] = [
   { type: ProviderType.Kimi, displayName: '月之暗面', description: 'Moonshot Kimi 系列,OpenAI 兼容' },
   { type: ProviderType.Volcengine, displayName: '火山方舟', description: '字节跳动 Ark 托管控,豆包/DeepSeek,OpenAI 兼容' },
   { type: ProviderType.MiniMax, displayName: 'MiniMax', description: 'MiniMax 推理模型,OpenAI 兼容' },
+  { type: ProviderType.Gemini, displayName: 'Gemini', description: 'Google 官方 OpenAI 兼容端点,可获取模型列表' },
   { type: ProviderType.OpenAICompatible, displayName: 'OpenAI Compatible', description: '通用 OpenAI 兼容接口,自定义 Base URL 与模型' }
 ];
 

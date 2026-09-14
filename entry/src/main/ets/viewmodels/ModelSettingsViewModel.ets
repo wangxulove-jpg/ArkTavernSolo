@@ -66,6 +66,8 @@ export class ModelSettingsViewModel {
   // ===== 表单状态 =====
   selectedConfigId: string | null = null;
   name: string = '';
+  /** 上次自动生成的配置名称(为空或与 name 一致时,切换服务商/模型才自动重命名) */
+  private lastAutoName: string = '';
   providerType: ProviderType = ProviderType.OpenAICompatible;
   baseUrl: string = '';
   modelName: string = '';
@@ -204,6 +206,7 @@ export class ModelSettingsViewModel {
   startCreate(): void {
     this.selectedConfigId = null;
     this.name = '';
+    this.lastAutoName = '';
     this.providerType = ProviderType.OpenAICompatible;
     this.baseUrl = '';
     this.modelName = '';
@@ -485,13 +488,15 @@ export class ModelSettingsViewModel {
       || type === ProviderType.Qwen
       || type === ProviderType.Kimi
       || type === ProviderType.Volcengine
-      || type === ProviderType.MiniMax;
+      || type === ProviderType.MiniMax
+      || type === ProviderType.Gemini;
   }
 
   // ===== 内部方法 =====
 
   private populateForm(config: ProviderConfig): void {
     this.name = config.name;
+    this.lastAutoName = '';
     this.providerType = config.type;
     this.baseUrl = config.baseUrl;
     this.modelName = config.modelName;
@@ -514,6 +519,39 @@ export class ModelSettingsViewModel {
   }
 
   /**
+   * 生成自动配置名称:服务商显示名 - 模型显示名。
+   */
+  private suggestAutoName(type: ProviderType, modelDisplayName: string): string {
+    const providerLabel: string = this.providerDisplayLabel(type);
+    if (providerLabel.length === 0) {
+      return modelDisplayName;
+    }
+    return providerLabel + ' - ' + modelDisplayName;
+  }
+
+  /**
+   * 服务商显示名(优先预设,无预设时回退内置映射)。
+   */
+  private providerDisplayLabel(type: ProviderType): string {
+    const preset: ProviderPreset | null = getPreset(type);
+    if (preset !== null && preset.displayName.length > 0) {
+      return preset.displayName;
+    }
+    switch (type) {
+      case ProviderType.OpenAICompatible:
+        return 'OpenAI Compatible';
+      case ProviderType.OpenAI:
+        return 'OpenAI';
+      case ProviderType.OpenRouter:
+        return 'OpenRouter';
+      case ProviderType.Claude:
+        return 'Claude';
+      default:
+        return '';
+    }
+  }
+
+  /**
    * 根据 Provider 类型应用预设。
    */
   private applyPresetForType(type: ProviderType): void {
@@ -528,9 +566,10 @@ export class ModelSettingsViewModel {
       this.baseUrl = preset.defaultBaseUrl;
       this.selectedModelIndex = 0;
       this.modelName = preset.defaultModel.id;
-      // 自动命名
-      if (this.name.length === 0 || this.name === this.modelName) {
-        this.name = preset.defaultModel.displayName;
+      // 自动命名:服务商 - 模型(仅当用户未手动改名时跟随更新)
+      if (this.name.length === 0 || this.name === this.lastAutoName) {
+        this.name = this.suggestAutoName(type, preset.defaultModel.displayName);
+        this.lastAutoName = this.name;
       }
     } else {
       this.selectedModelIndex = -1;
@@ -550,11 +589,9 @@ export class ModelSettingsViewModel {
     if (index >= 0 && index < models.length) {
       this.selectedModelIndex = index;
       this.modelName = models[index].id;
-      const oldDisplayName: string = (this.selectedModelIndex >= 0 && this.selectedModelIndex < models.length)
-        ? models[this.selectedModelIndex].displayName
-        : '';
-      if (this.name.length === 0 || this.name === oldDisplayName || this.name === this.modelName) {
-        this.name = models[index].displayName;
+      if (this.name.length === 0 || this.name === this.lastAutoName) {
+        this.name = this.suggestAutoName(this.providerType, models[index].displayName);
+        this.lastAutoName = this.name;
       }
     }
   }

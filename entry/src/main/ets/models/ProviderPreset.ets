@@ -377,6 +377,41 @@ const MINIMAX_PRESET: ProviderPreset = {
   defaultModel: MINIMAX_MODELS[0]
 };
 
+// ===== Google Gemini =====
+
+const GEMINI_MODELS: ModelOption[] = [
+  {
+    id: 'gemini-3.8-flash',
+    displayName: 'Gemini 3.8 Flash',
+    description: '通用快速,官方 OpenAI 兼容端点(约 1M 上下文)'
+  },
+  {
+    id: 'gemini-3.1-pro',
+    displayName: 'Gemini 3.1 Pro',
+    description: '旗舰深度推理(约 1M 上下文)'
+  },
+  {
+    id: 'gemini-2.5-pro',
+    displayName: 'Gemini 2.5 Pro',
+    description: '成熟旗舰推理(1M 上下文)'
+  },
+  {
+    id: 'gemini-2.5-flash',
+    displayName: 'Gemini 2.5 Flash',
+    description: '快速响应(1M 上下文)'
+  }
+];
+
+const GEMINI_PRESET: ProviderPreset = {
+  providerType: ProviderType.Gemini,
+  displayName: 'Gemini',
+  // 官方 OpenAI 兼容端点;必须以 /chat/completions 结尾,
+  // 避免 OpenAiUrlBuilder 追加 /v1 拼成错误的 /v1beta/openai/v1/...
+  defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+  availableModels: GEMINI_MODELS,
+  defaultModel: GEMINI_MODELS[0]
+};
+
 // ===== 全部预设列表 =====
 
 const ALL_PRESETS: ProviderPreset[] = [
@@ -388,5 +423,6 @@ const ALL_PRESETS: ProviderPreset[] = [
   QWEN_PRESET,
   KIMI_PRESET,
   VOLCENGINE_PRESET,
-  MINIMAX_PRESET
+  MINIMAX_PRESET,
+  GEMINI_PRESET
 ];

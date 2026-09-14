@@ -393,13 +393,17 @@ export class ModelService {
     const testMessage: ChatMessage = createChatMessage(
       'test-msg', ChatRole.User, 'Hi', Date.now()
     );
+    // 测试预算:16 对思考型模型(Gemini 3.x)不足——思考占满预算后
+    // 正文 completion_tokens=0,message 缺 content,导致解析失败。
+    // 调大到 512 保证有正文;对 Gemini 同时降思考档位加速输出。
     const testRequest: ChatRequest = {
       model: config.modelName,
       messages: [testMessage],
       temperature: config.temperature,
       topP: config.topP,
-      maxTokens: 16,
-      stream: false
+      maxTokens: 512,
+      stream: false,
+      reasoningEffort: config.type === ProviderType.Gemini ? 'low' : undefined
     };
 
     const provider: AiProvider = this.resolveProvider(providerConfig);
