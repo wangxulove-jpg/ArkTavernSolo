@@ -25,8 +25,6 @@ import { AppServices } from '../../services/AppServices';
 import { EmptyStateView } from '../../components/EmptyStateView';
 import { PressableCard } from '../../components/PressableCard';
 import { CharacterImageView } from '../../components/CharacterImageView';
-import { AppTopBar } from '../../components/ui/AppTopBar';
-import { AppInputField } from '../../components/ui/AppInputField';
 import { AppDialog } from '../../components/ui/AppDialog';
 import { AppButton } from '../../components/ui/AppButton';
 import { router, promptAction } from '@kit.ArkUI';
@@ -354,33 +352,54 @@ export struct CharacterRootView {
   build() {
     Stack() {
       Column() {
-        // ===== 顶部标题栏(统一 AppTopBar,右侧导入按钮) =====
-        AppTopBar({ title: $r('app.string.tab_characters') }) {
+        // ===== 顶部栏:标题 + 右侧紧凑搜索 + 导入 =====
+        Row() {
+          Text($r('app.string.tab_characters'))
+            .fontSize($r('app.float.app_font_title'))
+            .fontWeight(FontWeight.Bold)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+          // 紧凑搜索框(角色卡标题右侧,本地过滤不修改数据库)
+          Row() {
+            TextInput({
+              placeholder: $r('app.string.character_search_placeholder'),
+              text: this.searchText
+            })
+              .fontSize(13)
+              .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+              .placeholderColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+              .backgroundColor(Color.Transparent)
+              .height(32)
+              .padding({ left: 4, right: 4 })
+              .layoutWeight(1)
+              .onChange((value: string) => {
+                this.searchText = value;
+              })
+          }
+          .height(36)
+          .padding({ left: 12, right: 12 })
+          .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+          .borderRadius(18)
+          .alignItems(VerticalAlign.Center)
+          .layoutWeight(1)
+          .margin({ left: 12, right: 12 })
+
+          // 导入按钮(新建角色 / 文件导入二选一)
           Button($r('app.string.character_import'))
             .fontSize($r('app.float.app_font_body'))
             .fontColor(ThemePalette.accentColor(this.effectiveTheme))
             .backgroundColor(Color.Transparent)
-            .height(48)
-            .padding({ left: 16, right: 16 })
+            .height(36)
+            .padding({ left: 8, right: 8 })
             .onClick(() => {
-              // 导航到 AddCharacterPage(新建角色 / 文件导入二选一)
               router.pushUrl({ url: 'pages/AddCharacterPage' });
             })
         }
-
-        // 搜索角色卡(统一 AppInputField 胶囊,本地过滤不修改数据库)
-        Column() {
-          AppInputField({
-            text: this.searchText,
-            placeholder: $r('app.string.character_search_placeholder'),
-            shape: 'capsule',
-            onChange: (value: string) => {
-              this.searchText = value;
-            }
-          })
-        }
         .width('100%')
-        .padding({ left: 20, right: 20, top: 8, bottom: 8 })
+        .padding({ left: 20, right: 20, top: this.statusBarHeight + 8, bottom: 8 })
+        .alignItems(VerticalAlign.Center)
 
         // ===== 错误提示 =====
         if (this.viewModel !== null && this.viewModel!.errorMessage.length > 0) {
