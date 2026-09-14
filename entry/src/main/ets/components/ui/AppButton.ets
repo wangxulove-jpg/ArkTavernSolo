@@ -21,13 +21,13 @@ export struct AppButton {
   /** 形状:'rounded' | 'capsule' */
   shape: string = 'rounded';
   /** 尺寸:'default'(48) | 'small'(40) */
-  size: string = 'default';
+  btnSize: string = 'default';
   /** 按钮文案(ResourceStr) */
   label: ResourceStr = '';
   /** 可选前置图标(sys.symbol Resource) */
   icon: Resource | null = null;
   /** 是否可点 */
-  enabled: boolean = true;
+  canPress: boolean = true;
   /** 加载中(显示 LoadingProgress 替代文案) */
   loading: boolean = false;
   /** 点击回调 */
@@ -75,7 +75,7 @@ export struct AppButton {
 
   /** 高度:default=48 / small=40 */
   private btnHeight(): number {
-    return this.size === 'small' ? 40 : 48;
+    return this.btnSize === 'small' ? 40 : 48;
   }
 
   /** 圆角:capsule=高/2 / rounded=radius_lg(16) */
@@ -122,8 +122,8 @@ export struct AppButton {
     .borderRadius(this.btnRadius())
     .border({ width: 1, color: this.borderColorValue() })
     .padding({ left: 16, right: 16 })
-    .enabled(this.enabled && !this.loading)
-    .opacity((this.enabled && !this.loading) ? 1 : 0.4)
+    .enabled(this.canPress && !this.loading)
+    .opacity((this.canPress && !this.loading) ? 1 : 0.4)
     .scale({ x: this.pressed ? 0.97 : 1, y: this.pressed ? 0.97 : 1 })
     .animation({ duration: 140, curve: Curve.EaseOut })
     .onTouch((event: TouchEvent) => {

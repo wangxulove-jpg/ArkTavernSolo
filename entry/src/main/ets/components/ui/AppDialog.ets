@@ -73,7 +73,7 @@ export struct AppDialog {
             AppButton({
               variant: action.style,
               label: action.label,
-              enabled: action.enabled,
+              canPress: action.enabled,
               onPress: action.onTap
             })
           }.layoutWeight(1).margin({ left: index > 0 ? 12 : 0 })
@@ -96,9 +96,6 @@ export struct AppDialog {
     .backgroundColor(this.panelBg())
     .borderRadius({ topLeft: 22, topRight: 22 })
     .transition(TransitionEffect.OPACITY.combine(TransitionEffect.move(TransitionEdge.BOTTOM)))
-    .onClick((event: ClickEvent) => {
-      event.stopPropagation();
-    })
   }
 
   @Builder
@@ -113,14 +110,21 @@ export struct AppDialog {
     .backgroundColor(this.panelBg())
     .borderRadius(16)
     .transition(TransitionEffect.OPACITY)
-    .onClick((event: ClickEvent) => {
-      event.stopPropagation();
-    })
   }
 
   build() {
     if (this.visible) {
-      Stack() {
+      Stack({ alignContent: this.layout === 'bottom' ? Alignment.Bottom : Alignment.Center }) {
+        // 全屏遮罩层(置底,点击关闭;面板在上方,点面板不触发关闭)
+        Column()
+          .width('100%')
+          .height('100%')
+          .backgroundColor(this.scrimColor())
+          .onClick(() => {
+            this.onClose();
+          })
+
+        // 面板(浮于遮罩之上)
         if (this.layout === 'bottom') {
           this.panelBottom()
         } else {
@@ -129,11 +133,6 @@ export struct AppDialog {
       }
       .width('100%')
       .height('100%')
-      .justifyContent(this.layout === 'bottom' ? FlexAlign.End : FlexAlign.Center)
-      .backgroundColor(this.scrimColor())
-      .onClick(() => {
-        this.onClose();
-      })
     }
   }
 }

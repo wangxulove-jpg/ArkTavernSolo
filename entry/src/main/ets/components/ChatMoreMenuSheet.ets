@@ -16,6 +16,7 @@
  */
 
 import { ThemePalette } from '../theme/ThemePalette';
+import { AppDialog } from './ui/AppDialog';
 
 @Component
 export struct ChatMoreMenuSheet {
@@ -80,41 +81,23 @@ export struct ChatMoreMenuSheet {
 
   build() {
     if (this.visible) {
-      Stack() {
-        Column() {
-          Blank().layoutWeight(1)
-          Column() {
-            this.sheetContent()
-          }
-          .width('100%')
-          .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
-          .borderRadius({
-            topLeft: 16, topRight: 16,
-            bottomLeft: 0, bottomRight: 0
-          })
-          .padding({ top: 8, bottom: 24 })
+      AppDialog({
+        visible: true,
+        title: '对话设置',
+        layout: 'bottom',
+        actions: [],
+        onClose: () => {
+          this.onClose();
         }
-        .width('100%')
-        .height('100%')
+      }) {
+        this.sheetContent()
       }
-      .width('100%')
-      .height('100%')
-      .backgroundColor('rgba(0,0,0,0.5)')
-      .onClick(() => {
-        this.onClose();
-      })
-      .transition(TransitionEffect.OPACITY)
     }
   }
 
   @Builder
   sheetContent() {
     Column() {
-      Text('对话设置')
-        .fontSize($r('app.float.app_font_caption'))
-        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-        .margin({ top: 12, bottom: 8, left: 16, right: 16 })
-
       // 模型信息
       this.infoRow('模型', this.modelName.length > 0 ? this.modelName : '未配置', true, (): void => {
         this.onGoModelSettings();

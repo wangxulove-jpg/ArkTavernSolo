@@ -17,6 +17,7 @@
 import { ChatMessage } from '../models/ChatMessage';
 import { ChatRole } from '../models/ChatRole';
 import { ThemePalette } from '../theme/ThemePalette';
+import { AppDialog } from './ui/AppDialog';
 
 /** 操作类型 */
 export type MessageAction =
@@ -63,51 +64,24 @@ export struct ChatMessageActionSheet {
 
   build() {
     if (this.visible && this.msg !== null) {
-      Stack() {
-        // 遮罩层
+      AppDialog({
+        visible: true,
+        title: this.getTitle(),
+        layout: 'bottom',
+        actions: [],
+        onClose: () => {
+          this.onClose();
+        }
+      }) {
         Column() {
-          Blank().layoutWeight(1)
-          // 操作面板
-          Column() {
-            this.sheetContent()
-          }
-          .width('100%')
-          .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
-          .borderRadius({
-            topLeft: 16, topRight: 16,
-            bottomLeft: 0, bottomRight: 0
+          ForEach(this.buildActions(), (item: ActionItem) => {
+            this.actionRow(item)
           })
-          .padding({ top: 8, bottom: 24 })
         }
         .width('100%')
-        .height('100%')
+        .padding({ left: 16, right: 16 })
       }
-      .width('100%')
-      .height('100%')
-      .backgroundColor('rgba(0,0,0,0.5)')
-      .onClick(() => {
-        this.onClose();
-      })
-      .transition(TransitionEffect.OPACITY)
     }
-  }
-
-  @Builder
-  sheetContent() {
-    Column() {
-      // 标题
-      Text(this.getTitle())
-        .fontSize($r('app.float.app_font_caption'))
-        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-        .margin({ bottom: 8, top: 8 })
-
-      // 操作列表
-      ForEach(this.buildActions(), (item: ActionItem) => {
-        this.actionRow(item)
-      })
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16 })
   }
 
   @Builder
