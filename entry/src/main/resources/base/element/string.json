@@ -449,6 +449,14 @@
       "value": "当前"
     },
     {
+      "name": "character_status_active",
+      "value": "使用中"
+    },
+    {
+      "name": "character_status_inactive",
+      "value": "已停用"
+    },
+    {
       "name": "character_delete",
       "value": "删除"
     },
