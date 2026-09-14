@@ -77,6 +77,14 @@
       "value": "#F0F1F4"
     },
     {
+      "name": "app_surface_3",
+      "value": "#E0E6F0"
+    },
+    {
+      "name": "app_golden_strong",
+      "value": "#8FA4F8"
+    },
+    {
       "name": "app_accent_surface",
       "value": "#E8EEFF"
     },

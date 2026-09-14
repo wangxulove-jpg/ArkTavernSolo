@@ -49,6 +49,10 @@
       "value": "16vp"
     },
     {
+      "name": "app_radius_xl",
+      "value": "22vp"
+    },
+    {
       "name": "chat_top_gradient_height",
       "value": "112vp"
     },
@@ -67,6 +71,14 @@
     {
       "name": "app_font_title",
       "value": "26fp"
+    },
+    {
+      "name": "app_font_display",
+      "value": "30fp"
+    },
+    {
+      "name": "app_font_micro",
+      "value": "10fp"
     },
     {
       "name": "app_font_subtitle",

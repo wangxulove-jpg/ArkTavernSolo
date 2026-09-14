@@ -22,8 +22,12 @@ export interface ThemeColors {
   readonly surface1: string;
   /** 二级 / Elevated Surface */
   readonly surface2: string;
+  /** 三级 Surface(选中态/新视觉阶梯) */
+  readonly surface3: string;
   /** Pressed / Selected Surface */
   readonly selectedSurface: string;
+  /** 金色渐变高光(强调涟漪/头像渐变高亮) */
+  readonly goldenStrong: string;
   /** 分隔线 */
   readonly divider: string;
   /** 普通 Border */
@@ -64,7 +68,9 @@ const LIGHT_COLORS: ThemeColors = {
   pageBg: '#F5F6F8',
   surface1: '#FFFFFF',
   surface2: '#F0F1F4',
+  surface3: '#E0E6F0',
   selectedSurface: '#E8EEFF',
+  goldenStrong: '#8FA4F8',
   divider: '#E5E5E5',
   border: '#E5E5E5',
   textPrimary: '#1A1A1A',
@@ -90,7 +96,9 @@ const DARK_COLORS: ThemeColors = {
   pageBg: '#121212',
   surface1: '#1E1E1E',
   surface2: '#2A2A2A',
+  surface3: '#2E3852',
   selectedSurface: '#2A3552',
+  goldenStrong: '#A3BCFF',
   divider: '#333333',
   border: '#333333',
   textPrimary: '#F0F0F0',
@@ -116,13 +124,15 @@ const TAVERN_COLORS: ThemeColors = {
   pageBg: '#1B130E',
   surface1: '#241A13',
   surface2: '#302219',
+  surface3: '#3D2E1A',
   selectedSurface: '#3D3220',
+  goldenStrong: '#F2DCA6',
   divider: '#4D3724',
   border: '#4D3724',
   textPrimary: '#F7EBDD',
   textSecondary: '#C0AF99',
   textTertiary: '#968574',
-  accent: '#D4A23B',
+  accent: '#E3C27A',
   onAccent: '#1A1510',
   iconPrimary: '#F7EBDD',
   iconSecondary: '#968574',
@@ -133,7 +143,7 @@ const TAVERN_COLORS: ThemeColors = {
   scrim: '#B3000000',
   success: '#6B9E47',
   warning: '#D49B43',
-  error: '#C45A4A',
+  error: '#E07A5A',
   info: '#5B8AB5'
 };
 
@@ -209,6 +219,36 @@ export class ThemePalette {
       return TAVERN_COLORS.surface2;
     }
     return $r('app.color.app_surface_2');
+  }
+
+  /**
+   * 三级 Surface 颜色(ResourceColor,选中态/新视觉阶梯)。
+   * - Tavern → 酒馆棕三级表面
+   * - 其余 → 资源限定符 app_surface_3
+   *
+   * @param effectiveTheme EffectiveTheme 字符串值
+   * @returns ResourceColor
+   */
+  static surface3Color(effectiveTheme: string): ResourceColor {
+    if (effectiveTheme === 'tavern') {
+      return TAVERN_COLORS.surface3;
+    }
+    return $r('app.color.app_surface_3');
+  }
+
+  /**
+   * 金色渐变高光颜色(ResourceColor)。
+   * - Tavern → 酒馆金渐高光
+   * - 其余 → 资源限定符 app_golden_strong
+   *
+   * @param effectiveTheme EffectiveTheme 字符串值
+   * @returns ResourceColor
+   */
+  static goldenStrongColor(effectiveTheme: string): ResourceColor {
+    if (effectiveTheme === 'tavern') {
+      return TAVERN_COLORS.goldenStrong;
+    }
+    return $r('app.color.app_golden_strong');
   }
 
   /**
