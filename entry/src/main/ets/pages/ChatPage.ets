@@ -1197,7 +1197,7 @@ struct ChatPage {
           this.chatAppearancePanelVisible = !this.chatAppearancePanelVisible;
         })
         .bindSheet($$this.chatAppearancePanelVisible, this.appearanceSheetContent(), {
-          height: SheetSize.MEDIUM,
+          height: '76%',
           dragBar: false,
           showClose: false,
           backgroundColor: ThemePalette.surface1Color(this.effectiveTheme)
@@ -1225,7 +1225,7 @@ struct ChatPage {
         })
         .key('chat.worldbook.toggle')
         .bindSheet($$this.statusPanelVisible, this.statusWorldSheetContent(), {
-          height: '56%',
+          height: '70%',
           dragBar: false,
           showClose: false,
           backgroundColor: ThemePalette.surface1Color(this.effectiveTheme),
@@ -2153,6 +2153,7 @@ struct ChatPage {
           .padding(16)
         }
         .scrollBar(BarState.Auto)
+        .nestedScroll({ scrollForward: NestedScrollMode.PARENT_FIRST, scrollBackward: NestedScrollMode.SELF_FIRST })
         .width('100%')
       }
 
