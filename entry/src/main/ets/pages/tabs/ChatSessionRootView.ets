@@ -72,6 +72,8 @@ class SessionListRowModel {
   canMoveUp: boolean = false;
   /** 会话行:是否可下移(组内/区内非末条) */
   canMoveDown: boolean = false;
+  /** 会话行:是否属于某文件夹(用于层级缩进) */
+  isInWorld: boolean = false;
 }
 
 @Component
@@ -117,6 +119,22 @@ export struct ChatSessionRootView {
   @State showMoveNewFolderInput: boolean = false;
   /** 移动弹窗:"新建文件夹"输入值 */
   @State moveNewFolderInput: string = '';
+
+  // ===== 手动拖拽重排 =====
+  /** 是否正在拖拽 */
+  @State isDragging: boolean = false;
+  /** 正在拖拽的会话 id(空=未拖拽) */
+  @State dragChatId: string = '';
+  /** 拖拽预览垂直偏移(vp) */
+  @State dragOffsetY: number = 0;
+  /** 拖拽起点(被拖会话在列表内容区的 y) */
+  @State dragSourceY: number = 0;
+  /** 拖拽预览标题 */
+  @State dragPreviewTitle: string = '';
+  /** 行位置缓存:key = 's_'+chatId 或 'h_'+worldId → 列表内容区 y */
+  private rowPositions: Map<string, number> = new Map<string, number>();
+  /** 行高度缓存:key 同上 → 高度 vp */
+  private rowHeights: Map<string, number> = new Map<string, number>();
 
   // ===== T-CHAT.1: 聊天归档导入导出 =====
   /** T-CHAT.1: 聊天归档 ViewModel(导入流程) */
@@ -401,6 +419,11 @@ export struct ChatSessionRootView {
       if (this.showImportResult) {
         this.importResultDialog()
       }
+
+      // 手动拖拽:浮动预览
+      if (this.isDragging) {
+        this.dragFloatingPreview()
+      }
     }
     .width('100%')
     .height('100%')
@@ -408,14 +431,15 @@ export struct ChatSessionRootView {
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
   }
 
-  /** 会话列表区:有世界会话按分组渲染(分组头可折叠),无世界会话平铺 */
+  /** 会话列表区:有会话或空文件夹时展示(空文件夹仅文件夹头),否则空状态 */
   @Builder
   sessionListArea() {
-    if (this.sessions.length === 0) {
+    if (this.sessions.length === 0
+      && (this.viewModel === null || this.viewModel!.worldGroups.length === 0)) {
       this.sessionsEmptyState()
     } else {
       Column() {
-        // 分组管理入口
+        // 文件夹管理入口
         Row() {
           Text('文件夹')
             .fontSize(13)
@@ -443,12 +467,22 @@ export struct ChatSessionRootView {
               if (row.isHeader) {
                 this.groupHeaderRow(row)
               } else {
-                this.sessionCard(row.item!)
+                this.sessionCard(row.item!, row.isInWorld)
               }
             }
             .width('100%')
             .margin({ bottom: 6 })
-            .draggable(!row.isHeader)
+            .onAreaChange((_oldValue: Area, newValue: Area) => {
+              const key: string = row.isHeader
+                ? 'h_' + row.worldId
+                : 's_' + row.item!.chat.id;
+              const py: number = typeof newValue.position.y === 'number'
+                ? (newValue.position.y as number) : 0;
+              this.rowPositions.set(key, py);
+              const h: number = typeof newValue.height === 'number'
+                ? (newValue.height as number) : 0;
+              this.rowHeights.set(key, h);
+            })
             .swipeAction({
               end: {
                 builder: (): void => {
@@ -473,12 +507,6 @@ export struct ChatSessionRootView {
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
         .align(Alignment.Top)
-        .onItemDragStart((event: ItemDragInfo, itemIndex: number): CustomBuilder => {
-          return this.dragPreviewBuilder(itemIndex);
-        })
-        .onItemDrop((event: ItemDragInfo, itemIndex: number, insertIndex: number): void => {
-          this.handleSessionDragDrop(itemIndex, insertIndex);
-        })
         .padding({
           left: $r('app.float.app_spacing_8'),
           right: $r('app.float.app_spacing_8'),
@@ -492,7 +520,7 @@ export struct ChatSessionRootView {
   }
 
   /**
-   * 构建分组展示行:世界分组头 + 组内会话(按 createdAt 升序) + 未分组会话平铺。
+   * 构建分组展示行:文件夹头(含空文件夹) + 组内会话(按 sortOrder 升序,缩进) + 未分组会话平铺。
    */
   private buildRows(): SessionListRowModel[] {
     const rows: SessionListRowModel[] = [];
@@ -511,7 +539,7 @@ export struct ChatSessionRootView {
         flat.push(item);
       }
     }
-    // 分组顺序:优先按已加载分组的 createdAt 升序,未知分组排最后
+    // 文件夹顺序:已加载分组按 createdAt 升序(含空文件夹),未知分组排最后
     const knownOrder: string[] = [];
     const unknownWorldIds: string[] = [];
     const vmGroups: WorldGroup[] = this.viewModel !== null ? this.viewModel!.worldGroups : [];
@@ -531,19 +559,16 @@ export struct ChatSessionRootView {
     for (let w = 0; w < orderedWorldIds.length; w++) {
       const worldId: string = orderedWorldIds[w];
       const list: ChatSessionListItem[] | undefined = grouped.get(worldId);
-      if (list === undefined || list.length === 0) {
-        continue;
-      }
       const header: SessionListRowModel = new SessionListRowModel();
       header.isHeader = true;
       header.worldId = worldId;
       header.worldName = this.viewModel !== null
         ? this.viewModel!.getWorldName(worldId)
         : UNKNOWN_WORLD_NAME;
-      header.chatCount = list.length;
+      header.chatCount = list !== undefined ? list.length : 0;
       header.isCollapsed = this.isWorldCollapsed(worldId);
       rows.push(header);
-      if (!header.isCollapsed) {
+      if (!header.isCollapsed && list !== undefined) {
         const sorted: ChatSessionListItem[] = list.slice();
         sorted.sort((a: ChatSessionListItem, b: ChatSessionListItem): number => {
           if (a.chat.sortOrder !== b.chat.sortOrder) {
@@ -557,6 +582,7 @@ export struct ChatSessionRootView {
           row.item = sorted[i];
           row.canMoveUp = i > 0;
           row.canMoveDown = i < sorted.length - 1;
+          row.isInWorld = true;
           rows.push(row);
         }
       }
@@ -849,9 +875,9 @@ export struct ChatSessionRootView {
     })
   }
 
-  /** 单个会话卡片(紧凑布局:头像 52 + 两行文本 + 时间/Chevron)。支持拖拽重排 */
+  /** 单个会话卡片。文件夹内的会话缩进显示,支持长按拖拽重排/移入文件夹 */
   @Builder
-  sessionCard(item: ChatSessionListItem) {
+  sessionCard(item: ChatSessionListItem, isInWorld: boolean) {
     Column() {
       PressableCard({
         onPress: () => {
@@ -936,14 +962,152 @@ export struct ChatSessionRootView {
     .width('100%')
     .borderRadius($r('app.float.app_radius_md'))
     .border({ width: 0.5, color: ThemePalette.dividerColor(this.effectiveTheme) })
+    // 文件夹内的会话:缩进体现层级,与文件夹外会话区分
+    .padding({ left: isInWorld ? 8 : 0 })
+    .margin({ left: isInWorld ? 24 : 0, bottom: isInWorld ? 0 : 0 })
+    .gesture(
+      GestureGroup(GestureMode.Sequence,
+        LongPressGesture({ repeat: false })
+          .onAction(() => {
+            this.beginDrag(item.chat.id);
+          }),
+        PanGesture({ direction: PanDirection.Vertical })
+          .onActionUpdate((event: GestureEvent) => {
+            this.updateDragOffset(event.offsetY);
+          })
+          .onActionEnd(() => {
+            this.endDrag();
+          })
+          .onActionCancel(() => {
+            this.cancelDrag();
+          })
+      )
+    )
   }
 
-  /** 拖拽预览:被拖拽会话的简化卡片 */
+  // ===== 手动拖拽重排 =====
+
+  /** 开始拖拽:记录被拖会话与起点 */
+  private beginDrag(chatId: string): void {
+    this.dragChatId = chatId;
+    this.dragOffsetY = 0;
+    this.dragSourceY = this.rowPositions.get('s_' + chatId) ?? 0;
+    this.dragPreviewTitle = this.getSessionTitleByChatId(chatId);
+    this.isDragging = true;
+  }
+
+  /** 拖拽移动:更新预览偏移 */
+  private updateDragOffset(offsetY: number): void {
+    this.dragOffsetY = offsetY;
+  }
+
+  /** 结束拖拽:按落点计算目标并执行移动/重排 */
+  private endDrag(): void {
+    if (this.dragChatId.length === 0 || this.viewModel === null) {
+      this.cancelDrag();
+      return;
+    }
+    const rows: SessionListRowModel[] = this.buildRows();
+    let sourceRow: SessionListRowModel | null = null;
+    for (let i = 0; i < rows.length; i++) {
+      if (!rows[i].isHeader && rows[i].item!.chat.id === this.dragChatId) {
+        sourceRow = rows[i];
+        break;
+      }
+    }
+    if (sourceRow === null) {
+      this.cancelDrag();
+      return;
+    }
+    const source: ChatSessionListItem = sourceRow.item!;
+    const dropY: number = this.dragSourceY + this.dragOffsetY;
+    // 找出距离落点最近的"其他"行(按行中心距离)
+    let targetKey: string | null = null;
+    let bestDist: number = Number.MAX_SAFE_INTEGER;
+    for (let i = 0; i < rows.length; i++) {
+      const key: string = rows[i].isHeader
+        ? 'h_' + rows[i].worldId
+        : 's_' + rows[i].item!.chat.id;
+      if (key === 's_' + this.dragChatId) {
+        continue;
+      }
+      const y: number | undefined = this.rowPositions.get(key);
+      const h: number | undefined = this.rowHeights.get(key);
+      if (y === undefined || h === undefined) {
+        continue;
+      }
+      const center: number = y + h / 2;
+      const dist: number = Math.abs(dropY - center);
+      if (dist < bestDist) {
+        bestDist = dist;
+        targetKey = key;
+      }
+    }
+    // 映射目标:targetKey → targetWorldId + beforeChatId
+    let targetWorldId: string = source.worldId;
+    let beforeChatId: string | null = null;
+    if (targetKey !== null) {
+      if (targetKey.startsWith('h_')) {
+        targetWorldId = targetKey.substring(2);
+        beforeChatId = null;
+        for (let i = 0; i < rows.length; i++) {
+          if (!rows[i].isHeader && rows[i].item!.worldId === targetWorldId) {
+            beforeChatId = rows[i].item!.chat.id;
+            break;
+          }
+        }
+      } else {
+        const targetId: string = targetKey.substring(2);
+        for (let i = 0; i < rows.length; i++) {
+          if (!rows[i].isHeader && rows[i].item!.chat.id === targetId) {
+            targetWorldId = rows[i].item!.worldId;
+            beforeChatId = targetId;
+            break;
+          }
+        }
+      }
+    }
+    this.cancelDrag();
+    if (targetWorldId === source.worldId && beforeChatId === source.chat.id) {
+      return;
+    }
+    void this.viewModel!.moveChatByDrag(source.chat.id, targetWorldId, beforeChatId)
+      .then((ok: boolean) => {
+        if (ok) {
+          this.syncSessions();
+          this.bumpListVersion();
+        }
+      });
+  }
+
+  /** 取消/清理拖拽状态 */
+  private cancelDrag(): void {
+    this.isDragging = false;
+    this.dragChatId = '';
+    this.dragOffsetY = 0;
+    this.dragSourceY = 0;
+    this.dragPreviewTitle = '';
+  }
+
+  /** 按 chatId 取会话标题(拖拽预览用) */
+  private getSessionTitleByChatId(chatId: string): string {
+    if (this.viewModel !== null) {
+      const sessions: ChatSessionListItem[] = this.viewModel!.sessions;
+      for (let i = 0; i < sessions.length; i++) {
+        if (sessions[i].chat.id === chatId) {
+          return this.getSessionTitle(sessions[i]);
+        }
+      }
+    }
+    return '会话';
+  }
+
+  /** 浮动拖拽预览(根 Stack 覆盖层) */
   @Builder
-  dragPreviewBuilder(itemIndex: number) {
+  dragFloatingPreview() {
     Column() {
       Row() {
-        Text(this.getDragPreviewTitle(itemIndex))
+        Text(this.dragPreviewTitle)
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
           .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
@@ -955,72 +1119,14 @@ export struct ChatSessionRootView {
           .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
           .margin({ left: 8 })
       }
-      .width(240)
+      .width(220)
       .padding({ left: 12, right: 12, top: 10, bottom: 10 })
       .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
       .borderRadius(10)
       .border({ width: 1, color: ThemePalette.accentColor(this.effectiveTheme) })
     }
-  }
-
-  /** 拖拽预览标题(由行索引映射到会话) */
-  private getDragPreviewTitle(itemIndex: number): string {
-    const rows: SessionListRowModel[] = this.buildRows();
-    if (itemIndex >= 0 && itemIndex < rows.length && !rows[itemIndex].isHeader) {
-      return this.getSessionTitle(rows[itemIndex].item!);
-    }
-    return '会话';
-  }
-
-  /**
-   * 拖拽落点处理(任意会话均可拖拽):
-   * - 同作用域会话行 → 移到该会话前
-   * - 其他文件夹的会话行 → 移入该文件夹并插到该会话前
-   * - 落到某分组头 → 移到该文件夹最前(含跨文件夹移入)
-   * - 落到末尾(尾部留白) → 原作用域末尾
-   */
-  private handleSessionDragDrop(sourceIndex: number, insertIndex: number): void {
-    const rows: SessionListRowModel[] = this.buildRows();
-    if (sourceIndex < 0 || sourceIndex >= rows.length || rows[sourceIndex].isHeader) {
-      return;
-    }
-    const source: ChatSessionListItem = rows[sourceIndex].item!;
-    if (this.viewModel === null) {
-      return;
-    }
-    // 目标作用域与"之前"的会话 id
-    let targetWorldId: string = source.worldId;
-    let beforeChatId: string | null = null;
-    let targetRow: SessionListRowModel | null = null;
-    if (insertIndex >= 0 && insertIndex < rows.length) {
-      targetRow = rows[insertIndex];
-    }
-    if (targetRow !== null && !targetRow.isHeader) {
-      // 落到会话行:同组=重排,异组=移入该文件夹
-      targetWorldId = targetRow.item!.worldId;
-      beforeChatId = targetRow.item!.chat.id;
-    } else if (targetRow !== null && targetRow.isHeader) {
-      // 落到分组头:移到该文件夹最前(目标作用域 = 该文件夹)
-      targetWorldId = targetRow.worldId;
-      beforeChatId = null;
-      for (let i = insertIndex + 1; i < rows.length; i++) {
-        if (!rows[i].isHeader && rows[i].item!.worldId === targetWorldId) {
-          beforeChatId = rows[i].item!.chat.id;
-          break;
-        }
-      }
-    }
-    // targetRow === null(落到末尾):保持原作用域,插到末尾
-    if (targetWorldId === source.worldId && beforeChatId === source.chat.id) {
-      return;
-    }
-    void this.viewModel!.moveChatByDrag(source.chat.id, targetWorldId, beforeChatId)
-      .then((ok: boolean) => {
-        if (ok) {
-          this.syncSessions();
-          this.bumpListVersion();
-        }
-      });
+    .position({ x: 20, y: this.dragSourceY + this.dragOffsetY })
+    .shadow({ radius: 12, color: '#40000000', offsetX: 0, offsetY: 4 })
   }
 
   /**
