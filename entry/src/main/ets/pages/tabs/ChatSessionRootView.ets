@@ -495,7 +495,7 @@ export struct ChatSessionRootView {
           }, (row: SessionListRowModel) => {
             return row.isHeader
               ? 'h_' + row.worldId + '|' + row.isCollapsed.toString()
-              : 's_' + row.item!.chat.id + '|' + row.item!.chat.title
+              : 's_' + row.item!.chat.id + '|' + row.item!.worldId + '|' + row.item!.chat.title
           })
 
           ListItem() {
@@ -962,9 +962,12 @@ export struct ChatSessionRootView {
     .width('100%')
     .borderRadius($r('app.float.app_radius_md'))
     .border({ width: 0.5, color: ThemePalette.dividerColor(this.effectiveTheme) })
-    // 文件夹内的会话:缩进体现层级,与文件夹外会话区分
-    .padding({ left: isInWorld ? 8 : 0 })
-    .margin({ left: isInWorld ? 24 : 0, bottom: isInWorld ? 0 : 0 })
+    // 文件夹内的会话:整体缩小一点(居中缩放,不缩进,避免右侧超出屏幕)
+    .scale({
+      x: item.worldId.length > 0 ? 0.95 : 1.0,
+      y: item.worldId.length > 0 ? 0.95 : 1.0
+    })
+    .opacity(item.worldId.length > 0 ? 0.9 : 1.0)
     .gesture(
       GestureGroup(GestureMode.Sequence,
         LongPressGesture({ repeat: false })
