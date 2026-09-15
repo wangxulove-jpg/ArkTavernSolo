@@ -287,21 +287,23 @@ export class ChatSessionListViewModel {
   }
 
   /**
-   * 拖拽重排:把会话移动到同组/同区的目标位置。
-   * beforeChatId 为 null 表示移动到作用域末尾。
+   * 拖拽移动/重排会话。
+   * - targetWorldId 与来源相同:仅同组/同区重排
+   * - targetWorldId 不同:把会话移入目标文件夹
+   * beforeChatId 为 null 表示插入到目标作用域末尾。
    */
-  async reorderChat(chatId: string, beforeChatId: string | null): Promise<boolean> {
+  async moveChatByDrag(chatId: string, targetWorldId: string, beforeChatId: string | null): Promise<boolean> {
     if (this.disposed) {
       return false;
     }
     this.errorMessage = '';
     try {
-      await this.persistenceService.reorderChatInScope(chatId, beforeChatId);
+      await this.persistenceService.moveChatByDrag(chatId, targetWorldId, beforeChatId);
       await this.reload();
       return true;
     } catch (e) {
-      this.errorMessage = '重排失败: ' + String(e);
-      Logger.error(LOG_TAG, 'reorderChat failed: ' + String(e));
+      this.errorMessage = '移动失败: ' + String(e);
+      Logger.error(LOG_TAG, 'moveChatByDrag failed: ' + String(e));
       return false;
     }
   }

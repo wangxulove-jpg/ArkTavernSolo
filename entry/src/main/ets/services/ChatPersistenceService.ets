@@ -890,13 +890,13 @@ export class ChatPersistenceService {
   }
 
   /**
-   * 拖拽重排:把会话移动到同组/同区的目标位置。
-   * 仅在同一个作用域内(相同 worldId,未分组视为同一作用域)移动。
-   * 目标位置 by beforeChatId:移动到的位置在该会话之前;
-   * beforeChatId 为 null 时移动到作用域末尾。
-   * 重排后按新顺序重新分配 sortOrder(步长 10,保留 createdAt 决胜顺序)。
+   * 拖拽移动/重排会话。
+   * - 同作用域(相同 worldId,未分组视为同一作用域):仅重排
+   * - 跨作用域(targetWorldId 不同):把会话移入目标文件夹,再在目标作用域内重排
+   * 目标位置 by beforeChatId:插入到该会话之前;null 表示作用域末尾。
+   * 重排后按新顺序重新分配 sortOrder(步长 10)。
    */
-  async reorderChatInScope(chatId: string, beforeChatId: string | null): Promise<void> {
+  async moveChatByDrag(chatId: string, targetWorldId: string, beforeChatId: string | null): Promise<void> {
     const chats: Chat[] = await this.chatRepository.list({
       includeArchived: false,
       limit: 200,
@@ -912,11 +912,19 @@ export class ChatPersistenceService {
     if (source === null) {
       return;
     }
-    // 收集同作用域会话
+    // 跨作用域:先移入目标文件夹
+    if (targetWorldId !== source.worldId) {
+      await this.chatRepository.updateWorldId(chatId, targetWorldId);
+    }
+    // 收集目标作用域会话(source 单独处理,保证总能插入)
     const scope: Chat[] = [];
     for (let i = 0; i < chats.length; i++) {
-      if (chats[i].worldId === source.worldId) {
-        scope.push(chats[i]);
+      const c: Chat = chats[i];
+      if (c.id === chatId) {
+        continue;
+      }
+      if (c.worldId === targetWorldId) {
+        scope.push(c);
       }
     }
     // 按当前 sortOrder(平局 createdAt/id)排序
@@ -934,9 +942,6 @@ export class ChatPersistenceService {
     let inserted: boolean = false;
     for (let i = 0; i < scope.length; i++) {
       const c: Chat = scope[i];
-      if (c.id === chatId) {
-        continue;
-      }
       if (!inserted && beforeChatId !== null && c.id === beforeChatId) {
         reordered.push(source);
         inserted = true;

@@ -973,12 +973,11 @@ export struct ChatSessionRootView {
   }
 
   /**
-   * 拖拽落点处理。
-   * 仅在相同作用域(相同 worldId,未分组视为同一作用域)内重排:
-   * - 落到同组会话行前 → 移到该会话前
-   * - 落到本组分组头 → 移到本组最前
-   * - 落到末尾(尾部留白) → 移到本作用域末尾
-   * - 跨作用域(拖到其他组/其他组头) → 忽略
+   * 拖拽落点处理(任意会话均可拖拽):
+   * - 同作用域会话行 → 移到该会话前
+   * - 其他文件夹的会话行 → 移入该文件夹并插到该会话前
+   * - 落到某分组头 → 移到该文件夹最前(含跨文件夹移入)
+   * - 落到末尾(尾部留白) → 原作用域末尾
    */
   private handleSessionDragDrop(sourceIndex: number, insertIndex: number): void {
     const rows: SessionListRowModel[] = this.buildRows();
@@ -989,41 +988,39 @@ export struct ChatSessionRootView {
     if (this.viewModel === null) {
       return;
     }
-    // 目标行:insertIndex 指向落点"之后"的下一行(不存在=末尾)
+    // 目标作用域与"之前"的会话 id
+    let targetWorldId: string = source.worldId;
     let beforeChatId: string | null = null;
     let targetRow: SessionListRowModel | null = null;
     if (insertIndex >= 0 && insertIndex < rows.length) {
       targetRow = rows[insertIndex];
     }
     if (targetRow !== null && !targetRow.isHeader) {
-      // 落到会话行:仅同作用域有效,否则忽略
-      if (targetRow.item!.worldId !== source.worldId) {
-        return;
-      }
+      // 落到会话行:同组=重排,异组=移入该文件夹
+      targetWorldId = targetRow.item!.worldId;
       beforeChatId = targetRow.item!.chat.id;
     } else if (targetRow !== null && targetRow.isHeader) {
-      // 落到分组头:仅同组有效(移到组内最前),跨组忽略
-      if (targetRow.worldId !== source.worldId) {
-        return;
-      }
+      // 落到分组头:移到该文件夹最前(目标作用域 = 该文件夹)
+      targetWorldId = targetRow.worldId;
       beforeChatId = null;
       for (let i = insertIndex + 1; i < rows.length; i++) {
-        if (!rows[i].isHeader && rows[i].item!.worldId === source.worldId) {
+        if (!rows[i].isHeader && rows[i].item!.worldId === targetWorldId) {
           beforeChatId = rows[i].item!.chat.id;
           break;
         }
       }
     }
-    // targetRow === null(落到末尾):beforeChatId = null → 移到本作用域末尾
-    if (beforeChatId === source.chat.id) {
+    // targetRow === null(落到末尾):保持原作用域,插到末尾
+    if (targetWorldId === source.worldId && beforeChatId === source.chat.id) {
       return;
     }
-    void this.viewModel!.reorderChat(source.chat.id, beforeChatId).then((ok: boolean) => {
-      if (ok) {
-        this.syncSessions();
-        this.bumpListVersion();
-      }
-    });
+    void this.viewModel!.moveChatByDrag(source.chat.id, targetWorldId, beforeChatId)
+      .then((ok: boolean) => {
+        if (ok) {
+          this.syncSessions();
+          this.bumpListVersion();
+        }
+      });
   }
 
   /**
