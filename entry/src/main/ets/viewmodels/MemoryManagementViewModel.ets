@@ -27,8 +27,10 @@
 
 import { MemoryService } from '../services/MemoryService';
 import { ConversationBranchPersistenceService } from '../services/ConversationBranchPersistenceService';
+import { AppServices } from '../services/AppServices';
 import { ChatMemory, MemoryType } from '../models/ChatMemory';
 import { ChatMessage } from '../models/ChatMessage';
+import { WorldGroup } from '../models/WorldGroup';
 import { Logger } from '../utils/Logger';
 
 const LOG_TAG: string = 'MemoryMgmtVM';
@@ -71,6 +73,8 @@ export interface MemoryDisplayItem {
   isInvalidated: boolean;
   /** 是否启用 */
   isEnabled: boolean;
+  /** v42: 世界共享记忆的世界分组名(空=分支私有记忆) */
+  worldName: string;
 }
 
 /**
@@ -189,7 +193,21 @@ export class MemoryManagementViewModel {
 
       // 加载全部 Memory(按类型分组)
       const allMemories: ChatMemory[] = await this.memoryService.listByBranch(branchId);
-      this.memoryGroups = this.groupMemoriesByType(allMemories);
+      // v42: 解析记忆所属世界分组名(世界共享记忆的 worldId 非空)
+      const worldNameMap: Map<string, string> = new Map<string, string>();
+      for (let i = 0; i < allMemories.length; i++) {
+        const wid: string = allMemories[i].worldId;
+        if (wid.length > 0 && worldNameMap.get(wid) === undefined) {
+          try {
+            const g: WorldGroup | null = await AppServices.getWorldGroupService().getById(wid);
+            worldNameMap.set(wid, g !== null ? g.name : '');
+          } catch (e) {
+            Logger.warn(LOG_TAG, 'load world name failed: ' + String(e));
+            worldNameMap.set(wid, '');
+          }
+        }
+      }
+      this.memoryGroups = this.groupMemoriesByType(allMemories, worldNameMap);
 
       // 兼容旧字段:取最新有效 Memory
       let latestValid: ChatMemory | null = null;
@@ -226,7 +244,10 @@ export class MemoryManagementViewModel {
   /**
    * 将 Memory 列表按类型分组并构造 UI 展示项。
    */
-  private groupMemoriesByType(memories: ChatMemory[]): MemoryTypeGroup[] {
+  private groupMemoriesByType(
+    memories: ChatMemory[],
+    worldNameMap: Map<string, string>
+  ): MemoryTypeGroup[] {
     const groupMap: Map<MemoryType, ChatMemory[]> = new Map<MemoryType, ChatMemory[]>();
     groupMap.set('core', []);
     groupMap.set('chapter', []);
@@ -257,7 +278,7 @@ export class MemoryManagementViewModel {
 
       const items: MemoryDisplayItem[] = [];
       for (let i = 0; i < list.length; i++) {
-        items.push(this.buildDisplayItem(list[i]));
+        items.push(this.buildDisplayItem(list[i], worldNameMap));
       }
       groups.push({
         memoryType: type,
@@ -277,7 +298,7 @@ export class MemoryManagementViewModel {
   /**
    * 构造单条 Memory 的 UI 展示项。
    */
-  private buildDisplayItem(memory: ChatMemory): MemoryDisplayItem {
+  private buildDisplayItem(memory: ChatMemory, worldNameMap: Map<string, string>): MemoryDisplayItem {
     const typeLabel: string = MEMORY_TYPE_LABELS[memory.memoryType];
     const title: string = memory.title.length > 0 ? memory.title : typeLabel;
     const summaryPreview: string = memory.summary.length > 80
@@ -286,6 +307,12 @@ export class MemoryManagementViewModel {
     const coverageText: string = memory.endPosition >= 0
       ? (memory.startPosition + 1).toString() + ' - ' + (memory.endPosition + 1).toString()
       : '无范围';
+    // v42: 世界共享记忆(worldId 非空)显示世界分组名,查不到回退"世界"占位
+    let worldName: string = '';
+    if (memory.worldId.length > 0) {
+      const stored: string | undefined = worldNameMap.get(memory.worldId);
+      worldName = stored !== undefined && stored.length > 0 ? stored : '世界';
+    }
     return {
       memory: memory,
       typeLabel: typeLabel,
@@ -295,7 +322,8 @@ export class MemoryManagementViewModel {
       createdTimeText: this.formatTime(memory.createdAt),
       isInherited: memory.inheritedFromMemoryId !== undefined && memory.inheritedFromMemoryId.length > 0,
       isInvalidated: memory.invalidated,
-      isEnabled: memory.enabled
+      isEnabled: memory.enabled,
+      worldName: worldName
     };
   }
 

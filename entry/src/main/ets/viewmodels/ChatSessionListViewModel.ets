@@ -23,14 +23,19 @@
 
 import { Chat } from '../models/Chat';
 import { Character } from '../models/Character';
+import { WorldGroup } from '../models/WorldGroup';
 import { ChatPersistenceService } from '../services/ChatPersistenceService';
 import { CharacterService } from '../services/CharacterService';
+import { AppServices } from '../services/AppServices';
 import { Logger } from '../utils/Logger';
 
 const LOG_TAG: string = 'ChatSessionListViewModel';
 
 /** 未知角色显示名称 */
 export const UNKNOWN_CHARACTER_NAME: string = '未知角色';
+
+/** 世界分组缺失时的占位显示名 */
+export const UNKNOWN_WORLD_NAME: string = '世界';
 
 /** 会话列表项(含角色与最后消息摘要) */
 export interface ChatSessionListItem {
@@ -43,6 +48,10 @@ export interface ChatSessionListItem {
   readonly lastMessagePreview: string;
   /** 最后更新时间戳(优先 lastMessageAt,否则 updatedAt) */
   readonly displayTimestamp: number;
+  /** 所属世界分组 ID(v42,空=不分组) */
+  readonly worldId: string;
+  /** 世界分组名(v42,查不到时为空,UI 回退"世界"占位) */
+  readonly worldName: string;
 }
 
 /** 格式化时间戳为 MM-DD HH:mm */
@@ -66,6 +75,10 @@ export class ChatSessionListViewModel {
   isLoading: boolean = false;
   /** 错误信息(空表示无错误) */
   errorMessage: string = '';
+  /** v42: 全部世界分组(按 createdAt 升序,供分组管理与移动选择) */
+  worldGroups: WorldGroup[] = [];
+  /** v42: 分组操作/移动进行中(防止重复点击) */
+  isGroupOperating: boolean = false;
 
   private readonly persistenceService: ChatPersistenceService;
   private readonly characterService: CharacterService;
@@ -116,6 +129,33 @@ export class ChatSessionListViewModel {
         }
       }
 
+      // v42: 世界分组名(收集会话中出现的 worldId,批量查询避免 N+1)
+      const worldIdSet: Set<string> = new Set<string>();
+      for (let i = 0; i < chats.length; i++) {
+        const wid: string = chats[i].worldId;
+        if (wid.length > 0) {
+          worldIdSet.add(wid);
+        }
+      }
+      const worldNameMap: Map<string, string> = new Map<string, string>();
+      const worldIds: string[] = Array.from(worldIdSet);
+      for (let i = 0; i < worldIds.length; i++) {
+        const wid: string = worldIds[i];
+        try {
+          const g: WorldGroup | null = await AppServices.getWorldGroupService().getById(wid);
+          worldNameMap.set(wid, g !== null ? g.name : '');
+        } catch (e) {
+          Logger.warn(LOG_TAG, 'load world name failed: ' + String(e));
+          worldNameMap.set(wid, '');
+        }
+      }
+      try {
+        this.worldGroups = await AppServices.getWorldGroupService().list();
+      } catch (e) {
+        Logger.warn(LOG_TAG, 'load world groups failed: ' + String(e));
+        this.worldGroups = [];
+      }
+
       // 并行加载每个会话的最后消息预览(每个会话独立查询,失败不影响其他)
       const items: ChatSessionListItem[] = new Array(chats.length);
       for (let i = 0; i < chats.length; i++) {
@@ -143,12 +183,17 @@ export class ChatSessionListViewModel {
           preview = '';
         }
         const ts: number = chat.lastMessageAt > 0 ? chat.lastMessageAt : chat.updatedAt;
+        const worldName: string = chat.worldId.length > 0
+          ? (worldNameMap.get(chat.worldId) ?? '')
+          : '';
         items[i] = {
           chat: chat,
           character: character,
           isCharacterDeleted: isDeleted,
           lastMessagePreview: preview,
-          displayTimestamp: ts
+          displayTimestamp: ts,
+          worldId: chat.worldId,
+          worldName: worldName
         };
       }
       this.sessions = items;
@@ -182,7 +227,9 @@ export class ChatSessionListViewModel {
           character: item.character,
           isCharacterDeleted: item.isCharacterDeleted,
           lastMessagePreview: item.lastMessagePreview,
-          displayTimestamp: item.displayTimestamp
+          displayTimestamp: item.displayTimestamp,
+          worldId: item.worldId,
+          worldName: item.worldName
         };
       }
       return item;
@@ -236,6 +283,130 @@ export class ChatSessionListViewModel {
     } catch (e) {
       this.errorMessage = '下移失败: ' + String(e);
       Logger.error(LOG_TAG, 'moveDown failed: ' + String(e));
+    }
+  }
+
+  // ===== v42 世界分组管理 =====
+
+  /** 获取分组显示名(查不到时返回"世界"占位) */
+  getWorldName(worldId: string): string {
+    if (worldId.length === 0) {
+      return '';
+    }
+    for (let i = 0; i < this.worldGroups.length; i++) {
+      if (this.worldGroups[i].id === worldId) {
+        return this.worldGroups[i].name;
+      }
+    }
+    return UNKNOWN_WORLD_NAME;
+  }
+
+  /** 组内章节标签:组内会话按 createdAt 升序的序号("第N章") */
+  getChapterLabel(chatId: string): string {
+    let target: ChatSessionListItem | null = null;
+    for (let i = 0; i < this.sessions.length; i++) {
+      if (this.sessions[i].chat.id === chatId) {
+        target = this.sessions[i];
+        break;
+      }
+    }
+    if (target === null || target.worldId.length === 0) {
+      return '';
+    }
+    const sameWorld: ChatSessionListItem[] = [];
+    for (let i = 0; i < this.sessions.length; i++) {
+      if (this.sessions[i].worldId === target.worldId) {
+        sameWorld.push(this.sessions[i]);
+      }
+    }
+    sameWorld.sort((a: ChatSessionListItem, b: ChatSessionListItem): number =>
+      a.chat.createdAt - b.chat.createdAt
+    );
+    for (let i = 0; i < sameWorld.length; i++) {
+      if (sameWorld[i].chat.id === chatId) {
+        return '第' + (i + 1).toString() + '章';
+      }
+    }
+    return '';
+  }
+
+  /** 新建世界分组 */
+  async createWorldGroup(name: string): Promise<boolean> {
+    if (this.disposed) {
+      return false;
+    }
+    this.isGroupOperating = true;
+    this.errorMessage = '';
+    try {
+      await AppServices.getWorldGroupService().create(name);
+      await this.reload();
+      return true;
+    } catch (e) {
+      this.errorMessage = '创建分组失败: ' + String(e);
+      Logger.error(LOG_TAG, 'createWorldGroup failed: ' + String(e));
+      return false;
+    } finally {
+      this.isGroupOperating = false;
+    }
+  }
+
+  /** 重命名世界分组 */
+  async renameWorldGroup(groupId: string, name: string): Promise<boolean> {
+    if (this.disposed) {
+      return false;
+    }
+    this.isGroupOperating = true;
+    this.errorMessage = '';
+    try {
+      await AppServices.getWorldGroupService().update(groupId, { name: name });
+      await this.reload();
+      return true;
+    } catch (e) {
+      this.errorMessage = '重命名分组失败: ' + String(e);
+      Logger.error(LOG_TAG, 'renameWorldGroup failed: ' + String(e));
+      return false;
+    } finally {
+      this.isGroupOperating = false;
+    }
+  }
+
+  /** 删除世界分组(仅解除关联,不删会话) */
+  async deleteWorldGroup(groupId: string): Promise<boolean> {
+    if (this.disposed) {
+      return false;
+    }
+    this.isGroupOperating = true;
+    this.errorMessage = '';
+    try {
+      await AppServices.getWorldGroupService().removeWorldGroup(groupId);
+      await this.reload();
+      return true;
+    } catch (e) {
+      this.errorMessage = '删除分组失败: ' + String(e);
+      Logger.error(LOG_TAG, 'deleteWorldGroup failed: ' + String(e));
+      return false;
+    } finally {
+      this.isGroupOperating = false;
+    }
+  }
+
+  /** 移动会话到分组(worldId 为 null 表示"不分组") */
+  async moveChatToWorld(chatId: string, worldId: string | null): Promise<boolean> {
+    if (this.disposed) {
+      return false;
+    }
+    this.isGroupOperating = true;
+    this.errorMessage = '';
+    try {
+      await AppServices.getWorldGroupService().moveChatToWorld(chatId, worldId);
+      await this.reload();
+      return true;
+    } catch (e) {
+      this.errorMessage = '移动会话失败: ' + String(e);
+      Logger.error(LOG_TAG, 'moveChatToWorld failed: ' + String(e));
+      return false;
+    } finally {
+      this.isGroupOperating = false;
     }
   }
 

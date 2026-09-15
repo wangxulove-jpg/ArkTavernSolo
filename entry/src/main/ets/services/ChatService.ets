@@ -104,6 +104,8 @@ import {
 import { PromptPreset } from '../models/PromptPreset';
 import { Persona } from '../models/Persona';
 import { AppServices } from './AppServices';
+import { WorldGroupService } from './WorldGroupService';
+import { WorldGroup } from '../models/WorldGroup';
 import { generateUuid } from '../utils/Uuid';
 import { Logger } from '../utils/Logger';
 
@@ -809,6 +811,110 @@ export class ChatService {
    */
   getCurrentChat(): Chat | null {
     return this.currentChat;
+  }
+
+  /**
+   * 获取开场白池副本:[firstMessage(非空时)] + alternateGreetings(trim 过滤空项)。
+   * 供"新建章节"开场白选择器等 UI 预览使用。
+   */
+  getGreetingPool(): string[] {
+    return this.buildGreetingPool();
+  }
+
+  /**
+   * 新建章节(世界分组内切换开场白)。
+   *
+   * 流程(Stage 6 §4.4):
+   * 1. 校验:角色存在、开场白索引有效、当前会话存在
+   * 2. 确保当前会话所属世界分组(无分组时创建"角色名+的世界"并把当前会话移入)
+   * 3. 计算章节序号 = 组内会话数 + 1,标题 = "第N章·开场白前20字"
+   * 4. statusConfigJson 优先继承当前会话,否则取组内最近会话的
+   * 5. 用选定开场白创建新会话(事务),初始化其余开场白为 Swipe 候选
+   * 6. 切换到新会话(原会话保留,可切回)
+   *
+   * @param greetingIndex 开场白池索引(0 ≤ greetingIndex < 池长度)
+   * @returns 新章节会话 id
+   * @throws Error 前置校验失败 / 持久化失败(事务由 createSessionWithFirstMessage 保证)
+   */
+  async createChapter(greetingIndex: number): Promise<string> {
+    if (this.disposed) {
+      throw new Error('ChatService disposed');
+    }
+    if (this.character === null) {
+      throw new Error('当前无角色,无法新建章节');
+    }
+    if (this.currentChat === null || this.currentChatId === undefined) {
+      throw new Error('当前无活跃会话');
+    }
+    if (this.persistenceService === null) {
+      throw new Error('persistenceService unavailable');
+    }
+    const greetingPool: string[] = this.buildGreetingPool();
+    if (greetingIndex < 0 || greetingIndex >= greetingPool.length) {
+      throw new Error('开场白索引无效');
+    }
+
+    // 2. 确保世界分组
+    const worldGroupService: WorldGroupService = AppServices.getWorldGroupService();
+    let worldId: string = this.currentChat.worldId;
+    if (worldId.length === 0) {
+      const group: WorldGroup =
+        await worldGroupService.create(this.character.name + '的世界');
+      await worldGroupService.moveChatToWorld(this.currentChat.id, group.id);
+      worldId = group.id;
+    }
+
+    // 3. 章节序号与标题
+    const worldChats: Chat[] = await worldGroupService.listChatsInWorld(worldId);
+    const chapterNumber: number = worldChats.length + 1;
+    const greeting: string = greetingPool[greetingIndex];
+    const title: string = '第' + chapterNumber.toString() + '章·'
+      + this.buildChapterTitlePreview(greeting);
+
+    // 4. 状态配置继承
+    let statusConfigJson: string = this.currentChat.statusConfigJson;
+    if (statusConfigJson.length === 0) {
+      const latest: Chat | null = await worldGroupService.latestChatInWorld(worldId);
+      if (latest !== null) {
+        statusConfigJson = latest.statusConfigJson;
+      }
+    }
+
+    // 5. 创建新会话(选定开场白作为首条消息)
+    const firstMsg: ChatMessage = {
+      id: 'msg-' + generateUuid(),
+      role: ChatRole.Assistant,
+      content: greeting,
+      createdAt: Date.now(),
+      isStreaming: false,
+      status: ChatMessageStatus.Completed,
+      source: ChatMessageSource.CharacterFirstMessage
+    };
+    const session: PersistedChatSession = await this.persistenceService.createSessionWithFirstMessage(
+      this.character.id, title, firstMsg
+    );
+    const newChatId: string = session.chat.id;
+    await worldGroupService.moveChatToWorld(newChatId, worldId);
+    if (statusConfigJson.length > 0) {
+      await this.persistenceService.updateChatStatusConfig(newChatId, statusConfigJson);
+    }
+    // 其余开场白作为首条消息的 Swipe 候选
+    await this.initializeGreetingSwipeCandidates(firstMsg.id, greetingPool.slice(1));
+
+    // 6. 切换到新会话(复用公开 switchSession:flush + 加载 + 通知页面)
+    await this.switchSession(newChatId);
+    return newChatId;
+  }
+
+  /**
+   * 章节标题开场白预览:前 20 字符,超长追加省略号。
+   */
+  private buildChapterTitlePreview(greeting: string): string {
+    const trimmed: string = greeting.trim();
+    if (trimmed.length <= 20) {
+      return trimmed;
+    }
+    return trimmed.substring(0, 20) + '…';
   }
 
   /**

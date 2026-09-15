@@ -288,6 +288,27 @@ struct MemoryManagementPage {
           .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
           .layoutWeight(1)
 
+        // v42: 世界共享记忆 chip(区分世界共享与分支私有)
+        if (item.worldName.length > 0) {
+          Text(item.worldName + ' · 世界共享')
+            .fontSize(11)
+            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+            .borderRadius(4)
+            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+            .margin({ left: 8 })
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        } else {
+          Text('分支私有')
+            .fontSize(11)
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+            .borderRadius(4)
+            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+            .margin({ left: 8 })
+        }
+
         // 失效标签
         if (item.isInvalidated) {
           Text('已失效')

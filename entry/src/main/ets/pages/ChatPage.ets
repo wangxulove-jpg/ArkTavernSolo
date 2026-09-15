@@ -140,6 +140,12 @@ struct ChatPage {
   @State personaOptions: Persona[] = [];
   /** 当前生效的身份名称(供 ChatMoreMenuSheet 展示) */
   @State resolvedPersonaName: string = '';
+  /** v42: 是否显示"新建章节"开场白选择器 */
+  @State showChapterGreetingPicker: boolean = false;
+  /** v42: 开场白池(选择器预览列表) */
+  @State chapterGreetingPool: string[] = [];
+  /** v42: 新建章节进行中(防止重复点击) */
+  @State chapterCreateBusy: boolean = false;
   /** 是否显示 Fork 模式选择弹窗 */
   @State showForkModePicker: boolean = false;
   /** Fork 操作目标消息 ID */
@@ -1104,6 +1110,9 @@ struct ChatPage {
             onSwitchPersona: (): void => {
               this.openPersonaPicker();
             },
+            onNewChapter: (): void => {
+              this.openChapterGreetingPicker();
+            },
             onRegenerate: (): void => { this.viewModel!.regenerate(); },
             onClearChat: (): void => {
               this.showClearConfirm = true;
@@ -1145,6 +1154,11 @@ struct ChatPage {
         // Persona 选择弹窗
         if (this.showPersonaPicker) {
           this.personaPickerSheet()
+        }
+
+        // v42: 新建章节开场白选择弹窗
+        if (this.showChapterGreetingPicker) {
+          this.chapterGreetingPickerDialog()
         }
 
         // Fork 模式选择弹窗
@@ -3322,6 +3336,170 @@ struct ChatPage {
     } catch (e) {
       this.resolvedPersonaName = '';
     }
+  }
+
+  // ===== v42 新建章节(切换开场白) =====
+
+  /**
+   * 打开"新建章节"开场白选择器。
+   * 从 viewModel 取开场白池;池为空时提示并关闭。
+   */
+  private openChapterGreetingPicker(): void {
+    if (this.viewModel === null) {
+      return;
+    }
+    const pool: string[] = this.viewModel!.getGreetingPool();
+    if (pool.length === 0) {
+      promptAction.showToast({ message: '该角色没有可用的开场白', duration: 1500 });
+      return;
+    }
+    this.chapterGreetingPool = pool;
+    this.showChapterGreetingPicker = true;
+  }
+
+  /**
+   * 选中开场白 → 调 viewModel.createChapter(index)。
+   * 成功后刷新会话列表并提示;原会话保留,可切回。
+   */
+  private async selectChapterGreeting(index: number): Promise<void> {
+    if (this.viewModel === null || this.chapterCreateBusy) {
+      return;
+    }
+    this.chapterCreateBusy = true;
+    try {
+      const newChatId: string = await this.viewModel!.createChapter(index);
+      if (newChatId.length > 0) {
+        this.showChapterGreetingPicker = false;
+        this.chapterGreetingPool = [];
+        this.refreshUserNameDisplay();
+        promptAction.showToast({ message: '已创建新章节,原对话可切回', duration: 2000 });
+      } else {
+        const msg: string = this.viewModel!.sessionError.length > 0
+          ? this.viewModel!.sessionError : '新建章节失败';
+        promptAction.showToast({ message: msg, duration: 2000 });
+      }
+    } catch (e) {
+      promptAction.showToast({ message: '新建章节失败', duration: 2000 });
+      Logger.error(LOG_TAG, 'selectChapterGreeting failed: ' + String(e));
+    } finally {
+      this.chapterCreateBusy = false;
+    }
+  }
+
+  /** 关闭"新建章节"开场白选择器 */
+  private closeChapterGreetingPicker(): void {
+    if (this.chapterCreateBusy) {
+      return;
+    }
+    this.showChapterGreetingPicker = false;
+    this.chapterGreetingPool = [];
+  }
+
+  /** 开场白选择弹窗:列表显示每项前 100 字预览 */
+  @Builder
+  chapterGreetingPickerDialog() {
+    Stack() {
+      Column() {
+        Column() {
+          Row() {
+            Text('新建章节 · 选择开场白')
+              .fontSize(17)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            Blank()
+            Button('取消')
+              .fontSize(14)
+              .backgroundColor(Color.Transparent)
+              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+              .height(36)
+              .enabled(!this.chapterCreateBusy)
+              .onClick(() => {
+                this.closeChapterGreetingPicker();
+              })
+          }
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
+          .margin({ bottom: 4 })
+
+          Text('新章节将加入同一世界分组,原对话保留可切回')
+            .fontSize(12)
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            .width('100%')
+            .margin({ bottom: 8 })
+
+          Scroll() {
+            Column() {
+              ForEach(this.chapterGreetingPool, (greeting: string, index: number) => {
+                Column() {
+                  Text('开场白 ' + (index + 1).toString())
+                    .fontSize(12)
+                    .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+                    .width('100%')
+                  Text(this.greetingPreview(greeting))
+                    .fontSize(13)
+                    .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+                    .width('100%')
+                    .margin({ top: 2 })
+                    .maxLines(4)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                }
+                .width('100%')
+                .padding(12)
+                .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+                .borderRadius(8)
+                .margin({ bottom: 8 })
+                .alignItems(HorizontalAlign.Start)
+                .onClick(() => {
+                  this.selectChapterGreeting(index);
+                })
+              }, (greeting: string, index: number) => 'greeting_' + index.toString())
+            }
+            .width('100%')
+          }
+          .height(300)
+          .scrollBar(BarState.Auto)
+
+          Divider().color(ThemePalette.dividerColor(this.effectiveTheme)).margin({ top: 4, bottom: 4 })
+
+          Button(this.chapterCreateBusy ? '正在创建章节...' : '创建章节')
+            .fontSize(15)
+            .fontColor($r('app.color.app_on_accent'))
+            .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
+            .borderRadius($r('app.float.app_radius_sm'))
+            .width('100%')
+            .height(44)
+            .enabled(!this.chapterCreateBusy)
+            .onClick(() => {
+              if (!this.chapterCreateBusy && this.chapterGreetingPool.length > 0) {
+                this.selectChapterGreeting(0);
+              }
+            })
+        }
+        .width('88%')
+        .padding(16)
+        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+        .borderRadius($r('app.float.app_radius_lg'))
+      }
+      .width('100%')
+      .height('100%')
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('rgba(0,0,0,0.5)')
+    .onClick(() => {
+      this.closeChapterGreetingPicker();
+    })
+  }
+
+  /** 开场白预览文本:前 100 字,超长省略 */
+  private greetingPreview(greeting: string): string {
+    const trimmed: string = greeting.trim();
+    if (trimmed.length <= 100) {
+      return trimmed;
+    }
+    return trimmed.substring(0, 100) + '…';
   }
 
   @Builder

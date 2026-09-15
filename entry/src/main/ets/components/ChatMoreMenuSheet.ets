@@ -60,6 +60,8 @@ export struct ChatMoreMenuSheet {
   onEditUserNameOverride: () => void = () => {};
   /** 切换用户身份(打开 Persona 选择) */
   onSwitchPersona: () => void = () => {};
+  /** v42: 新建章节(世界分组内切换开场白) */
+  onNewChapter: () => void = () => {};
   /** 重新生成 */
   onRegenerate: () => void = () => {};
   /** 清空对话 */
@@ -191,6 +193,17 @@ export struct ChatMoreMenuSheet {
           this.onSwitchPersona();
         }
       )
+
+      // 新建章节(世界分组内切换开场白,仅角色聊天可用)
+      if (this.characterName.length > 0) {
+        this.menuRow('新建章节(切换开场白)', this.busy, false, (): void => {
+          if (this.busy) {
+            return;
+          }
+          this.onNewChapter();
+          this.onClose();
+        })
+      }
 
       // 重新生成
       if (this.canRegenerate) {

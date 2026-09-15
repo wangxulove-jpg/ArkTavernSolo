@@ -21,7 +21,7 @@
  * - 其他 Tab
  */
 
-import { ChatSessionListViewModel, ChatSessionListItem, formatSessionTimestamp, UNKNOWN_CHARACTER_NAME } from '../../viewmodels/ChatSessionListViewModel';
+import { ChatSessionListViewModel, ChatSessionListItem, formatSessionTimestamp, UNKNOWN_CHARACTER_NAME, UNKNOWN_WORLD_NAME } from '../../viewmodels/ChatSessionListViewModel';
 import { AppServices } from '../../services/AppServices';
 import { EmptyStateView } from '../../components/EmptyStateView';
 import { PressableCard } from '../../components/PressableCard';
@@ -30,6 +30,7 @@ import { CharacterImageView } from '../../components/CharacterImageView';
 import { promptAction, router } from '@kit.ArkUI';
 
 import { Character, resolveCharacterDisplayName } from '../../models/Character';
+import { WorldGroup } from '../../models/WorldGroup';
 
 import { ChatArchiveViewModel } from '../../viewmodels/ChatArchiveViewModel';
 import { ChatArchiveImportConversationResult } from '../../parser/ChatArchiveSchema';
@@ -53,6 +54,22 @@ interface SwipeIconButtonParams {
   action: () => void;
 }
 
+/** 会话列表展示行模型:分组头 或 会话行 */
+class SessionListRowModel {
+  /** 是否为分组头行 */
+  isHeader: boolean = false;
+  /** 分组头:worldId */
+  worldId: string = '';
+  /** 分组头:分组名 */
+  worldName: string = '';
+  /** 分组头:组内会话数 */
+  chatCount: number = 0;
+  /** 分组头:是否折叠 */
+  isCollapsed: boolean = false;
+  /** 会话行:对应列表项 */
+  item: ChatSessionListItem | null = null;
+}
+
 @Component
 export struct ChatSessionRootView {
   @State viewModel: ChatSessionListViewModel | null = null;
@@ -74,6 +91,24 @@ export struct ChatSessionRootView {
   @State deleteTarget: ChatSessionListItem | null = null;
   /** 删除进行中(防止重复点击) */
   @State isDeleting: boolean = false;
+
+  // ===== v42 世界分组(章节)状态 =====
+  /** 已折叠的世界分组 id 列表 */
+  @State collapsedWorldIds: string[] = [];
+  /** 是否显示新建分组弹窗 */
+  @State showCreateGroupDialog: boolean = false;
+  /** 新建分组输入 */
+  @State newGroupName: string = '';
+  /** 重命名分组目标(空时不显示) */
+  @State renameGroupTarget: WorldGroup | null = null;
+  /** 重命名分组输入 */
+  @State renameGroupInput: string = '';
+  /** 删除分组确认目标(空时不显示) */
+  @State deleteGroupTarget: WorldGroup | null = null;
+  /** 移动会话到分组的目标会话(空时不显示) */
+  @State moveTarget: ChatSessionListItem | null = null;
+  /** 移动弹窗中选中的分组 id(空字符串=不分组) */
+  @State moveSelectedWorldId: string = '';
 
   // ===== T-CHAT.1: 聊天归档导入导出 =====
   /** T-CHAT.1: 聊天归档 ViewModel(导入流程) */
@@ -324,6 +359,26 @@ export struct ChatSessionRootView {
         this.deleteConfirmDialog()
       }
 
+      // v42: 新建分组弹窗
+      if (this.showCreateGroupDialog) {
+        this.createGroupDialog()
+      }
+
+      // v42: 重命名分组弹窗
+      if (this.renameGroupTarget !== null) {
+        this.renameGroupDialog()
+      }
+
+      // v42: 删除分组确认弹窗
+      if (this.deleteGroupTarget !== null) {
+        this.deleteGroupDialog()
+      }
+
+      // v42: 移动会话到分组弹窗
+      if (this.moveTarget !== null) {
+        this.moveChatDialog()
+      }
+
       // T-CHAT.1: 长按导出选择弹窗
       if (this.exportTarget !== null) {
         this.exportChatDialog()
@@ -345,43 +400,239 @@ export struct ChatSessionRootView {
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
   }
 
-  /** 会话列表区:直接展示全部单人会话(左滑操作) */
+  /** 会话列表区:有世界会话按分组渲染(分组头可折叠),无世界会话平铺 */
   @Builder
   sessionListArea() {
     if (this.sessions.length === 0) {
       this.sessionsEmptyState()
     } else {
-      List() {
-        ForEach(this.sessions, (item: ChatSessionListItem, index: number) => {
-          ListItem() {
-            this.sessionCard(item)
-          }
-          .width('100%')
-          .margin({ bottom: 6 })
-          .swipeAction({
-            end: {
-              builder: (): void => {
-                this.swipeActionButtons(item, index)
+      Column() {
+        // 分组管理入口
+        Row() {
+          Text('世界分组')
+            .fontSize(13)
+            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+          Blank()
+          Button('新建分组')
+            .fontSize(12)
+            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .borderRadius(14)
+            .height(28)
+            .padding({ left: 12, right: 12 })
+            .enabled(this.viewModel !== null && !this.viewModel!.isGroupOperating)
+            .onClick(() => {
+              this.newGroupName = '';
+              this.showCreateGroupDialog = true;
+            })
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, bottom: 6 })
+
+        List() {
+          ForEach(this.buildRows(), (row: SessionListRowModel) => {
+            ListItem() {
+              if (row.isHeader) {
+                this.groupHeaderRow(row)
+              } else {
+                this.sessionCard(row.item!)
               }
             }
+            .width('100%')
+            .margin({ bottom: 6 })
+            .swipeAction({
+              end: {
+                builder: (): void => {
+                  if (!row.isHeader && row.item !== null) {
+                    this.swipeActionButtons(row.item!, this.getSessionIndex(row.item!))
+                  }
+                }
+              }
+            })
+          }, (row: SessionListRowModel) => {
+            return row.isHeader
+              ? 'h_' + row.worldId + '|' + row.isCollapsed.toString()
+              : 's_' + row.item!.chat.id + '|' + row.item!.chat.title
           })
-        }, (item: ChatSessionListItem) => item.chat.id + '|' + item.chat.title)
 
-        ListItem() {
-          Column().width('100%').height(160)
+          ListItem() {
+            Column().width('100%').height(160)
+          }
         }
+        .width('100%')
+        .layoutWeight(1)
+        .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring)
+        .align(Alignment.Top)
+        .padding({
+          left: $r('app.float.app_spacing_8'),
+          right: $r('app.float.app_spacing_8'),
+          top: 0,
+          bottom: 0
+        })
       }
       .width('100%')
       .layoutWeight(1)
-      .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.Spring)
-      .align(Alignment.Top)
-      .padding({
-        left: $r('app.float.app_spacing_8'),
-        right: $r('app.float.app_spacing_8'),
-        top: 0,
-        bottom: 0
-      })
+    }
+  }
+
+  /**
+   * 构建分组展示行:世界分组头 + 组内会话(按 createdAt 升序) + 未分组会话平铺。
+   */
+  private buildRows(): SessionListRowModel[] {
+    const rows: SessionListRowModel[] = [];
+    const grouped: Map<string, ChatSessionListItem[]> = new Map<string, ChatSessionListItem[]>();
+    const flat: ChatSessionListItem[] = [];
+    for (let i = 0; i < this.sessions.length; i++) {
+      const item: ChatSessionListItem = this.sessions[i];
+      if (item.worldId.length > 0) {
+        let list: ChatSessionListItem[] | undefined = grouped.get(item.worldId);
+        if (list === undefined) {
+          list = [];
+          grouped.set(item.worldId, list);
+        }
+        list.push(item);
+      } else {
+        flat.push(item);
+      }
+    }
+    // 分组顺序:优先按已加载分组的 createdAt 升序,未知分组排最后
+    const knownOrder: string[] = [];
+    const unknownWorldIds: string[] = [];
+    const vmGroups: WorldGroup[] = this.viewModel !== null ? this.viewModel!.worldGroups : [];
+    const vmGroupsSorted: WorldGroup[] = vmGroups.slice();
+    vmGroupsSorted.sort((a: WorldGroup, b: WorldGroup): number => a.createdAt - b.createdAt);
+    for (let i = 0; i < vmGroupsSorted.length; i++) {
+      knownOrder.push(vmGroupsSorted[i].id);
+    }
+    grouped.forEach((_list: ChatSessionListItem[], worldId: string): void => {
+      if (knownOrder.indexOf(worldId) < 0) {
+        unknownWorldIds.push(worldId);
+      }
+    });
+    unknownWorldIds.sort();
+    const orderedWorldIds: string[] = knownOrder.concat(unknownWorldIds);
+
+    for (let w = 0; w < orderedWorldIds.length; w++) {
+      const worldId: string = orderedWorldIds[w];
+      const list: ChatSessionListItem[] | undefined = grouped.get(worldId);
+      if (list === undefined || list.length === 0) {
+        continue;
+      }
+      const header: SessionListRowModel = new SessionListRowModel();
+      header.isHeader = true;
+      header.worldId = worldId;
+      header.worldName = this.viewModel !== null
+        ? this.viewModel!.getWorldName(worldId)
+        : UNKNOWN_WORLD_NAME;
+      header.chatCount = list.length;
+      header.isCollapsed = this.isWorldCollapsed(worldId);
+      rows.push(header);
+      if (!header.isCollapsed) {
+        const sorted: ChatSessionListItem[] = list.slice();
+        sorted.sort((a: ChatSessionListItem, b: ChatSessionListItem): number =>
+          a.chat.createdAt - b.chat.createdAt
+        );
+        for (let i = 0; i < sorted.length; i++) {
+          const row: SessionListRowModel = new SessionListRowModel();
+          row.isHeader = false;
+          row.item = sorted[i];
+          rows.push(row);
+        }
+      }
+    }
+    for (let i = 0; i < flat.length; i++) {
+      const row: SessionListRowModel = new SessionListRowModel();
+      row.isHeader = false;
+      row.item = flat[i];
+      rows.push(row);
+    }
+    return rows;
+  }
+
+  /** 分组头行:分组名 + 章节数 + 折叠箭头 + 管理按钮(重命名/删除) */
+  @Builder
+  groupHeaderRow(row: SessionListRowModel) {
+    Row() {
+      Text(row.worldName)
+        .fontSize(14)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .layoutWeight(1)
+
+      Text(row.chatCount.toString() + ' 个章节')
+        .fontSize(11)
+        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+        .margin({ left: 8 })
+
+      Text(row.isCollapsed ? '▸' : '▾')
+        .fontSize(14)
+        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+        .margin({ left: 8 })
+
+      Button('管理')
+        .fontSize(11)
+        .backgroundColor(Color.Transparent)
+        .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+        .height(28)
+        .padding({ left: 8, right: 8 })
+        .onClick(() => {
+          if (this.viewModel !== null) {
+            this.openGroupManageDialog(row.worldId);
+          }
+        })
+    }
+    .width('100%')
+    .padding({ left: 12, right: 8, top: 10, bottom: 10 })
+    .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+    .borderRadius(10)
+    .alignItems(VerticalAlign.Center)
+    .onClick(() => {
+      this.toggleWorldCollapsed(row.worldId);
+    })
+  }
+
+  /** 分组是否已折叠 */
+  private isWorldCollapsed(worldId: string): boolean {
+    return this.collapsedWorldIds.indexOf(worldId) >= 0;
+  }
+
+  /** 折叠/展开分组 */
+  private toggleWorldCollapsed(worldId: string): void {
+    const next: string[] = this.collapsedWorldIds.slice();
+    const idx: number = next.indexOf(worldId);
+    if (idx >= 0) {
+      next.splice(idx, 1);
+    } else {
+      next.push(worldId);
+    }
+    this.collapsedWorldIds = next;
+  }
+
+  /** 会话在 this.sessions 中的下标(用于上移/下移禁用判断) */
+  private getSessionIndex(item: ChatSessionListItem): number {
+    for (let i = 0; i < this.sessions.length; i++) {
+      if (this.sessions[i].chat.id === item.chat.id) {
+        return i;
+      }
+    }
+    return 0;
+  }
+
+  /** 打开分组管理弹窗(重命名/删除) */
+  private openGroupManageDialog(worldId: string): void {
+    if (this.viewModel === null) {
+      return;
+    }
+    const groups: WorldGroup[] = this.viewModel!.worldGroups;
+    for (let i = 0; i < groups.length; i++) {
+      if (groups[i].id === worldId) {
+        this.renameGroupTarget = groups[i];
+        this.renameGroupInput = groups[i].name;
+        return;
+      }
     }
   }
 
@@ -452,12 +703,12 @@ export struct ChatSessionRootView {
   }
 
 
-  /** 左滑操作区:2行×3列紧凑网格(上移/重命名/导出 | 下移/删除) */
+  /** 左滑操作区:2行×3列紧凑网格(上移/重命名/分组 | 下移/导出/删除) */
   @Builder
   swipeActionButtons(item: ChatSessionListItem, index: number) {
     Row() {
       Column() {
-        // 第一行:上移 / 重命名 / 导出
+        // 第一行:上移 / 重命名 / 分组
         Row() {
           this.swipeGridCell({
             icon: $r('sys.symbol.arrow_up'),
@@ -476,18 +727,18 @@ export struct ChatSessionRootView {
             action: (): void => { this.openRenameDialog(item); }
           })
           this.swipeGridCell({
-            icon: $r('sys.symbol.share'),
-            label: $r('app.string.session_action_export'),
+            icon: $r('sys.symbol.folder'),
+            label: '分组',
             bgColor: ThemePalette.surface2Color(this.effectiveTheme),
             fgColor: ThemePalette.textPrimaryColor(this.effectiveTheme),
             disabled: false,
-            action: (): void => { this.exportTarget = item; }
+            action: (): void => { this.openMoveChatDialog(item); }
           })
         }
         .layoutWeight(1)
         .width('100%')
 
-        // 第二行:下移 / 删除
+        // 第二行:下移 / 导出 / 删除
         Row() {
           this.swipeGridCell({
             icon: $r('sys.symbol.arrow_down'),
@@ -496,6 +747,14 @@ export struct ChatSessionRootView {
             fgColor: ThemePalette.textPrimaryColor(this.effectiveTheme),
             disabled: index === this.sessions.length - 1,
             action: (): void => { this.handleMoveDown(item.chat.id); }
+          })
+          this.swipeGridCell({
+            icon: $r('sys.symbol.share'),
+            label: $r('app.string.session_action_export'),
+            bgColor: ThemePalette.surface2Color(this.effectiveTheme),
+            fgColor: ThemePalette.textPrimaryColor(this.effectiveTheme),
+            disabled: false,
+            action: (): void => { this.exportTarget = item; }
           })
           this.swipeGridCell({
             icon: $r('sys.symbol.trash'),
@@ -572,14 +831,27 @@ export struct ChatSessionRootView {
           })
 
           Column() {
-            Text(this.getSessionTitle(item))
-              .fontSize(15)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .width('100%')
-              .textAlign(TextAlign.Start)
+            Row() {
+              if (item.worldId.length > 0) {
+                Text(this.getChapterLabel(item))
+                  .fontSize(10)
+                  .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+                  .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+                  .borderRadius(4)
+                  .padding({ left: 4, right: 4, top: 1, bottom: 1 })
+                  .margin({ right: 6 })
+              }
+              Text(this.getSessionTitle(item))
+                .fontSize(15)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .layoutWeight(1)
+                .textAlign(TextAlign.Start)
+            }
+            .width('100%')
+            .alignItems(VerticalAlign.Center)
 
             if (item.lastMessagePreview.length > 0) {
               Text(item.lastMessagePreview)
@@ -654,7 +926,426 @@ export struct ChatSessionRootView {
     return '助';
   }
 
+  /** 组内章节标签(未分组返回空) */
+  private getChapterLabel(item: ChatSessionListItem): string {
+    if (this.viewModel === null) {
+      return '';
+    }
+    return this.viewModel!.getChapterLabel(item.chat.id);
+  }
+
   /** 底部"开始新对话"按钮已移除(规范未要求;新建对话入口统一由角色卡 Tab 提供) */
+
+  // ===== v42 世界分组管理 =====
+
+  /** 确认新建分组 */
+  private async confirmCreateGroup(): Promise<void> {
+    const name: string = this.newGroupName.trim();
+    if (name.length === 0) {
+      promptAction.showToast({ message: '分组名称不能为空', duration: 2000 });
+      return;
+    }
+    if (this.viewModel === null) {
+      return;
+    }
+    this.showCreateGroupDialog = false;
+    const ok: boolean = await this.viewModel!.createWorldGroup(name);
+    this.syncSessions();
+    if (ok) {
+      promptAction.showToast({ message: '已创建分组', duration: 1500 });
+      this.bumpListVersion();
+    }
+  }
+
+  /** 确认重命名分组 */
+  private async confirmRenameGroup(): Promise<void> {
+    const target: WorldGroup | null = this.renameGroupTarget;
+    if (target === null || this.viewModel === null) {
+      return;
+    }
+    const name: string = this.renameGroupInput.trim();
+    if (name.length === 0) {
+      promptAction.showToast({ message: '分组名称不能为空', duration: 2000 });
+      return;
+    }
+    this.renameGroupTarget = null;
+    const ok: boolean = await this.viewModel!.renameWorldGroup(target.id, name);
+    this.syncSessions();
+    if (ok) {
+      promptAction.showToast({ message: '已重命名分组', duration: 1500 });
+      this.bumpListVersion();
+    }
+  }
+
+  /** 确认删除分组(仅解除关联,不删会话) */
+  private async confirmDeleteGroup(): Promise<void> {
+    const target: WorldGroup | null = this.deleteGroupTarget;
+    if (target === null || this.viewModel === null) {
+      return;
+    }
+    this.deleteGroupTarget = null;
+    const ok: boolean = await this.viewModel!.deleteWorldGroup(target.id);
+    this.syncSessions();
+    if (ok) {
+      promptAction.showToast({ message: '已删除分组,会话未受影响', duration: 1500 });
+      this.bumpListVersion();
+    }
+  }
+
+  /** 打开移动会话到分组弹窗 */
+  private openMoveChatDialog(item: ChatSessionListItem): void {
+    if (this.viewModel === null) {
+      return;
+    }
+    this.moveTarget = item;
+    this.moveSelectedWorldId = item.worldId;
+  }
+
+  /** 确认移动会话到分组(空字符串=不分组) */
+  private async confirmMoveChat(): Promise<void> {
+    const target: ChatSessionListItem | null = this.moveTarget;
+    if (target === null || this.viewModel === null) {
+      return;
+    }
+    this.moveTarget = null;
+    const worldId: string = this.moveSelectedWorldId;
+    const ok: boolean = await this.viewModel!.moveChatToWorld(
+      target.chat.id, worldId.length > 0 ? worldId : null
+    );
+    this.syncSessions();
+    if (ok) {
+      promptAction.showToast({ message: '已移动会话', duration: 1500 });
+      this.bumpListVersion();
+    }
+  }
+
+  /** 新建分组弹窗 */
+  @Builder
+  createGroupDialog() {
+    Stack() {
+      Column() {
+        Column() {
+          Text('新建世界分组')
+            .fontSize(17)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .margin({ bottom: 12 })
+
+          TextInput({ placeholder: '分组名称', text: this.newGroupName })
+            .fontSize(15)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+            .borderRadius($r('app.float.app_radius_sm'))
+            .height(44)
+            .padding({ left: 12, right: 12 })
+            .onChange((value: string) => {
+              this.newGroupName = value;
+            })
+
+          Row() {
+            Button('取消')
+              .fontSize(15)
+              .backgroundColor(Color.Transparent)
+              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+              .layoutWeight(1)
+              .height(40)
+              .onClick(() => {
+                this.showCreateGroupDialog = false;
+              })
+            Button('创建')
+              .fontSize(15)
+              .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
+              .fontColor($r('app.color.app_on_accent'))
+              .borderRadius($r('app.float.app_radius_sm'))
+              .layoutWeight(1)
+              .height(40)
+              .margin({ left: 12 })
+              .onClick(() => {
+                this.confirmCreateGroup();
+              })
+          }
+          .width('100%')
+          .margin({ top: 20 })
+        }
+        .width('80%')
+        .padding(20)
+        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+        .borderRadius($r('app.float.app_radius_lg'))
+      }
+      .width('100%')
+      .height('100%')
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('rgba(0,0,0,0.5)')
+  }
+
+  /** 分组管理弹窗(重命名 + 删除) */
+  @Builder
+  renameGroupDialog() {
+    Stack() {
+      Column() {
+        Column() {
+          Text('分组管理')
+            .fontSize(17)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .margin({ bottom: 12 })
+
+          TextInput({ placeholder: '分组名称', text: this.renameGroupInput })
+            .fontSize(15)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+            .borderRadius($r('app.float.app_radius_sm'))
+            .height(44)
+            .padding({ left: 12, right: 12 })
+            .onChange((value: string) => {
+              this.renameGroupInput = value;
+            })
+
+          Row() {
+            Button('取消')
+              .fontSize(15)
+              .backgroundColor(Color.Transparent)
+              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+              .layoutWeight(1)
+              .height(40)
+              .onClick(() => {
+                this.renameGroupTarget = null;
+              })
+            Button('重命名')
+              .fontSize(15)
+              .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
+              .fontColor($r('app.color.app_on_accent'))
+              .borderRadius($r('app.float.app_radius_sm'))
+              .layoutWeight(1)
+              .height(40)
+              .margin({ left: 12 })
+              .onClick(() => {
+                this.confirmRenameGroup();
+              })
+          }
+          .width('100%')
+          .margin({ top: 12 })
+
+          Divider().color(ThemePalette.dividerColor(this.effectiveTheme)).margin({ top: 12, bottom: 4 })
+
+          Button('删除分组(仅解除关联,不删会话)')
+            .fontSize(14)
+            .backgroundColor(Color.Transparent)
+            .fontColor($r('app.color.app_danger'))
+            .width('100%')
+            .height(44)
+            .onClick(() => {
+              const target: WorldGroup | null = this.renameGroupTarget;
+              if (target !== null) {
+                this.renameGroupTarget = null;
+                this.deleteGroupTarget = target;
+              }
+            })
+        }
+        .width('80%')
+        .padding(20)
+        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+        .borderRadius($r('app.float.app_radius_lg'))
+      }
+      .width('100%')
+      .height('100%')
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('rgba(0,0,0,0.5)')
+  }
+
+  /** 删除分组确认弹窗 */
+  @Builder
+  deleteGroupDialog() {
+    Stack() {
+      Column() {
+        Column() {
+          Text('删除分组')
+            .fontSize(17)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .margin({ bottom: 12 })
+
+          Text('删除分组仅解除会话与该分组的关联,不会删除任何会话。确定删除"'
+            + (this.deleteGroupTarget !== null ? this.deleteGroupTarget!.name : '')
+            + '"吗?')
+            .fontSize(14)
+            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+            .lineHeight(20)
+            .margin({ bottom: 20 })
+
+          Row() {
+            Button('取消')
+              .fontSize(14)
+              .backgroundColor(Color.Transparent)
+              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+              .layoutWeight(1)
+              .height(40)
+              .onClick(() => {
+                this.deleteGroupTarget = null;
+              })
+
+            Button('删除')
+              .fontSize(14)
+              .backgroundColor($r('app.color.app_danger'))
+              .fontColor(Color.White)
+              .borderRadius($r('app.float.app_radius_sm'))
+              .layoutWeight(1)
+              .height(40)
+              .margin({ left: 12 })
+              .onClick(() => {
+                this.confirmDeleteGroup();
+              })
+          }
+          .width('100%')
+        }
+        .width('80%')
+        .padding(20)
+        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+        .borderRadius($r('app.float.app_radius_lg'))
+      }
+      .width('100%')
+      .height('100%')
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('rgba(0,0,0,0.5)')
+  }
+
+  /** 移动会话到分组弹窗(含"不分组") */
+  @Builder
+  moveChatDialog() {
+    Stack() {
+      Column() {
+        Column() {
+          Text('移动到分组')
+            .fontSize(17)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .margin({ bottom: 8 })
+
+          Text(this.moveTarget !== null ? this.getSessionTitle(this.moveTarget!) : '')
+            .fontSize(13)
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width('100%')
+            .margin({ bottom: 12 })
+
+          Scroll() {
+            Column() {
+              // "不分组"选项
+              Row() {
+                Radio({ value: 'none', group: 'moveWorld' })
+                  .checked(this.moveSelectedWorldId.length === 0)
+                  .onChange((checked: boolean) => {
+                    if (checked) {
+                      this.moveSelectedWorldId = '';
+                    }
+                  })
+                Text('不分组')
+                  .fontSize(14)
+                  .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+                  .margin({ left: 8 })
+              }
+              .width('100%')
+              .height(44)
+              .alignItems(VerticalAlign.Center)
+              .onClick(() => {
+                this.moveSelectedWorldId = '';
+              })
+
+              Divider().color(ThemePalette.dividerColor(this.effectiveTheme))
+
+              // 分组列表
+              if (this.viewModel !== null) {
+                ForEach(this.viewModel!.worldGroups, (g: WorldGroup) => {
+                  Row() {
+                    Radio({ value: g.id, group: 'moveWorld' })
+                      .checked(this.moveSelectedWorldId === g.id)
+                      .onChange((checked: boolean) => {
+                        if (checked) {
+                          this.moveSelectedWorldId = g.id;
+                        }
+                      })
+                    Text(g.name)
+                      .fontSize(14)
+                      .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+                      .margin({ left: 8 })
+                      .layoutWeight(1)
+                      .maxLines(1)
+                      .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  }
+                  .width('100%')
+                  .height(44)
+                  .alignItems(VerticalAlign.Center)
+                  .onClick(() => {
+                    this.moveSelectedWorldId = g.id;
+                  })
+                }, (g: WorldGroup) => g.id)
+              }
+
+              if (this.viewModel !== null && this.viewModel!.worldGroups.length === 0) {
+                Text('暂无分组,请先点击"新建分组"创建')
+                  .fontSize(13)
+                  .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+                  .margin({ top: 8 })
+              }
+            }
+            .width('100%')
+          }
+          .height(220)
+          .scrollBar(BarState.Auto)
+
+          Divider().color(ThemePalette.dividerColor(this.effectiveTheme)).margin({ top: 8, bottom: 8 })
+
+          Row() {
+            Button('取消')
+              .fontSize(15)
+              .backgroundColor(Color.Transparent)
+              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+              .layoutWeight(1)
+              .height(40)
+              .onClick(() => {
+                this.moveTarget = null;
+              })
+            Button('移动')
+              .fontSize(15)
+              .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
+              .fontColor($r('app.color.app_on_accent'))
+              .borderRadius($r('app.float.app_radius_sm'))
+              .layoutWeight(1)
+              .height(40)
+              .margin({ left: 12 })
+              .onClick(() => {
+                this.confirmMoveChat();
+              })
+          }
+          .width('100%')
+        }
+        .width('85%')
+        .padding(20)
+        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+        .borderRadius($r('app.float.app_radius_lg'))
+      }
+      .width('100%')
+      .height('100%')
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('rgba(0,0,0,0.5)')
+  }
 
   /** 重命名弹窗(原生 Stack 遮罩 + 输入框) */
   @Builder
