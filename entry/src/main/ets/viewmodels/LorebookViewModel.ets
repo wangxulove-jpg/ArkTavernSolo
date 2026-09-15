@@ -9,15 +9,28 @@ import {
   Lorebook,
   LorebookEntry,
   LorebookPosition,
-  LorebookEntryUpdates
+  LorebookActivationMode,
+  LorebookEntryUpdates,
+  isValidActivationMode
 } from '../models/Lorebook';
 import { LorebookService } from '../services/LorebookService';
 import { CharacterService } from '../services/CharacterService';
 import { CharacterBookRef } from '../repositories/CharacterRepository';
 import { parseLorebookJson, parseLorebookSource, serializeLorebook } from '../parser/LorebookJsonParser';
+import { AppPreferences } from '../storage/AppPreferences';
+import {
+  LOREBOOK_ACTIVATION_DEFAULT_PREFS_KEY,
+  LOREBOOK_INJECTION_DEPTH_PREFS_KEY
+} from '../services/ChatService';
 import { Logger } from '../utils/Logger';
 
 const LOG_TAG: string = 'LorebookViewModel';
+
+/** 全局默认激活方式可选值(全局默认没有 FollowGlobal) */
+const GLOBAL_MODE_FULL_INJECT: LorebookActivationMode = LorebookActivationMode.FullInject;
+const GLOBAL_MODE_ON_DEMAND: LorebookActivationMode = LorebookActivationMode.OnDemand;
+/** 注入预算上限(与模型校验一致) */
+const MAX_INJECTION_BUDGET_CHARS: number = 200000;
 
 @Observed
 export class LorebookViewModel {
@@ -39,6 +52,10 @@ export class LorebookViewModel {
   editingLorebook: Lorebook | null = null;
   editLorebookName: string = '';
   editLorebookDescription: string = '';
+  /** 编辑对话框:激活方式(0=跟随全局/1=全量/2=按需) */
+  editLorebookActivationMode: number = 0;
+  /** 编辑对话框:注入预算(字符,空=默认) */
+  editLorebookBudget: string = '';
 
   /** 条目编辑对话框 */
   showEntryDialog: boolean = false;
@@ -59,12 +76,23 @@ export class LorebookViewModel {
   deleteTargetEntry: LorebookEntry | null = null;
   deleteTargetEntryLorebookId: string = '';
 
+  /** 全局默认激活方式(FullInject / OnDemand),默认 OnDemand */
+  globalActivationMode: LorebookActivationMode = GLOBAL_MODE_ON_DEMAND;
+  /** 全局深度注入位置(0-8),默认 2 */
+  globalInjectionDepth: number = 2;
+
   private readonly service: LorebookService;
   private readonly characterService: CharacterService;
+  private readonly appPreferences: AppPreferences;
 
-  constructor(service: LorebookService, characterService: CharacterService) {
+  constructor(
+    service: LorebookService,
+    characterService: CharacterService,
+    appPreferences: AppPreferences
+  ) {
     this.service = service;
     this.characterService = characterService;
+    this.appPreferences = appPreferences;
   }
 
   async load(): Promise<void> {
@@ -73,6 +101,7 @@ export class LorebookViewModel {
     try {
       this.lorebooks = await this.service.list();
       this.currentLorebookId = await this.service.getCurrentLorebookId();
+      await this.loadGlobalSettings();
       await this.refreshBoundCharacters();
       this.notifyDataUpdate();
     } catch (e) {
@@ -81,6 +110,61 @@ export class LorebookViewModel {
     } finally {
       this.loading = false;
     }
+  }
+
+  /**
+   * 加载全局默认激活方式与深度注入偏好(AppPreferences)。
+   */
+  async loadGlobalSettings(): Promise<void> {
+    try {
+      const modeVal: string = await this.appPreferences.getString(
+        LOREBOOK_ACTIVATION_DEFAULT_PREFS_KEY, '');
+      if (modeVal === GLOBAL_MODE_FULL_INJECT || modeVal === GLOBAL_MODE_ON_DEMAND) {
+        this.globalActivationMode = modeVal as LorebookActivationMode;
+      } else {
+        this.globalActivationMode = GLOBAL_MODE_ON_DEMAND;
+      }
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'loadGlobalSettings mode failed: ' + String(e));
+      this.globalActivationMode = GLOBAL_MODE_ON_DEMAND;
+    }
+    try {
+      const depthStr: string = await this.appPreferences.getString(
+        LOREBOOK_INJECTION_DEPTH_PREFS_KEY, '');
+      const parsed: number = Number(depthStr);
+      this.globalInjectionDepth = Number.isFinite(parsed) && parsed >= 0 && parsed <= 8
+        ? Math.floor(parsed) : 2;
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'loadGlobalSettings depth failed: ' + String(e));
+      this.globalInjectionDepth = 2;
+    }
+  }
+
+  /**
+   * 设置全局默认激活方式并持久化。
+   */
+  async setGlobalActivationMode(mode: LorebookActivationMode): Promise<void> {
+    this.globalActivationMode = mode;
+    try {
+      await this.appPreferences.putString(LOREBOOK_ACTIVATION_DEFAULT_PREFS_KEY, mode);
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'setGlobalActivationMode failed: ' + String(e));
+    }
+    this.notifyDataUpdate();
+  }
+
+  /**
+   * 设置全局深度注入位置并持久化(0-8)。
+   */
+  async setGlobalInjectionDepth(depth: number): Promise<void> {
+    const clamped: number = Math.max(0, Math.min(8, Math.floor(depth)));
+    this.globalInjectionDepth = clamped;
+    try {
+      await this.appPreferences.putString(LOREBOOK_INJECTION_DEPTH_PREFS_KEY, String(clamped));
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'setGlobalInjectionDepth failed: ' + String(e));
+    }
+    this.notifyDataUpdate();
   }
 
   /** 重建"世界书 → 绑定角色"映射(轻量查询所有世界书的反向绑定) */
@@ -207,6 +291,8 @@ export class LorebookViewModel {
     this.editingLorebook = null;
     this.editLorebookName = '';
     this.editLorebookDescription = '';
+    this.editLorebookActivationMode = 0;
+    this.editLorebookBudget = '';
     this.showLorebookDialog = true;
   }
 
@@ -214,6 +300,9 @@ export class LorebookViewModel {
     this.editingLorebook = lorebook;
     this.editLorebookName = lorebook.name;
     this.editLorebookDescription = lorebook.description;
+    this.editLorebookActivationMode = this.activationModeToNumber(lorebook.activationMode);
+    this.editLorebookBudget = lorebook.injectionBudgetChars > 0
+      ? String(lorebook.injectionBudgetChars) : '';
     this.showLorebookDialog = true;
   }
 
@@ -228,13 +317,20 @@ export class LorebookViewModel {
       this.errorMessage = '世界书名称不能为空';
       return false;
     }
+    const activationMode: LorebookActivationMode = this.numberToActivationMode(this.editLorebookActivationMode);
+    const budget: number = this.parseBudget(this.editLorebookBudget);
     try {
       if (this.editingLorebook === null) {
-        await this.service.create(this.editLorebookName, this.editLorebookDescription);
+        await this.service.create(
+          this.editLorebookName, this.editLorebookDescription,
+          activationMode, budget
+        );
       } else {
         await this.service.update(this.editingLorebook.id, {
           name: this.editLorebookName,
-          description: this.editLorebookDescription
+          description: this.editLorebookDescription,
+          activationMode: activationMode,
+          injectionBudgetChars: budget
         });
       }
       this.showLorebookDialog = false;
@@ -246,6 +342,60 @@ export class LorebookViewModel {
       Logger.error(LOG_TAG, 'saveLorebook failed: ' + String(e));
       return false;
     }
+  }
+
+  /**
+   * 激活方式枚举 → UI 档位(0=跟随全局/1=全量/2=按需)。
+   */
+  activationModeToNumber(mode: LorebookActivationMode): number {
+    if (mode === LorebookActivationMode.FullInject) {
+      return 1;
+    }
+    if (mode === LorebookActivationMode.OnDemand) {
+      return 2;
+    }
+    return 0;
+  }
+
+  /**
+   * UI 档位 → 激活方式枚举。
+   */
+  numberToActivationMode(value: number): LorebookActivationMode {
+    if (value === 1) {
+      return LorebookActivationMode.FullInject;
+    }
+    if (value === 2) {
+      return LorebookActivationMode.OnDemand;
+    }
+    return LorebookActivationMode.FollowGlobal;
+  }
+
+  /**
+   * 解析注入预算输入(空/非法为 0,上限 200000)。
+   */
+  parseBudget(input: string): number {
+    const trimmed: string = input.trim();
+    if (trimmed.length === 0) {
+      return 0;
+    }
+    const parsed: number = parseInt(trimmed);
+    if (isNaN(parsed) || parsed < 0) {
+      return 0;
+    }
+    return Math.min(parsed, MAX_INJECTION_BUDGET_CHARS);
+  }
+
+  /**
+   * 获取激活方式显示文本(书列表徽标)。
+   */
+  getActivationModeText(mode: LorebookActivationMode): string {
+    if (mode === LorebookActivationMode.FullInject) {
+      return '全量';
+    }
+    if (mode === LorebookActivationMode.OnDemand) {
+      return '按需';
+    }
+    return '跟随全局';
   }
 
   async setCurrentLorebook(id: string | null): Promise<void> {

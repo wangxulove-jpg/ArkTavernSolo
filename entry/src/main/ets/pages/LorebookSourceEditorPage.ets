@@ -49,7 +49,8 @@ struct LorebookSourceEditorPage {
 
   private vm: LorebookViewModel = new LorebookViewModel(
     AppServices.getLorebookService(),
-    AppServices.getCharacterService()
+    AppServices.getCharacterService(),
+    AppServices.getAppPreferences()
   );
   private lorebookId: string = '';
   private textAreaController: TextAreaController = new TextAreaController();

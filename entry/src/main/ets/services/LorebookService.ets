@@ -17,6 +17,7 @@ import {
   Lorebook,
   LorebookEntry,
   LorebookPosition,
+  LorebookActivationMode,
   LorebookUpdates,
   LorebookEntryUpdates,
   createLorebook,
@@ -94,9 +95,14 @@ export class LorebookService {
     return await this.repository.getById(id);
   }
 
-  async create(name: string, description: string = ''): Promise<Lorebook> {
+  async create(
+    name: string,
+    description: string = '',
+    activationMode: LorebookActivationMode = LorebookActivationMode.FollowGlobal,
+    injectionBudgetChars: number = 0
+  ): Promise<Lorebook> {
     this.requireInit();
-    const lorebook: Lorebook = createLorebook(name, description);
+    const lorebook: Lorebook = createLorebook(name, description, true, activationMode, injectionBudgetChars);
     const error: string | null = validateLorebook(lorebook);
     if (error !== null) {
       throw new Error(error);
