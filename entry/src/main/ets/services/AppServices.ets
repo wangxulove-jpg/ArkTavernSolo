@@ -83,6 +83,8 @@ import { PersonaService } from './PersonaService';
 import { SyncConfigStore } from '../storage/SyncConfigStore';
 import { WebDavSyncService } from './sync/WebDavSyncService';
 import { DeepSeekBalanceService } from './DeepSeekBalanceService';
+import { WorldGroupService } from './WorldGroupService';
+import { WorldGroupRepository } from '../repositories/WorldGroupRepository';
 
 import { Logger } from '../utils/Logger';
 
@@ -196,6 +198,8 @@ export class AppServices {
   private webDavSyncService: WebDavSyncService | null = null;
   /** DeepSeekBalanceService DeepSeek余额查询服务 */
   private deepSeekBalanceService: DeepSeekBalanceService | null = null;
+  /** WorldGroupService 世界分组(章节记忆共享)服务(懒加载单例,v42) */
+  private worldGroupService: WorldGroupService | null = null;
   /** AssetStoreKeyStore 安全存储(共享实例) */
   private readonly assetKeyStore: AssetStoreKeyStore;
   /** ProviderKeyStore(不对页面公开) */
@@ -748,5 +752,20 @@ export class AppServices {
       throw new Error('DeepSeekBalanceService not initialized');
     }
     return service;
+  }
+
+  /**
+   * 获取 WorldGroupService 实例(v42 世界分组章节记忆共享)。
+   * 懒加载单例,首次调用时组装 WorldGroupRepository + ChatRepository。
+   */
+  static getWorldGroupService(): WorldGroupService {
+    const services: AppServices = AppServices.getInstance();
+    if (services.worldGroupService === null) {
+      services.worldGroupService = new WorldGroupService(
+        new WorldGroupRepository(services.dbHelper),
+        services.chatRepository
+      );
+    }
+    return services.worldGroupService;
   }
 }

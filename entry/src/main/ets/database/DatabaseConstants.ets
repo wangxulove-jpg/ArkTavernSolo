@@ -6,7 +6,7 @@
  */
 
 export const DATABASE_NAME: string = 'arktavern_solo.db';
-export const DATABASE_VERSION: number = 41;
+export const DATABASE_VERSION: number = 42;
 
 export const TABLE_CHARACTERS: string = 'characters';
 export const TABLE_CHATS: string = 'chats';
@@ -14,6 +14,8 @@ export const TABLE_MESSAGES: string = 'messages';
 
 export const INDEX_CHATS_UPDATED_AT: string = 'idx_chats_updated_at';
 export const INDEX_CHATS_CHARACTER_ID: string = 'idx_chats_character_id';
+/** v42: chats.world_id 索引(世界分组章节记忆共享) */
+export const INDEX_CHATS_WORLD_ID: string = 'idx_chats_world_id';
 export const INDEX_MESSAGES_CHAT_SEQUENCE: string = 'idx_messages_chat_id_sequence';
 export const INDEX_MESSAGES_CHAT_CREATED: string = 'idx_messages_chat_id_created_at';
 
@@ -200,12 +202,16 @@ export const COLUMN_MEMORY_KEYWORDS_JSON: string = 'keywords_json';
 export const COLUMN_MEMORY_SOURCE_HASH: string = 'source_hash';
 /** 是否已失效(编辑/删除/Swipe 切换后标记,不再注入 Prompt) */
 export const COLUMN_MEMORY_INVALIDATED: string = 'invalidated';
+/** v42: chat_memories.world_id 列(章节记忆共享) */
+export const COLUMN_CHAT_MEMORIES_WORLD_ID: string = 'world_id';
 
 export const INDEX_CHAT_MEMORIES_CHAT_ID: string = 'idx_chat_memories_chat_id';
 export const INDEX_CHAT_MEMORIES_BRANCH_ID: string = 'idx_chat_memories_branch_id';
 export const INDEX_CHAT_MEMORIES_BRANCH_END_POSITION: string = 'idx_chat_memories_branch_end_position';
 /** v12: 按 Branch + Type + Invalidated 查询有效记忆 */
 export const INDEX_CHAT_MEMORIES_BRANCH_TYPE: string = 'idx_chat_memories_branch_type';
+/** v42: chat_memories.world_id 索引(章节记忆共享) */
+export const INDEX_CHAT_MEMORIES_WORLD_ID: string = 'idx_chat_memories_world_id';
 
 // ===== messages 表扩展字段(原 v10/v11 引入,已内建到 CREATE 语句) =====
 export const COLUMN_SENDER_TYPE: string = 'sender_type';
@@ -834,6 +840,8 @@ export const ALTER_CHARACTERS_ADD_DEFAULT_PERSONA_ID: string =
 export const COLUMN_CHAT_USER_PERSONA_SUMMARY: string = 'user_persona_summary';
 /** chats 表新增列: user_persona_summary_updated_at(用户性格总结更新时间) */
 export const COLUMN_CHAT_USER_PERSONA_SUMMARY_UPDATED_AT: string = 'user_persona_summary_updated_at';
+/** v42: chats.world_id 列(所属世界分组 ID,空=不分组) */
+export const COLUMN_CHATS_WORLD_ID: string = 'world_id';
 
 /** v36 迁移: ALTER chats 添加 user_persona_summary 列 */
 export const ALTER_CHATS_ADD_USER_PERSONA_SUMMARY: string =

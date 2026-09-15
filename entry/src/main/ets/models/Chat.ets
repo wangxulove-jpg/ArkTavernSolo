@@ -57,6 +57,11 @@ export interface Chat {
    * 用于判断总结是否覆盖当前分支内容。
    */
   readonly userPersonaSummaryUpdatedAt: number;
+  /**
+   * 所属世界分组 ID(v42 引入)。
+   * 空=不分组。
+   */
+  readonly worldId: string;
 }
 
 export interface CreateChatOptions {
@@ -71,6 +76,7 @@ export interface CreateChatOptions {
   readonly personaId?: string;
   readonly userPersonaSummary?: string;
   readonly userPersonaSummaryUpdatedAt?: number;
+  readonly worldId?: string;
 }
 
 export interface ChatUpdates {
@@ -86,6 +92,7 @@ export interface ChatUpdates {
   readonly personaId?: string | null;
   readonly userPersonaSummary?: string | null;
   readonly userPersonaSummaryUpdatedAt?: number;
+  readonly worldId?: string | null;
 }
 
 export function createChat(options?: CreateChatOptions): Chat {
@@ -133,6 +140,10 @@ export function createChat(options?: CreateChatOptions): Chat {
     options !== undefined && options.userPersonaSummaryUpdatedAt !== undefined
       ? options.userPersonaSummaryUpdatedAt
       : 0;
+  const worldId: string =
+    options !== undefined && options.worldId !== undefined
+      ? options.worldId
+      : '';
   return {
     id: id,
     characterId: characterId,
@@ -147,7 +158,8 @@ export function createChat(options?: CreateChatOptions): Chat {
     statusConfigJson: statusConfigJson,
     personaId: personaId,
     userPersonaSummary: userPersonaSummary,
-    userPersonaSummaryUpdatedAt: userPersonaSummaryUpdatedAt
+    userPersonaSummaryUpdatedAt: userPersonaSummaryUpdatedAt,
+    worldId: worldId
   };
 }
 
@@ -188,6 +200,11 @@ export function updateChat(chat: Chat, updates: ChatUpdates): Chat {
     updates.userPersonaSummaryUpdatedAt !== undefined
       ? updates.userPersonaSummaryUpdatedAt
       : chat.userPersonaSummaryUpdatedAt;
+  // worldId 支持 null(清空分组)与 undefined(不变)两种语义
+  const worldId: string =
+    updates.worldId !== undefined
+      ? (updates.worldId === null ? '' : updates.worldId)
+      : chat.worldId;
   return {
     id: chat.id,
     characterId: characterId,
@@ -202,6 +219,7 @@ export function updateChat(chat: Chat, updates: ChatUpdates): Chat {
     statusConfigJson: statusConfigJson,
     personaId: personaId,
     userPersonaSummary: userPersonaSummary,
-    userPersonaSummaryUpdatedAt: userPersonaSummaryUpdatedAt
+    userPersonaSummaryUpdatedAt: userPersonaSummaryUpdatedAt,
+    worldId: worldId
   };
 }

@@ -34,6 +34,7 @@ import {
   COLUMN_CHAT_PERSONA_ID,
   COLUMN_CHAT_USER_PERSONA_SUMMARY,
   COLUMN_CHAT_USER_PERSONA_SUMMARY_UPDATED_AT,
+  COLUMN_CHATS_WORLD_ID,
   CONVERSATION_MODE_SINGLE,
   CONVERSATION_MODE_GROUP
 } from '../database/DatabaseConstants';
@@ -80,6 +81,7 @@ function chatToBucket(chat: Chat): relationalStore.ValuesBucket {
   bucket[COLUMN_CHAT_PERSONA_ID] = chat.personaId;
   bucket[COLUMN_CHAT_USER_PERSONA_SUMMARY] = chat.userPersonaSummary;
   bucket[COLUMN_CHAT_USER_PERSONA_SUMMARY_UPDATED_AT] = chat.userPersonaSummaryUpdatedAt;
+  bucket[COLUMN_CHATS_WORLD_ID] = chat.worldId;
   return bucket;
 }
 
@@ -126,6 +128,11 @@ function chatFromRow(rs: relationalStore.ResultSet): Chat {
   const userPersonaSummaryUpdatedAt: number = userPersonaSummaryUpdatedAtCol >= 0
     ? rs.getLong(userPersonaSummaryUpdatedAtCol)
     : 0;
+  // world_id:列不存在或值为空时安全回退为空字符串(不分组)
+  const worldIdCol: number = rs.getColumnIndex(COLUMN_CHATS_WORLD_ID);
+  const worldId: string = worldIdCol >= 0
+    ? safeString(rs, worldIdCol)
+    : '';
   return {
     id: id,
     characterId: characterId,
@@ -140,7 +147,8 @@ function chatFromRow(rs: relationalStore.ResultSet): Chat {
     statusConfigJson: statusConfigJson,
     personaId: personaId,
     userPersonaSummary: userPersonaSummary,
-    userPersonaSummaryUpdatedAt: userPersonaSummaryUpdatedAt
+    userPersonaSummaryUpdatedAt: userPersonaSummaryUpdatedAt,
+    worldId: worldId
   };
 }
 
@@ -280,6 +288,7 @@ export class ChatRepository {
     bucket[COLUMN_CHAT_PERSONA_ID] = chat.personaId;
     bucket[COLUMN_CHAT_USER_PERSONA_SUMMARY] = chat.userPersonaSummary;
     bucket[COLUMN_CHAT_USER_PERSONA_SUMMARY_UPDATED_AT] = chat.userPersonaSummaryUpdatedAt;
+    bucket[COLUMN_CHATS_WORLD_ID] = chat.worldId;
 
     const predicates: relationalStore.RdbPredicates =
       new relationalStore.RdbPredicates(TABLE_CHATS);
@@ -664,6 +673,56 @@ export class ChatRepository {
       return chats;
     } finally {
       rs.close();
+    }
+  }
+
+  /**
+   * 按世界分组 ID 查询会话列表(v42 世界分组章节记忆共享)。
+   * 包含 archived,由上层决定是否过滤。
+   * 排序:last_message_at DESC → updated_at DESC → id ASC。
+   */
+  async listByWorldId(worldId: string): Promise<Chat[]> {
+    const store: relationalStore.RdbStore = this.dbHelper.getStore();
+    const predicates: relationalStore.RdbPredicates =
+      new relationalStore.RdbPredicates(TABLE_CHATS);
+    predicates.equalTo(COLUMN_CHATS_WORLD_ID, worldId);
+    predicates.orderByDesc(COLUMN_LAST_MESSAGE_AT);
+    predicates.orderByDesc(COLUMN_UPDATED_AT);
+    predicates.orderByAsc(COLUMN_ID);
+    const rs: relationalStore.ResultSet = await store.query(predicates);
+    try {
+      const chats: Chat[] = [];
+      while (rs.goToNextRow()) {
+        chats.push(chatFromRow(rs));
+      }
+      return chats;
+    } finally {
+      rs.close();
+    }
+  }
+
+  /**
+   * 更新指定 Chat 的 worldId(v42 世界分组章节记忆共享)。
+   * 用于将会话移入/移出世界分组(移出时传空字符串)。
+   */
+  async updateWorldId(chatId: string, worldId: string): Promise<void> {
+    const store: relationalStore.RdbStore = this.dbHelper.getStore();
+    const bucket: relationalStore.ValuesBucket = {};
+    bucket[COLUMN_CHATS_WORLD_ID] = worldId;
+    bucket[COLUMN_UPDATED_AT] = nowMillis();
+
+    const predicates: relationalStore.RdbPredicates =
+      new relationalStore.RdbPredicates(TABLE_CHATS);
+    predicates.equalTo(COLUMN_ID, chatId);
+
+    let affected: number;
+    try {
+      affected = await store.update(bucket, predicates);
+    } catch (err) {
+      throw DatabaseError.queryFailed(`chat.updateWorldId: ${extractCauseMessage(err)}`);
+    }
+    if (affected === 0) {
+      throw DatabaseError.notFound('chat.updateWorldId');
     }
   }
 

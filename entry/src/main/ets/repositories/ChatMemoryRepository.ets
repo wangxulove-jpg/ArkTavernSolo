@@ -549,7 +549,8 @@ export class ChatMemoryRepository {
         importance: ancestor.importance,
         keywordsJson: ancestor.keywordsJson,
         sourceHash: ancestor.sourceHash,
-        invalidated: false
+        invalidated: false,
+        worldId: ancestor.worldId
       };
       await this.insertWithStore(store, inherited);
     }

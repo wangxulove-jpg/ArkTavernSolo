@@ -30,7 +30,8 @@ import {
   COLUMN_MEMORY_IMPORTANCE,
   COLUMN_MEMORY_KEYWORDS_JSON,
   COLUMN_MEMORY_SOURCE_HASH,
-  COLUMN_MEMORY_INVALIDATED
+  COLUMN_MEMORY_INVALIDATED,
+  COLUMN_CHAT_MEMORIES_WORLD_ID
 } from '../database/DatabaseConstants';
 import {
   booleanToInt,
@@ -130,6 +131,12 @@ export function memoryFromRow(rs: relationalStore.ResultSet): ChatMemory {
   const invalidatedInt: number = invalidatedCol >= 0 ? rs.getLong(invalidatedCol) : 0;
   const invalidated: boolean = intToBoolean(invalidatedInt);
 
+  // world_id:列不存在或值为空时安全回退为空字符串(不分组,v42)
+  const worldIdCol: number = rs.getColumnIndex(COLUMN_CHAT_MEMORIES_WORLD_ID);
+  const worldId: string = worldIdCol >= 0
+    ? (rs.isColumnNull(worldIdCol) ? '' : rs.getString(worldIdCol))
+    : '';
+
   return {
     id,
     chatId,
@@ -150,7 +157,8 @@ export function memoryFromRow(rs: relationalStore.ResultSet): ChatMemory {
     importance,
     keywordsJson,
     sourceHash,
-    invalidated
+    invalidated,
+    worldId
   };
 }
 
@@ -184,5 +192,6 @@ export function memoryToBucket(memory: ChatMemory): relationalStore.ValuesBucket
   bucket[COLUMN_MEMORY_KEYWORDS_JSON] = memory.keywordsJson;
   bucket[COLUMN_MEMORY_SOURCE_HASH] = memory.sourceHash;
   bucket[COLUMN_MEMORY_INVALIDATED] = booleanToInt(memory.invalidated);
+  bucket[COLUMN_CHAT_MEMORIES_WORLD_ID] = memory.worldId;
   return bucket;
 }

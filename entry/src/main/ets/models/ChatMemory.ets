@@ -77,6 +77,8 @@ export interface ChatMemory {
   sourceHash: string;
   /** v12: 是否已失效(编辑/删除/Swipe 切换后标记,不再注入 Prompt),默认 false */
   invalidated: boolean;
+  /** 所属世界分组 ID(章节记忆共享,v42 引入)。空=不分组,默认 '' */
+  readonly worldId: string;
 }
 
 /**
@@ -143,7 +145,8 @@ export function createChatMemory(
   endPosition: number,
   summary: string,
   now: number,
-  inheritedFromMemoryId?: string
+  inheritedFromMemoryId?: string,
+  worldId: string = ''
 ): ChatMemory {
   return {
     id,
@@ -165,7 +168,8 @@ export function createChatMemory(
     importance: 0,
     keywordsJson: '[]',
     sourceHash: '',
-    invalidated: false
+    invalidated: false,
+    worldId: worldId
   };
 }
 
@@ -193,7 +197,8 @@ export function withUpdatedSummary(memory: ChatMemory, newSummary: string, now: 
     importance: memory.importance,
     keywordsJson: memory.keywordsJson,
     sourceHash: memory.sourceHash,
-    invalidated: memory.invalidated
+    invalidated: memory.invalidated,
+    worldId: memory.worldId
   };
 }
 
@@ -227,7 +232,8 @@ export function withExtendedRange(
     importance: memory.importance,
     keywordsJson: memory.keywordsJson,
     sourceHash: memory.sourceHash,
-    invalidated: memory.invalidated
+    invalidated: memory.invalidated,
+    worldId: memory.worldId
   };
 }
 
@@ -255,7 +261,8 @@ export function withEnabled(memory: ChatMemory, enabled: boolean, now: number): 
     importance: memory.importance,
     keywordsJson: memory.keywordsJson,
     sourceHash: memory.sourceHash,
-    invalidated: memory.invalidated
+    invalidated: memory.invalidated,
+    worldId: memory.worldId
   };
 }
 
@@ -283,7 +290,8 @@ export function withMemoryType(memory: ChatMemory, memoryType: MemoryType, now: 
     importance: memory.importance,
     keywordsJson: memory.keywordsJson,
     sourceHash: memory.sourceHash,
-    invalidated: memory.invalidated
+    invalidated: memory.invalidated,
+    worldId: memory.worldId
   };
 }
 
@@ -311,7 +319,8 @@ export function withDetail(memory: ChatMemory, detail: string, now: number): Cha
     importance: memory.importance,
     keywordsJson: memory.keywordsJson,
     sourceHash: memory.sourceHash,
-    invalidated: memory.invalidated
+    invalidated: memory.invalidated,
+    worldId: memory.worldId
   };
 }
 
@@ -339,7 +348,8 @@ export function withTitle(memory: ChatMemory, title: string, now: number): ChatM
     importance: memory.importance,
     keywordsJson: memory.keywordsJson,
     sourceHash: memory.sourceHash,
-    invalidated: memory.invalidated
+    invalidated: memory.invalidated,
+    worldId: memory.worldId
   };
 }
 
@@ -367,7 +377,8 @@ export function withInvalidated(memory: ChatMemory, invalidated: boolean, now: n
     importance: memory.importance,
     keywordsJson: memory.keywordsJson,
     sourceHash: memory.sourceHash,
-    invalidated
+    invalidated,
+    worldId: memory.worldId
   };
 }
 
@@ -399,7 +410,8 @@ export function withMemoryMetadata(
     importance: updates.importance !== undefined ? updates.importance : memory.importance,
     keywordsJson: updates.keywordsJson !== undefined ? updates.keywordsJson : memory.keywordsJson,
     sourceHash: updates.sourceHash !== undefined ? updates.sourceHash : memory.sourceHash,
-    invalidated: memory.invalidated
+    invalidated: memory.invalidated,
+    worldId: memory.worldId
   };
 }
 
