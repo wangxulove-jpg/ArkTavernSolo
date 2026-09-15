@@ -25,7 +25,7 @@
  *   })
  */
 
-import { ChatTextSegment, parseChatChunks, ChatRenderChunk, ChatTextParserOptions } from '../parser/ChatTextParser';
+import { ChatTextSegment, parseChatChunks, ChatRenderChunk, ChatTextParserOptions, TableChatRenderChunk, TableChunkRow } from '../parser/ChatTextParser';
 import { getCharacterColor } from '../utils/ChatPalette';
 import { ChatTextStyle } from '../utils/ChatTextStyleSettings';
 import { ChatMarkdownColorTheme } from '../utils/ChatTextColorTheme';
@@ -436,6 +436,51 @@ export struct ChatRichText {
     return base + levelStep;
   }
 
+  /**
+   * 渲染表格分块:按行列网格对齐,修复表格列错乱。
+   * - 每格宽度相等(layoutWeight=1),内容为行内片段(加粗/代码等保留)
+   * - 表头行浅灰底 + 加粗;行间细分隔线
+   * - 颜色全部使用 app.surface_* 资源,自动适配深色模式
+   */
+  @Builder
+  tableChunk(chunk: TableChatRenderChunk) {
+    Column({ space: 2 }) {
+      ForEach(chunk.rows, (row: TableChunkRow, rowIndex: number) => {
+        Row() {
+          ForEach(row.cells, (cellSegs: ChatTextSegment[], _colIndex: number) => {
+            Text() {
+              ForEach(cellSegs, (seg: ChatTextSegment, spanIndex: number) => {
+                Span(seg.text)
+                  .fontColor(this.getSegmentColor(seg))
+                  .fontSize(this.settings !== null ? this.settings.fontSize : 16)
+                  .fontWeight(row.isHeader || seg.bold ? FontWeight.Bold : FontWeight.Normal)
+                  .fontStyle(seg.italic ? FontStyle.Italic : FontStyle.Normal)
+                  .decoration({
+                    type: seg.strike ? TextDecorationType.LineThrough : TextDecorationType.None,
+                    color: this.getSegmentColor(seg)
+                  })
+              }, (seg: ChatTextSegment, spanIndex: number) => spanIndex.toString() + '_' + seg.text.length.toString())
+            }
+            .layoutWeight(1)
+            .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+            .backgroundColor(row.isHeader ? $r('app.color.app_surface_2') : Color.Transparent)
+          }, (_cellSegs: ChatTextSegment[], colIndex: number) => colIndex.toString())
+        }
+        .width('100%')
+        .border({
+          width: {
+            bottom: rowIndex < chunk.rows.length - 1 ? 0.5 : 0
+          },
+          color: {
+            bottom: $r('app.color.app_surface_3')
+          }
+        })
+      }, (row: TableChunkRow, rowIndex: number) => rowIndex.toString())
+    }
+    .alignItems(HorizontalAlign.Start)
+    .padding({ top: 2, bottom: 4 })
+  }
+
   build() {
     if (this.chunks.length === 0) {
       // 空内容占位
@@ -499,11 +544,14 @@ export struct ChatRichText {
                 onInteractiveAction: this.onInteractiveAction
               })
             }
-          } else {
+          } else if (chunk.type === 'branches') {
             ChatBranchBlock({
               options: chunk.options,
               onSelect: this.onInteractiveAction
             })
+          } else {
+            // 表格分块:按列对齐渲染
+            this.tableChunk(chunk)
           }
         }, (chunk: ChatRenderChunk, index: number) => {
           if (chunk.type === 'text') {

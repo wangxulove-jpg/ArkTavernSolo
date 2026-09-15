@@ -304,11 +304,6 @@ function parseLine(
     return [createSegment('――――――――', 'hr', 'secondary', { lineStart: isFirstLine })];
   }
 
-  // 检测表格行(以 | 开头,含至少 2 个 |)
-  if (isTableRow(line)) {
-    return parseTableRow(line, isFirstLine, options, codePlaceholders);
-  }
-
   // 检测引用 >
   const quoteMatch: RegExpMatchArray | null = line.match(/^>\s?(.*)$/);
   if (quoteMatch !== null) {
@@ -421,66 +416,6 @@ function isTableRow(line: string): boolean {
     }
   }
   return count >= 2;
-}
-
-/**
- * 解析一行 Markdown 表格:把 | 作为分割,单元格内容正常渲染,| 用次要色弱化。
- * 表头分隔行(| --- | --- |)渲染为细分隔线。
- */
-function parseTableRow(
-  line: string,
-  isFirstLine: boolean,
-  options: ChatTextParserOptions,
-  codePlaceholders: CodePlaceholder[]
-): ChatTextSegment[] {
-  const cells: string[] = line.split('|');
-  // 去掉首尾空白单元,只保留有效单元之间
-  const trimmedCells: string[] = [];
-  for (let i = 0; i < cells.length; i++) {
-    const t: string = cells[i].trim();
-    if (t.length > 0) {
-      trimmedCells.push(t);
-    }
-  }
-
-  // 表头分隔行:每个单元都是 :?-+:? 形式的横线
-  let isSeparator: boolean = trimmedCells.length > 0;
-  for (let i = 0; i < trimmedCells.length; i++) {
-    if (!/^:?-+:?$/.test(trimmedCells[i])) {
-      isSeparator = false;
-      break;
-    }
-  }
-  if (isSeparator) {
-    return [createSegment('――――――――', 'hr', 'secondary', { lineStart: isFirstLine })];
-  }
-
-  const result: ChatTextSegment[] = [];
-  const pipe: ChatTextSegment = createSegment('│ ', 'normal', 'secondary');
-  for (let i = 0; i < trimmedCells.length; i++) {
-    if (i > 0) {
-      result.push(pipe);
-    }
-    const inner: ChatTextSegment[] = parseInlineMarkdown(trimmedCells[i], options, codePlaceholders, true);
-    for (let j = 0; j < inner.length; j++) {
-      const s: ChatTextSegment = inner[j];
-      result.push({
-        text: s.text,
-        styleType: s.styleType,
-        colorRole: s.colorRole,
-        bold: s.bold,
-        italic: s.italic,
-        strike: s.strike,
-        code: s.code,
-        dialogue: s.dialogue,
-        narrator: s.narrator,
-        linkTarget: s.linkTarget,
-        lineStart: i === 0 && j === 0,
-        listLevel: 0
-      });
-    }
-  }
-  return result;
 }
 
 /**
@@ -940,8 +875,27 @@ export interface BranchesChatRenderChunk {
   readonly options: string[];
 }
 
+/** 表格分块中的一行 */
+export interface TableChunkRow {
+  /** 是否为表头行(紧跟分隔行) */
+  readonly isHeader: boolean;
+  /** 每格已解析的行内片段(列数已补齐到全表最大列数) */
+  readonly cells: ChatTextSegment[][];
+}
+
+/** 表格分块 */
+export interface TableChatRenderChunk {
+  readonly type: 'table';
+  readonly id: string;
+  readonly rows: TableChunkRow[];
+}
+
 /** 渲染分块联合 */
-export type ChatRenderChunk = TextChatRenderChunk | CollapsibleChatRenderChunk | BranchesChatRenderChunk;
+export type ChatRenderChunk =
+  | TextChatRenderChunk
+  | CollapsibleChatRenderChunk
+  | BranchesChatRenderChunk
+  | TableChatRenderChunk;
 
 /** 交互块占位符前缀/后缀(仅用于解析中间态) */
 const BLOCK_PLACEHOLDER: string = '\uE200';
@@ -1001,15 +955,11 @@ export function parseChatChunks(
   try {
     const extracted: InteractiveExtraction = extractInteractiveBlocks(content);
     if (extracted.blocks.length === 0) {
-      const textChunk: TextChatRenderChunk = {
-        type: 'text',
-        segments: parseLightTextPipeline(extracted.residual, options)
-      };
-      return [textChunk];
+      return buildLightChunks(extracted.residual, options);
     }
 
     const chunks: ChatRenderChunk[] = [];
-    // 按占位符切成段,占位符处还原交互块,其余走文本管线
+    // 按占位符切成段,占位符处还原交互块,其余走文本管线(含表格分组)
     const parts: string[] = extracted.residual.split(/(\uE200\d+\uE201)/g);
     for (let i = 0; i < parts.length; i++) {
       const part: string = parts[i];
@@ -1040,10 +990,9 @@ export function parseChatChunks(
           }
         }
       } else {
-        const segs: ChatTextSegment[] = parseLightTextPipeline(part, options);
-        if (segs.length > 0) {
-          const t: TextChatRenderChunk = { type: 'text', segments: segs };
-          chunks.push(t);
+        const built: ChatRenderChunk[] = buildLightChunks(part, options);
+        for (let j = 0; j < built.length; j++) {
+          chunks.push(built[j]);
         }
       }
     }
@@ -1056,10 +1005,14 @@ export function parseChatChunks(
 }
 
 /**
- * 文本管线:隐藏指令块 → 掷骰宏 → HTML 消毒 → Markdown 解析。
- * 供纯文本块与折叠块内部统一复用。
+ * 轻量管线(无交互块时的文本构建):
+ * 隐藏指令块 → 掷骰宏 → HTML 消毒 → 按行扫描,把连续表格行聚合成 table 分块,
+ * 其余行作为文本分块。文本分块内部复用 parseChatText(支持整段多行)。
+ *
+ * 相比旧的 parseLightTextPipeline(只产出 text 分块),表格不再内联渲染,
+ * 而是作为一个结构化表格分块交给渲染层做列对齐。
  */
-function parseLightTextPipeline(text: string, options: ChatTextParserOptions): ChatTextSegment[] {
+function buildLightChunks(text: string, options: ChatTextParserOptions): ChatRenderChunk[] {
   let s: string = text;
   s = stripInstructionBlocks(s);
   s = resolveDiceMacros(s);
@@ -1067,7 +1020,134 @@ function parseLightTextPipeline(text: string, options: ChatTextParserOptions): C
   if (s.length === 0) {
     return [];
   }
-  return parseChatText(s, options);
+  const result: ChatRenderChunk[] = [];
+  const lines: string[] = s.split('\n');
+  // 累积的普通文本行(整段交给 parseChatText,保留内部换行语义)
+  const textLines: string[] = [];
+  // 累积的连续表格行(聚合成一个 table 分块)
+  const tableLines: string[] = [];
+  let tableSeq: number = 0;
+
+  const flushText = (): void => {
+    if (textLines.length === 0) {
+      return;
+    }
+    const segs: ChatTextSegment[] = parseChatText(textLines.join('\n'), options);
+    textLines.length = 0;
+    if (segs.length > 0) {
+      const t: TextChatRenderChunk = { type: 'text', segments: segs };
+      result.push(t);
+    }
+  };
+  const flushTable = (): void => {
+    if (tableLines.length === 0) {
+      return;
+    }
+    result.push({
+      type: 'table',
+      id: 'tbl' + tableSeq.toString(),
+      rows: parseTableBlock(tableLines, options)
+    });
+    tableSeq++;
+    tableLines.length = 0;
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    if (isTableRow(lines[i])) {
+      flushText();
+      tableLines.push(lines[i]);
+    } else {
+      flushTable();
+      textLines.push(lines[i]);
+    }
+  }
+  flushText();
+  flushTable();
+  return result;
+}
+
+/**
+ * 解析一个表格分块(连续表格行)。
+ * - 单元格以 | 分隔,内容复用 parseInlineMarkdown(支持加粗/行内代码等)
+ * - 分隔行(| --- | --- |)不显示,把上一行标记为表头
+ * - 列数以全表最大列数为准,不足补空格占位列
+ */
+function parseTableBlock(lines: string[], options: ChatTextParserOptions): TableChunkRow[] {
+  // 单元格内行内代码等仍需代码块保护,按表整体走一次 protectCode
+  const placeholders: CodePlaceholder[] = [];
+  const protectedText: string = protectCode(lines.join('\n'), placeholders);
+  const rawLines: string[] = protectedText.split('\n');
+
+  const rows: TableChunkRow[] = [];
+  for (let i = 0; i < rawLines.length; i++) {
+    const cells: string[] | null = splitTableCells(rawLines[i]);
+    if (cells === null) {
+      continue;
+    }
+    // 分隔行:仅标记上一行为表头,不单独渲染
+    if (isSeparatorRow(cells)) {
+      if (rows.length > 0 && !rows[rows.length - 1].isHeader) {
+        const prev: TableChunkRow = rows[rows.length - 1];
+        rows[rows.length - 1] = { isHeader: true, cells: prev.cells };
+      }
+      continue;
+    }
+    const cellSegs: ChatTextSegment[][] = [];
+    for (let j = 0; j < cells.length; j++) {
+      cellSegs.push(parseInlineMarkdown(cells[j], options, placeholders, true));
+    }
+    rows.push({ isHeader: false, cells: cellSegs });
+  }
+
+  // 补齐列数(不足的列补空格占位,保证渲染层列宽一致)
+  let colCount: number = 0;
+  for (let i = 0; i < rows.length; i++) {
+    colCount = Math.max(colCount, rows[i].cells.length);
+  }
+  if (colCount === 0) {
+    return rows;
+  }
+  for (let i = 0; i < rows.length; i++) {
+    while (rows[i].cells.length < colCount) {
+      rows[i] = {
+        isHeader: rows[i].isHeader,
+        cells: rows[i].cells.concat([[createSegment(' ')]])
+      };
+    }
+  }
+  return rows;
+}
+
+/**
+ * 拆分表格行单元格:以 | 分割并 trim。非表格行返回 null。
+ */
+function splitTableCells(line: string): string[] | null {
+  if (!isTableRow(line)) {
+    return null;
+  }
+  const parts: string[] = line.split('|');
+  const cells: string[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const t: string = parts[i].trim();
+    if (t.length > 0) {
+      cells.push(t);
+    }
+  }
+  return cells;
+}
+
+/**
+ * 是否表格分隔行(每个单元都是 :?-+:? 形式的横线)。
+ */
+function isSeparatorRow(cells: string[]): boolean {
+  let ok: boolean = cells.length > 0;
+  for (let i = 0; i < cells.length; i++) {
+    if (!/^:?-+:?$/.test(cells[i])) {
+      ok = false;
+      break;
+    }
+  }
+  return ok;
 }
 
 /**
