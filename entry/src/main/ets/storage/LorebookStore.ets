@@ -215,6 +215,7 @@ export class LorebookStore {
           name: entryItem['name'] as string,
           keys: this.deserializeStringArray(entryItem['keys']),
           secondaryKeys: this.deserializeStringArray(entryItem['secondaryKeys']),
+          regex: typeof entryItem['regex'] === 'string' ? entryItem['regex'] as string : '',
           content: typeof entryItem['content'] === 'string' ? entryItem['content'] as string : '',
           enabled: typeof entryItem['enabled'] === 'boolean' ? entryItem['enabled'] as boolean : true,
           constant: typeof entryItem['constant'] === 'boolean' ? entryItem['constant'] as boolean : false,
@@ -236,6 +237,7 @@ export class LorebookStore {
         ? (item['activationMode'] as LorebookActivationMode) : LorebookActivationMode.FollowGlobal,
       injectionBudgetChars: typeof item['injectionBudgetChars'] === 'number'
         ? item['injectionBudgetChars'] as number : 0,
+      scanDepth: typeof item['scanDepth'] === 'number' ? item['scanDepth'] as number : 0,
       entries: entries,
       createdAt: typeof item['createdAt'] === 'number' ? item['createdAt'] as number : Date.now(),
       updatedAt: typeof item['updatedAt'] === 'number' ? item['updatedAt'] as number : Date.now()

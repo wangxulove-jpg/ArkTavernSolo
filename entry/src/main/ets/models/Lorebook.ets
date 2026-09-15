@@ -43,6 +43,8 @@ export interface LorebookEntry {
   readonly name: string;
   readonly keys: string[];
   readonly secondaryKeys: string[];
+  /** 正则触发模式(可选):非空时,任一被扫消息命中该正则视为关键词触发 */
+  readonly regex: string;
   readonly content: string;
   readonly enabled: boolean;
   readonly constant: boolean;
@@ -65,6 +67,8 @@ export interface Lorebook {
   readonly activationMode: LorebookActivationMode;
   /** 注入预算(字符),0 表示使用默认预算 12000 */
   readonly injectionBudgetChars: number;
+  /** 关键词扫描深度(最近 N 条消息),0 表示使用默认 10 */
+  readonly scanDepth: number;
   readonly entries: LorebookEntry[];
   readonly createdAt: number;
   readonly updatedAt: number;
@@ -72,8 +76,11 @@ export interface Lorebook {
 
 const MAX_NAME_LENGTH: number = 100;
 const MAX_ENTRY_CONTENT_LENGTH: number = 100000;
+const MAX_ENTRY_REGEX_LENGTH: number = 2000;
 const MAX_DESCRIPTION_LENGTH: number = 100000;
 const MAX_INJECTION_BUDGET_CHARS: number = 200000;
+/** 扫描深度上限(最近 N 条消息) */
+const MAX_SCAN_DEPTH: number = 50;
 
 /**
  * 创建世界书条目。
@@ -87,7 +94,8 @@ export function createLorebookEntry(
   constant: boolean = false,
   selective: boolean = false,
   position: LorebookPosition = LorebookPosition.BeforeCharacter,
-  priority: number = 0
+  priority: number = 0,
+  regex: string = ''
 ): LorebookEntry {
   const now: number = Date.now();
   return {
@@ -95,6 +103,7 @@ export function createLorebookEntry(
     name: name.trim(),
     keys: filterEmptyStrings(keys),
     secondaryKeys: filterEmptyStrings(secondaryKeys),
+    regex: regex.trim(),
     content: content.trim(),
     enabled: enabled,
     constant: constant,
@@ -114,7 +123,8 @@ export function createLorebook(
   description: string = '',
   enabled: boolean = true,
   activationMode: LorebookActivationMode = LorebookActivationMode.FollowGlobal,
-  injectionBudgetChars: number = 0
+  injectionBudgetChars: number = 0,
+  scanDepth: number = 0
 ): Lorebook {
   const now: number = Date.now();
   return {
@@ -124,6 +134,7 @@ export function createLorebook(
     enabled: enabled,
     activationMode: activationMode,
     injectionBudgetChars: injectionBudgetChars,
+    scanDepth: scanDepth,
     entries: [],
     createdAt: now,
     updatedAt: now
@@ -147,10 +158,28 @@ export function validateLorebookEntry(entry: LorebookEntry): string | null {
   if (entry.content.length > MAX_ENTRY_CONTENT_LENGTH) {
     return '条目内容不能超过' + MAX_ENTRY_CONTENT_LENGTH + '个字符';
   }
-  if (!entry.constant && entry.keys.length === 0) {
-    return '非恒定条目至少需要一个关键词';
+  if (entry.regex.length > MAX_ENTRY_REGEX_LENGTH) {
+    return '正则表达式不能超过' + MAX_ENTRY_REGEX_LENGTH + '个字符';
+  }
+  if (entry.regex.trim().length > 0 && !isValidRegex(entry.regex)) {
+    return '正则表达式无法编译,请检查语法';
+  }
+  if (!entry.constant && entry.keys.length === 0 && entry.regex.trim().length === 0) {
+    return '非恒定条目至少需要一个关键词或正则';
   }
   return null;
+}
+
+/**
+ * 校验正则表达式能否编译。
+ */
+export function isValidRegex(pattern: string): boolean {
+  try {
+    new RegExp(pattern);
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 /**
@@ -174,6 +203,10 @@ export function validateLorebook(lorebook: Lorebook): string | null {
     lorebook.injectionBudgetChars < 0 || lorebook.injectionBudgetChars > MAX_INJECTION_BUDGET_CHARS) {
     return '注入预算必须在 0 到 ' + MAX_INJECTION_BUDGET_CHARS + ' 之间';
   }
+  if (!Number.isFinite(lorebook.scanDepth) ||
+    lorebook.scanDepth < 0 || lorebook.scanDepth > MAX_SCAN_DEPTH) {
+    return '扫描深度必须在 0 到 ' + MAX_SCAN_DEPTH + ' 之间';
+  }
   return null;
 }
 
@@ -195,6 +228,7 @@ export interface LorebookUpdates {
   enabled?: boolean;
   activationMode?: LorebookActivationMode;
   injectionBudgetChars?: number;
+  scanDepth?: number;
 }
 
 /**
@@ -212,6 +246,7 @@ export function updateLorebook(
     activationMode: updates.activationMode !== undefined ? updates.activationMode : lorebook.activationMode,
     injectionBudgetChars: updates.injectionBudgetChars !== undefined
       ? updates.injectionBudgetChars : lorebook.injectionBudgetChars,
+    scanDepth: updates.scanDepth !== undefined ? updates.scanDepth : lorebook.scanDepth,
     entries: lorebook.entries,
     createdAt: lorebook.createdAt,
     updatedAt: Date.now()
@@ -225,6 +260,7 @@ export interface LorebookEntryUpdates {
   name?: string;
   keys?: string[];
   secondaryKeys?: string[];
+  regex?: string;
   content?: string;
   enabled?: boolean;
   constant?: boolean;
@@ -246,6 +282,7 @@ export function updateLorebookEntry(
     keys: updates.keys !== undefined ? filterEmptyStrings(updates.keys) : entry.keys,
     secondaryKeys: updates.secondaryKeys !== undefined
       ? filterEmptyStrings(updates.secondaryKeys) : entry.secondaryKeys,
+    regex: updates.regex !== undefined ? updates.regex.trim() : entry.regex,
     content: updates.content !== undefined ? updates.content.trim() : entry.content,
     enabled: updates.enabled !== undefined ? updates.enabled : entry.enabled,
     constant: updates.constant !== undefined ? updates.constant : entry.constant,
@@ -271,6 +308,7 @@ export function addEntryToLorebook(
     enabled: lorebook.enabled,
     activationMode: lorebook.activationMode,
     injectionBudgetChars: lorebook.injectionBudgetChars,
+    scanDepth: lorebook.scanDepth,
     entries: [...lorebook.entries, entry],
     createdAt: lorebook.createdAt,
     updatedAt: Date.now()
@@ -297,6 +335,7 @@ export function removeEntryFromLorebook(
     enabled: lorebook.enabled,
     activationMode: lorebook.activationMode,
     injectionBudgetChars: lorebook.injectionBudgetChars,
+    scanDepth: lorebook.scanDepth,
     entries: newEntries,
     createdAt: lorebook.createdAt,
     updatedAt: Date.now()
@@ -326,6 +365,7 @@ export function updateEntryInLorebook(
     enabled: lorebook.enabled,
     activationMode: lorebook.activationMode,
     injectionBudgetChars: lorebook.injectionBudgetChars,
+    scanDepth: lorebook.scanDepth,
     entries: newEntries,
     createdAt: lorebook.createdAt,
     updatedAt: Date.now()

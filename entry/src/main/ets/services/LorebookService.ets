@@ -99,10 +99,11 @@ export class LorebookService {
     name: string,
     description: string = '',
     activationMode: LorebookActivationMode = LorebookActivationMode.FollowGlobal,
-    injectionBudgetChars: number = 0
+    injectionBudgetChars: number = 0,
+    scanDepth: number = 0
   ): Promise<Lorebook> {
     this.requireInit();
-    const lorebook: Lorebook = createLorebook(name, description, true, activationMode, injectionBudgetChars);
+    const lorebook: Lorebook = createLorebook(name, description, true, activationMode, injectionBudgetChars, scanDepth);
     const error: string | null = validateLorebook(lorebook);
     if (error !== null) {
       throw new Error(error);
@@ -155,6 +156,7 @@ export class LorebookService {
       enabled: base.enabled,
       activationMode: base.activationMode,
       injectionBudgetChars: base.injectionBudgetChars,
+      scanDepth: existing.scanDepth,
       entries: parsed.entries,
       createdAt: existing.createdAt,
       updatedAt: Date.now()
@@ -235,7 +237,8 @@ export class LorebookService {
     constant: boolean = false,
     selective: boolean = false,
     position: LorebookPosition = LorebookPosition.BeforeCharacter,
-    priority: number = 0
+    priority: number = 0,
+    regex: string = ''
   ): Promise<Lorebook> {
     this.requireInit();
     const existing: Lorebook | null = await this.repository.getById(lorebookId);
@@ -243,7 +246,7 @@ export class LorebookService {
       throw new Error('LorebookService addEntry: lorebook not found');
     }
     const entry: LorebookEntry = createLorebookEntry(
-      name, keys, secondaryKeys, content, enabled, constant, selective, position, priority
+      name, keys, secondaryKeys, content, enabled, constant, selective, position, priority, regex
     );
     const error: string | null = validateLorebookEntry(entry);
     if (error !== null) {
@@ -380,10 +383,11 @@ export class LorebookService {
     lorebook: Lorebook,
     messages: ChatMessage[]
   ): LorebookEntry[] {
-    // 收集最近 N 条 User/Assistant 消息文本
+    // 收集最近 N 条 User/Assistant 消息文本(书级 scanDepth > 0 用之,否则默认)
+    const scanDepth: number = lorebook.scanDepth > 0 ? lorebook.scanDepth : this.maxScanMessages;
     const recentTexts: string[] = [];
     let count: number = 0;
-    for (let i = messages.length - 1; i >= 0 && count < this.maxScanMessages; i--) {
+    for (let i = messages.length - 1; i >= 0 && count < scanDepth; i--) {
       const msg: ChatMessage = messages[i];
       if (msg.role === ChatRole.User || msg.role === ChatRole.Assistant) {
         recentTexts.push(msg.content);
@@ -455,9 +459,11 @@ export class LorebookService {
    * 复用最近 N 条消息扫描与 selective 匹配逻辑,不注入头部。
    */
   matchKeywordEntries(lorebook: Lorebook, messages: ChatMessage[]): LorebookEntry[] {
+    // 复用最近 N 条消息扫描与 selective 匹配逻辑,不注入头部
+    const scanDepth: number = lorebook.scanDepth > 0 ? lorebook.scanDepth : this.maxScanMessages;
     const recentTexts: string[] = [];
     let count: number = 0;
-    for (let i = messages.length - 1; i >= 0 && count < this.maxScanMessages; i--) {
+    for (let i = messages.length - 1; i >= 0 && count < scanDepth; i--) {
       const msg: ChatMessage = messages[i];
       if (msg.role === ChatRole.User || msg.role === ChatRole.Assistant) {
         recentTexts.push(msg.content);
@@ -504,7 +510,8 @@ export class LorebookService {
 
   private isEntryMatched(entry: LorebookEntry, texts: string[]): boolean {
     if (entry.selective) {
-      const primaryMatched: boolean = this.matchAnyKey(entry.keys, texts);
+      const primaryMatched: boolean = this.matchAnyKey(entry.keys, texts)
+        || this.matchRegex(entry.regex, texts);
       if (!primaryMatched) {
         return false;
       }
@@ -513,7 +520,8 @@ export class LorebookService {
       }
       return this.matchAnyKey(entry.secondaryKeys, texts);
     } else {
-      return this.matchAnyKey(entry.keys, texts);
+      return this.matchAnyKey(entry.keys, texts)
+        || this.matchRegex(entry.regex, texts);
     }
   }
 
@@ -549,6 +557,29 @@ export class LorebookService {
       }
     }
     return true;
+  }
+
+  /**
+   * 正则触发:条目的 regex 非空且能编译时,任一被扫消息命中即视为触发。
+   * 非法正则(如用户手误)返回 false,不影响其他条目匹配。
+   */
+  private matchRegex(regex: string, texts: string[]): boolean {
+    const pattern: string = regex.trim();
+    if (pattern.length === 0) {
+      return false;
+    }
+    let re: RegExp;
+    try {
+      re = new RegExp(pattern);
+    } catch (e) {
+      return false;
+    }
+    for (let j = 0; j < texts.length; j++) {
+      if (re.test(texts[j])) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private findEntry(lorebook: Lorebook, entryId: string): LorebookEntry | null {

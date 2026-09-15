@@ -62,6 +62,7 @@ import {
   COLUMN_LOREBOOK_ENABLED,
   COLUMN_LOREBOOK_ACTIVATION_MODE,
   COLUMN_LOREBOOK_INJECTION_BUDGET,
+  COLUMN_LOREBOOK_SCAN_DEPTH,
   COLUMN_LOREBOOK_CREATED_AT,
   COLUMN_LOREBOOK_UPDATED_AT,
   COLUMN_ENTRY_ID,
@@ -69,6 +70,7 @@ import {
   COLUMN_ENTRY_NAME,
   COLUMN_ENTRY_KEYS_JSON,
   COLUMN_ENTRY_SECONDARY_KEYS_JSON,
+  COLUMN_ENTRY_REGEX,
   COLUMN_ENTRY_CONTENT,
   COLUMN_ENTRY_ENABLED,
   COLUMN_ENTRY_CONSTANT,
@@ -2472,6 +2474,27 @@ export const V43_SCHEMA_STATEMENTS: string[] = [
   ...V42_SCHEMA_STATEMENTS
 ];
 
+/**
+ * v43→v44 迁移 DDL(世界书正则触发 + 书级扫描深度):
+ * 1. ALTER lorebook_entries 添加 regex TEXT NOT NULL DEFAULT ''(空 = 不启用正则)
+ * 2. ALTER lorebooks 添加 scan_depth INTEGER NOT NULL DEFAULT 0(0 = 使用默认深度 10)
+ *
+ * 安全性:
+ * - 仅 ALTER TABLE ADD COLUMN,不重建表、不删除数据
+ * - 旧数据默认值兼容(空正则 / 默认深度)
+ */
+export const V43_TO_V44_DDL_STATEMENTS: string[] = [
+  `ALTER TABLE ${TABLE_LOREBOOK_ENTRIES} ADD COLUMN ${COLUMN_ENTRY_REGEX} TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE ${TABLE_LOREBOOKS} ADD COLUMN ${COLUMN_LOREBOOK_SCAN_DEPTH} INTEGER NOT NULL DEFAULT 0`
+];
+
+/** v44 完整 Schema(新安装使用),fresh 安装同样通过 ALTER 补齐新列 */
+export const V44_SCHEMA_STATEMENTS: string[] = [
+  ...V43_SCHEMA_STATEMENTS,
+  `ALTER TABLE ${TABLE_LOREBOOK_ENTRIES} ADD COLUMN ${COLUMN_ENTRY_REGEX} TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE ${TABLE_LOREBOOKS} ADD COLUMN ${COLUMN_LOREBOOK_SCAN_DEPTH} INTEGER NOT NULL DEFAULT 0`
+];
+
 export function getSchemaStatements(version: number): string[] {
   if (version === 1) {
     return [...VERSION_1_STATEMENTS];
@@ -2592,6 +2615,9 @@ export function getSchemaStatements(version: number): string[] {
   }
   if (version === 43) {
     return [...V43_SCHEMA_STATEMENTS];
+  }
+  if (version === 44) {
+    return [...V44_SCHEMA_STATEMENTS];
   }
   return [];
 }

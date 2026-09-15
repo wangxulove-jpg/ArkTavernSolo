@@ -57,6 +57,7 @@ struct LorebookPage {
   @State editEntryName: string = '';
   @State editEntryKeys: string = '';
   @State editEntrySecondaryKeys: string = '';
+  @State editEntryRegex: string = '';
   @State editEntryContent: string = '';
   @State editEntryConstant: boolean = false;
   @State editEntrySelective: boolean = false;
@@ -66,6 +67,7 @@ struct LorebookPage {
   /** 本地 @State 镜像:世界书编辑对话框的激活方式与预算 */
   @State editLorebookActivationMode: number = 0;
   @State editLorebookBudget: string = '';
+  @State editLorebookScanDepth: string = '';
   /** 顶部状态栏避让高度(由 EntryAbility 写入 AppStorage) */
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   /** 底部手势条/导航栏避让高度(由 EntryAbility 写入 AppStorage) */
@@ -110,6 +112,7 @@ struct LorebookPage {
     this.editEntryName = this.viewModel.editEntryName;
     this.editEntryKeys = this.viewModel.editEntryKeys;
     this.editEntrySecondaryKeys = this.viewModel.editEntrySecondaryKeys;
+    this.editEntryRegex = this.viewModel.editEntryRegex;
     this.editEntryContent = this.viewModel.editEntryContent;
     this.editEntryConstant = this.viewModel.editEntryConstant;
     this.editEntrySelective = this.viewModel.editEntrySelective;
@@ -119,6 +122,7 @@ struct LorebookPage {
     // 同步世界书编辑对话框的激活方式与预算
     this.editLorebookActivationMode = this.viewModel.editLorebookActivationMode;
     this.editLorebookBudget = this.viewModel.editLorebookBudget;
+    this.editLorebookScanDepth = this.viewModel.editLorebookScanDepth;
   }
 
   /** 选择并导入世界书文件(JSON)。成功后弹出操作弹窗。 */
@@ -870,6 +874,34 @@ struct LorebookPage {
             this.editLorebookBudget = value;
           })
 
+        // 关键词扫描深度(最近 N 条消息,0 = 默认 10)
+        Text('关键词扫描深度(最近 N 条消息,0 = 默认 10)')
+          .fontSize(13)
+          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+          .width('100%')
+          .margin({ bottom: 4 })
+
+        TextInput({
+          placeholder: '0',
+          text: this.editLorebookScanDepth
+        })
+          .fontSize(14)
+          .type(InputType.Number)
+          .width('100%')
+          .margin({ bottom: 4 })
+          .onChange((value: string) => {
+            if (this.viewModel !== null) {
+              this.viewModel.editLorebookScanDepth = value;
+            }
+            this.editLorebookScanDepth = value;
+          })
+
+        Text('小书全文搜索可加大,大书建议 3~5 减少误命中')
+          .fontSize(11)
+          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+          .width('100%')
+          .margin({ bottom: 12 })
+
         // 查看源码(仅编辑模式)
         if (this.viewModel !== null && this.viewModel.editingLorebook !== null) {
           Button($r('app.string.lorebook_source_open'))
@@ -1064,6 +1096,19 @@ struct LorebookPage {
               this.viewModel.editEntrySecondaryKeys = value;
             }
             this.editEntrySecondaryKeys = value;
+          }
+        )
+
+        // 正则触发模式(可选,任一被扫消息命中即触发;与关键词为 OR 关系)
+        this.entryFormField(
+          '正则触发(可选)',
+          '如: ^\\[\\[.*\\]\\]$ 或 心跳\\s*\\d+',
+          this.editEntryRegex,
+          (value: string): void => {
+            if (this.viewModel !== null) {
+              this.viewModel.editEntryRegex = value;
+            }
+            this.editEntryRegex = value;
           }
         )
 

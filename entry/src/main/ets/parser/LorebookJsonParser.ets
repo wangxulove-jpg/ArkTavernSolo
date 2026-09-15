@@ -194,6 +194,8 @@ function parseEntry(
   const position: LorebookPosition = mapPosition(raw['position']);
   const insertionOrder: number = readNumber(raw, 'insertion_order', 0);
   const priority: number = readNumber(raw, 'priority', insertionOrder);
+  // 正则触发:SillyTavern 标准字段为 regexp,兼容内部字段 regex
+  const regex: string = readString(raw, 'regexp', readString(raw, 'regex', ''));
 
   // 内容过长则截断,避免撑爆单个条目(仅严格模式;宽松模式保留完整内容,
   // 让保存层校验拦截并明确报错,而不是静默截断导致与 JSON 不一致)
@@ -221,7 +223,8 @@ function parseEntry(
       constant,
       selective,
       position,
-      priority
+      priority,
+      regex
     );
     if (!lenient && validateLorebookEntry(entry) !== null) {
       return null;
@@ -243,6 +246,7 @@ export function buildLorebookFromParsed(parsed: ParsedLorebookFile): Lorebook {
     enabled: base.enabled,
     activationMode: base.activationMode,
     injectionBudgetChars: base.injectionBudgetChars,
+    scanDepth: base.scanDepth,
     entries: parsed.entries,
     createdAt: base.createdAt,
     updatedAt: base.updatedAt
@@ -254,6 +258,7 @@ interface SerializableLorebookEntry {
   readonly name: string;
   readonly keys: string[];
   readonly secondary_keys: string[];
+  readonly regexp: string;
   readonly comment: string;
   readonly content: string;
   readonly constant: boolean;
@@ -287,6 +292,7 @@ export function serializeLorebook(lorebook: Lorebook): string {
       name: e.name,
       keys: e.keys,
       secondary_keys: e.secondaryKeys,
+      regexp: e.regex,
       comment: '',
       content: e.content,
       constant: e.constant,
@@ -301,7 +307,7 @@ export function serializeLorebook(lorebook: Lorebook): string {
     name: lorebook.name,
     description: lorebook.description,
     enabled: lorebook.enabled,
-    scan_depth: DEFAULT_SCAN_DEPTH,
+    scan_depth: lorebook.scanDepth,
     token_budget: DEFAULT_TOKEN_BUDGET,
     recursive_scanning: false,
     extensions: {},

@@ -122,6 +122,7 @@ export class LorebookRepository {
         enabled: lorebook.enabled,
         activationMode: lorebook.activationMode,
         injectionBudgetChars: lorebook.injectionBudgetChars,
+        scanDepth: lorebook.scanDepth,
         entries: entries,
         createdAt: lorebook.createdAt,
         updatedAt: lorebook.updatedAt
@@ -188,6 +189,7 @@ export class LorebookRepository {
         enabled: book.enabled,
         activationMode: book.activationMode,
         injectionBudgetChars: book.injectionBudgetChars,
+        scanDepth: book.scanDepth,
         entries: entries !== undefined ? entries : [],
         createdAt: book.createdAt,
         updatedAt: book.updatedAt
@@ -390,6 +392,7 @@ export class LorebookRepository {
         enabled: lorebook.enabled,
         activationMode: lorebook.activationMode,
         injectionBudgetChars: lorebook.injectionBudgetChars,
+        scanDepth: lorebook.scanDepth,
         entries: entries,
         createdAt: lorebook.createdAt,
         updatedAt: lorebook.updatedAt

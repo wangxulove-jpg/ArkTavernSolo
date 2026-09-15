@@ -31,6 +31,7 @@ import {
   COLUMN_LOREBOOK_ENABLED,
   COLUMN_LOREBOOK_ACTIVATION_MODE,
   COLUMN_LOREBOOK_INJECTION_BUDGET,
+  COLUMN_LOREBOOK_SCAN_DEPTH,
   COLUMN_LOREBOOK_CREATED_AT,
   COLUMN_LOREBOOK_UPDATED_AT,
   COLUMN_ENTRY_ID,
@@ -38,6 +39,7 @@ import {
   COLUMN_ENTRY_NAME,
   COLUMN_ENTRY_KEYS_JSON,
   COLUMN_ENTRY_SECONDARY_KEYS_JSON,
+  COLUMN_ENTRY_REGEX,
   COLUMN_ENTRY_CONTENT,
   COLUMN_ENTRY_ENABLED,
   COLUMN_ENTRY_CONSTANT,
@@ -145,6 +147,7 @@ export function lorebookEntryFromRow(
   const name: string = rs.getString(rs.getColumnIndex(COLUMN_ENTRY_NAME));
   const keysJson: string = rs.getString(rs.getColumnIndex(COLUMN_ENTRY_KEYS_JSON));
   const secondaryKeysJson: string = rs.getString(rs.getColumnIndex(COLUMN_ENTRY_SECONDARY_KEYS_JSON));
+  const regex: string = rs.getString(rs.getColumnIndex(COLUMN_ENTRY_REGEX));
   const content: string = rs.getString(rs.getColumnIndex(COLUMN_ENTRY_CONTENT));
   const enabled: boolean = intToBoolean(rs.getLong(rs.getColumnIndex(COLUMN_ENTRY_ENABLED)));
   const constant: boolean = intToBoolean(rs.getLong(rs.getColumnIndex(COLUMN_ENTRY_CONSTANT)));
@@ -168,6 +171,7 @@ export function lorebookEntryFromRow(
     name: name,
     keys: decodeKeysJson(keysJson),
     secondaryKeys: decodeKeysJson(secondaryKeysJson),
+    regex: regex,
     content: content,
     enabled: enabled,
     constant: constant,
@@ -201,6 +205,10 @@ export function lorebookFromMainRow(
   if (!Number.isFinite(injectionBudgetChars) || injectionBudgetChars < 0) {
     throw DatabaseError.invalidData('lorebook injectionBudgetChars invalid');
   }
+  const scanDepth: number = rs.getLong(rs.getColumnIndex(COLUMN_LOREBOOK_SCAN_DEPTH));
+  if (!Number.isFinite(scanDepth) || scanDepth < 0) {
+    throw DatabaseError.invalidData('lorebook scanDepth invalid');
+  }
   const createdAt: number = rs.getLong(rs.getColumnIndex(COLUMN_LOREBOOK_CREATED_AT));
   if (!isValidTimestamp(createdAt)) {
     throw DatabaseError.invalidData('lorebook createdAt invalid');
@@ -216,6 +224,7 @@ export function lorebookFromMainRow(
     enabled: enabled,
     activationMode: activationMode,
     injectionBudgetChars: injectionBudgetChars,
+    scanDepth: scanDepth,
     entries: [],
     createdAt: createdAt,
     updatedAt: updatedAt
@@ -235,6 +244,7 @@ export function lorebookEntryToBucket(
   bucket[COLUMN_ENTRY_NAME] = entry.name;
   bucket[COLUMN_ENTRY_KEYS_JSON] = encodeKeysJson(entry.keys);
   bucket[COLUMN_ENTRY_SECONDARY_KEYS_JSON] = encodeKeysJson(entry.secondaryKeys);
+  bucket[COLUMN_ENTRY_REGEX] = entry.regex;
   bucket[COLUMN_ENTRY_CONTENT] = entry.content;
   bucket[COLUMN_ENTRY_ENABLED] = booleanToInt(entry.enabled);
   bucket[COLUMN_ENTRY_CONSTANT] = booleanToInt(entry.constant);
@@ -259,6 +269,7 @@ export function lorebookToBucket(
   bucket[COLUMN_LOREBOOK_ENABLED] = booleanToInt(lorebook.enabled);
   bucket[COLUMN_LOREBOOK_ACTIVATION_MODE] = lorebook.activationMode;
   bucket[COLUMN_LOREBOOK_INJECTION_BUDGET] = lorebook.injectionBudgetChars;
+  bucket[COLUMN_LOREBOOK_SCAN_DEPTH] = lorebook.scanDepth;
   bucket[COLUMN_LOREBOOK_CREATED_AT] = lorebook.createdAt;
   bucket[COLUMN_LOREBOOK_UPDATED_AT] = lorebook.updatedAt;
   return bucket;

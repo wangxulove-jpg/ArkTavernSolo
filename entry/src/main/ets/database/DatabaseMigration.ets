@@ -24,10 +24,13 @@ import {
   TABLE_MESSAGES,
   TABLE_CHAT_MEMORIES,
   TABLE_LOREBOOKS,
+  TABLE_LOREBOOK_ENTRIES,
   COLUMN_CHATS_WORLD_ID,
   COLUMN_CHAT_MEMORIES_WORLD_ID,
   COLUMN_LOREBOOK_ACTIVATION_MODE,
   COLUMN_LOREBOOK_INJECTION_BUDGET,
+  COLUMN_LOREBOOK_SCAN_DEPTH,
+  COLUMN_ENTRY_REGEX,
   INDEX_CHATS_WORLD_ID,
   INDEX_CHAT_MEMORIES_WORLD_ID,
   TABLE_MESSAGE_SWIPE_GROUPS,
@@ -1411,6 +1414,53 @@ class V42ToV43Migration implements DatabaseMigration {
       `CREATE INDEX IF NOT EXISTS ${INDEX_CHATS_WORLD_ID} ON ${TABLE_CHATS}(${COLUMN_CHATS_WORLD_ID})`);
     await store.executeSql(
       `CREATE INDEX IF NOT EXISTS ${INDEX_CHAT_MEMORIES_WORLD_ID} ON ${TABLE_CHAT_MEMORIES}(${COLUMN_CHAT_MEMORIES_WORLD_ID})`);
+  }
+
+  private async ensureColumn(
+    store: relationalStore.RdbStore,
+    table: string,
+    column: string,
+    alterSql: string
+  ): Promise<void> {
+    const rs: relationalStore.ResultSet = await store.querySql(`PRAGMA table_info(${table})`);
+    let found: boolean = false;
+    try {
+      while (rs.goToNextRow()) {
+        const colIndex: number = rs.getColumnIndex('name');
+        if (colIndex >= 0 && rs.getString(colIndex) === column) {
+          found = true;
+          break;
+        }
+      }
+    } finally {
+      rs.close();
+    }
+    if (!found) {
+      await store.executeSql(alterSql);
+    }
+  }
+}
+
+/**
+ * v43→v44 迁移:世界书条目正则触发(regex 列)与书级扫描深度(scan_depth 列)。
+ * 采用 ensureColumn 自愈风格:列缺失才 ALTER 补列,避免
+ * "user_version 已到 44 但表结构缺失"导致的启动失败(参考 v42/v43 事故)。
+ */
+export function createV43ToV44Migration(): DatabaseMigration {
+  return new V43ToV44Migration();
+}
+
+class V43ToV44Migration implements DatabaseMigration {
+  readonly fromVersion: number = 43;
+  readonly toVersion: number = 44;
+
+  async migrate(store: relationalStore.RdbStore): Promise<void> {
+    // lorebook_entries.regex(空 = 不启用正则触发)
+    await this.ensureColumn(store, TABLE_LOREBOOK_ENTRIES, COLUMN_ENTRY_REGEX,
+      `ALTER TABLE ${TABLE_LOREBOOK_ENTRIES} ADD COLUMN ${COLUMN_ENTRY_REGEX} TEXT NOT NULL DEFAULT ''`);
+    // lorebooks.scan_depth(0 = 使用默认深度 10)
+    await this.ensureColumn(store, TABLE_LOREBOOKS, COLUMN_LOREBOOK_SCAN_DEPTH,
+      `ALTER TABLE ${TABLE_LOREBOOKS} ADD COLUMN ${COLUMN_LOREBOOK_SCAN_DEPTH} INTEGER NOT NULL DEFAULT 0`);
   }
 
   private async ensureColumn(

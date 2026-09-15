@@ -38,6 +38,8 @@ export interface LorebookStats {
   totalEntries: number;
   /** 全部条目字符总数 */
   totalChars: number;
+  /** ASCII 字符数(token 估算用:约 4 字符 = 1 token) */
+  asciiChars: number;
   /** 启用条目数 */
   enabledEntries: number;
   /** 启用条目字符总数 */
@@ -70,6 +72,8 @@ export class LorebookViewModel {
   editLorebookActivationMode: number = 0;
   /** 编辑对话框:注入预算(字符,空=默认) */
   editLorebookBudget: string = '';
+  /** 编辑对话框:关键词扫描深度(最近 N 条消息,空=默认) */
+  editLorebookScanDepth: string = '';
 
   /** 条目编辑对话框 */
   showEntryDialog: boolean = false;
@@ -78,6 +82,8 @@ export class LorebookViewModel {
   editEntryName: string = '';
   editEntryKeys: string = '';
   editEntrySecondaryKeys: string = '';
+  /** 条目编辑:正则触发模式(空 = 不启用) */
+  editEntryRegex: string = '';
   editEntryContent: string = '';
   editEntryEnabled: boolean = true;
   editEntryConstant: boolean = false;
@@ -308,6 +314,7 @@ export class LorebookViewModel {
     // 新建默认按需激活(安全默认,可按需在编辑里切全量)
     this.editLorebookActivationMode = 2;
     this.editLorebookBudget = '';
+    this.editLorebookScanDepth = '';
     this.showLorebookDialog = true;
   }
 
@@ -319,6 +326,7 @@ export class LorebookViewModel {
     this.editLorebookActivationMode = this.resolveEditActivationMode(lorebook.activationMode);
     this.editLorebookBudget = lorebook.injectionBudgetChars > 0
       ? String(lorebook.injectionBudgetChars) : '';
+    this.editLorebookScanDepth = lorebook.scanDepth > 0 ? String(lorebook.scanDepth) : '';
     this.showLorebookDialog = true;
   }
 
@@ -335,18 +343,20 @@ export class LorebookViewModel {
     }
     const activationMode: LorebookActivationMode = this.numberToActivationMode(this.editLorebookActivationMode);
     const budget: number = this.parseBudget(this.editLorebookBudget);
+    const scanDepth: number = this.parseScanDepth(this.editLorebookScanDepth);
     try {
       if (this.editingLorebook === null) {
         await this.service.create(
           this.editLorebookName, this.editLorebookDescription,
-          activationMode, budget
+          activationMode, budget, scanDepth
         );
       } else {
         await this.service.update(this.editingLorebook.id, {
           name: this.editLorebookName,
           description: this.editLorebookDescription,
           activationMode: activationMode,
-          injectionBudgetChars: budget
+          injectionBudgetChars: budget,
+          scanDepth: scanDepth
         });
       }
       this.showLorebookDialog = false;
@@ -413,33 +423,63 @@ export class LorebookViewModel {
   }
 
   /**
+   * 解析扫描深度输入(空/非法为 0,上限 50)。
+   */
+  parseScanDepth(input: string): number {
+    const trimmed: string = input.trim();
+    if (trimmed.length === 0) {
+      return 0;
+    }
+    const parsed: number = parseInt(trimmed);
+    if (isNaN(parsed) || parsed < 0) {
+      return 0;
+    }
+    return Math.min(parsed, 50);
+  }
+
+  /**
    * 世界书字符统计(供界面判断加载方式)。
    */
   computeLorebookStats(lorebook: Lorebook): LorebookStats {
     let totalEntries: number = 0;
     let totalChars: number = 0;
+    let asciiChars: number = 0;
     let enabledEntries: number = 0;
     let enabledChars: number = 0;
     let constantChars: number = 0;
     for (let i = 0; i < lorebook.entries.length; i++) {
       const entry: LorebookEntry = lorebook.entries[i];
       totalEntries++;
-      totalChars += entry.content.length;
+      const content: string = entry.content;
+      totalChars += content.length;
+      // 统计 ASCII 字符数(token 估算用:ASCII 约 4 字符/1 token,非 ASCII 约 1 字符/1 token)
+      for (let c = 0; c < content.length; c++) {
+        if (content.charCodeAt(c) <= 127) {
+          asciiChars++;
+        }
+      }
       if (entry.enabled) {
         enabledEntries++;
-        enabledChars += entry.content.length;
+        enabledChars += content.length;
         if (entry.constant) {
-          constantChars += entry.content.length;
+          constantChars += content.length;
         }
       }
     }
     return {
       totalEntries: totalEntries,
       totalChars: totalChars,
+      asciiChars: asciiChars,
       enabledEntries: enabledEntries,
       enabledChars: enabledChars,
       constantChars: constantChars
     };
+  }
+
+  /** 字符量估算 token:ASCII 4 字符 ≈ 1 token,非 ASCII ≈ 1 字符 1 token。 */
+  estimateTokens(stats: LorebookStats): number {
+    const nonAscii: number = stats.totalChars - stats.asciiChars;
+    return Math.ceil(stats.asciiChars / 4) + nonAscii;
   }
 
   /** 数字紧凑格式化:K/W 单位(千/万)。 */
@@ -483,11 +523,12 @@ export class LorebookViewModel {
     return this.computeBudgetWarning(lorebook, mode);
   }
 
-  /** 编辑弹窗统计行文本:条目数/字符/启用/预算。 */
+  /** 编辑弹窗统计行文本:条目数/字符/token/启用/预算。 */
   buildDialogStatsLine(lorebook: Lorebook): string {
     const stats: LorebookStats = this.computeLorebookStats(lorebook);
     return '共 ' + stats.totalEntries + ' 条目 · '
       + this.formatCompact(stats.totalChars) + ' 字符'
+      + ' · 约 ' + this.formatCompact(this.estimateTokens(stats)) + ' token'
       + ' · 启用 ' + this.formatCompact(stats.enabledChars)
       + ' · 预算 ' + this.formatCompact(this.effectiveBudget(lorebook));
   }
@@ -551,6 +592,7 @@ export class LorebookViewModel {
     this.editEntryName = '';
     this.editEntryKeys = '';
     this.editEntrySecondaryKeys = '';
+    this.editEntryRegex = '';
     this.editEntryContent = '';
     this.editEntryEnabled = true;
     this.editEntryConstant = false;
@@ -566,6 +608,7 @@ export class LorebookViewModel {
     this.editEntryName = entry.name;
     this.editEntryKeys = entry.keys.join(', ');
     this.editEntrySecondaryKeys = entry.secondaryKeys.join(', ');
+    this.editEntryRegex = entry.regex;
     this.editEntryContent = entry.content;
     this.editEntryEnabled = entry.enabled;
     this.editEntryConstant = entry.constant;
@@ -592,8 +635,9 @@ export class LorebookViewModel {
     }
     const keys: string[] = this.parseKeysString(this.editEntryKeys);
     const secondaryKeys: string[] = this.parseKeysString(this.editEntrySecondaryKeys);
-    if (!this.editEntryConstant && keys.length === 0) {
-      this.errorMessage = '非恒定条目至少需要一个关键词';
+    const regex: string = this.editEntryRegex.trim();
+    if (!this.editEntryConstant && keys.length === 0 && regex.length === 0) {
+      this.errorMessage = '非恒定条目至少需要一个关键词或正则';
       return false;
     }
     const position: LorebookPosition = this.editEntryPosition === 1
@@ -605,13 +649,14 @@ export class LorebookViewModel {
           this.editingEntryLorebookId,
           this.editEntryName, keys, secondaryKeys, this.editEntryContent,
           this.editEntryEnabled, this.editEntryConstant, this.editEntrySelective,
-          position, this.editEntryPriority
+          position, this.editEntryPriority, regex
         );
       } else {
         const updates: LorebookEntryUpdates = {
           name: this.editEntryName,
           keys: keys,
           secondaryKeys: secondaryKeys,
+          regex: regex,
           content: this.editEntryContent,
           enabled: this.editEntryEnabled,
           constant: this.editEntryConstant,
@@ -685,7 +730,8 @@ export class LorebookViewModel {
       return '无条目';
     }
     let text: string = stats.totalEntries + ' 个条目 · '
-      + this.formatCompact(stats.totalChars) + ' 字符';
+      + this.formatCompact(stats.totalChars) + ' 字符 · 约 '
+      + this.formatCompact(this.estimateTokens(stats)) + ' token';
     if (stats.constantChars > 0) {
       text += ' · 恒定 ' + this.formatCompact(stats.constantChars);
     }

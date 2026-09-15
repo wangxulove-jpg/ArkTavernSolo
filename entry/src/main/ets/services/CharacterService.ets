@@ -856,6 +856,7 @@ export class CharacterService {
       enabled: lorebook.enabled,
       activationMode: lorebook.activationMode,
       injectionBudgetChars: lorebook.injectionBudgetChars,
+      scanDepth: lorebook.scanDepth,
       entries: entries,
       createdAt: lorebook.createdAt,
       updatedAt: lorebook.updatedAt
