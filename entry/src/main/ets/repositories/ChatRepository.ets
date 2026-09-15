@@ -806,6 +806,22 @@ export class ChatRepository {
     await store.update(bucket, predicates);
   }
 
+  /**
+   * 直接设置指定会话的 sortOrder(拖拽重排用,事务包裹)。
+   */
+  async updateSortOrder(id: string, sortOrder: number): Promise<void> {
+    if (id.length === 0) {
+      throw DatabaseError.invalidData('updateSortOrder: invalid id');
+    }
+    const store: relationalStore.RdbStore = this.dbHelper.getStore();
+    await this.dbHelper.runInTransaction(
+      async (s: relationalStore.RdbStore): Promise<void> => {
+        await this.updateSortOrderWithStore(s, id, sortOrder);
+      },
+      'chat_swap_sort_order'
+    );
+  }
+
   private validateChat(chat: Chat): void {
     if (chat.id === '') {
       throw DatabaseError.invalidData('chat.id empty');

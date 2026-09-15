@@ -286,6 +286,26 @@ export class ChatSessionListViewModel {
     }
   }
 
+  /**
+   * 拖拽重排:把会话移动到同组/同区的目标位置。
+   * beforeChatId 为 null 表示移动到作用域末尾。
+   */
+  async reorderChat(chatId: string, beforeChatId: string | null): Promise<boolean> {
+    if (this.disposed) {
+      return false;
+    }
+    this.errorMessage = '';
+    try {
+      await this.persistenceService.reorderChatInScope(chatId, beforeChatId);
+      await this.reload();
+      return true;
+    } catch (e) {
+      this.errorMessage = '重排失败: ' + String(e);
+      Logger.error(LOG_TAG, 'reorderChat failed: ' + String(e));
+      return false;
+    }
+  }
+
   // ===== v42 世界分组管理 =====
 
   /** 获取分组显示名(查不到时返回"世界"占位) */

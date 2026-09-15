@@ -117,8 +117,6 @@ export struct ChatSessionRootView {
   @State showMoveNewFolderInput: boolean = false;
   /** 移动弹窗:"新建文件夹"输入值 */
   @State moveNewFolderInput: string = '';
-  /** 长按排序模式:当前正在排序的会话 id(空=未处于排序模式) */
-  @State reorderChatId: string = '';
 
   // ===== T-CHAT.1: 聊天归档导入导出 =====
   /** T-CHAT.1: 聊天归档 ViewModel(导入流程) */
@@ -445,11 +443,12 @@ export struct ChatSessionRootView {
               if (row.isHeader) {
                 this.groupHeaderRow(row)
               } else {
-                this.sessionCard(row.item!, row.canMoveUp, row.canMoveDown)
+                this.sessionCard(row.item!)
               }
             }
             .width('100%')
             .margin({ bottom: 6 })
+            .draggable(!row.isHeader)
             .swipeAction({
               end: {
                 builder: (): void => {
@@ -474,6 +473,12 @@ export struct ChatSessionRootView {
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
         .align(Alignment.Top)
+        .onItemDragStart((event: ItemDragInfo, itemIndex: number): CustomBuilder => {
+          return this.dragPreviewBuilder(itemIndex);
+        })
+        .onItemDrop((event: ItemDragInfo, itemIndex: number, insertIndex: number): void => {
+          this.handleSessionDragDrop(itemIndex, insertIndex);
+        })
         .padding({
           left: $r('app.float.app_spacing_8'),
           right: $r('app.float.app_spacing_8'),
@@ -844,18 +849,12 @@ export struct ChatSessionRootView {
     })
   }
 
-  /** 单个会话卡片(紧凑布局:头像 52 + 两行文本 + 时间/Chevron)。
-   *  长按进入该条的排序模式,显示 ↑/↓ 移动按钮;再次点击卡片/再次长按退出。 */
+  /** 单个会话卡片(紧凑布局:头像 52 + 两行文本 + 时间/Chevron)。支持拖拽重排 */
   @Builder
-  sessionCard(item: ChatSessionListItem, canMoveUp: boolean, canMoveDown: boolean) {
+  sessionCard(item: ChatSessionListItem) {
     Column() {
       PressableCard({
         onPress: () => {
-          // 排序模式中点击卡片:退出排序模式,不打开会话
-          if (this.reorderChatId.length > 0) {
-            this.reorderChatId = '';
-            return;
-          }
           this.openSession(item);
         },
         surfaceColor: ThemePalette.surface1Color(this.effectiveTheme)
@@ -904,69 +903,25 @@ export struct ChatSessionRootView {
                 .width('100%')
                 .textAlign(TextAlign.Start)
             }
-
-            // 长按排序模式提示
-            if (this.reorderChatId === item.chat.id) {
-              Text('点击卡片或再次长按退出排序')
-                .fontSize(10)
-                .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-                .margin({ top: 4 })
-                .width('100%')
-                .textAlign(TextAlign.Start)
-            }
           }
           .layoutWeight(1)
           .alignItems(HorizontalAlign.Start)
           .margin({ left: 12 })
 
-          if (this.reorderChatId === item.chat.id) {
-            // 排序模式:↑/↓ 按钮
-            Row() {
-              Button('↑')
-                .fontSize(16)
-                .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-                .fontColor(canMoveUp
-                  ? ThemePalette.accentColor(this.effectiveTheme)
-                  : ThemePalette.textTertiaryColor(this.effectiveTheme))
-                .borderRadius(16)
-                .width(32)
-                .height(32)
-                .enabled(canMoveUp)
-                .onClick(() => {
-                  this.handleMoveUp(item.chat.id);
-                })
-              Button('↓')
-                .fontSize(16)
-                .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-                .fontColor(canMoveDown
-                  ? ThemePalette.accentColor(this.effectiveTheme)
-                  : ThemePalette.textTertiaryColor(this.effectiveTheme))
-                .borderRadius(16)
-                .width(32)
-                .height(32)
-                .margin({ left: 8 })
-                .enabled(canMoveDown)
-                .onClick(() => {
-                  this.handleMoveDown(item.chat.id);
-                })
-            }
-            .margin({ left: 8 })
-          } else {
-            Column() {
-              Text(formatSessionTimestamp(item.displayTimestamp))
-                .fontSize(11)
-                .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
+          Column() {
+            Text(formatSessionTimestamp(item.displayTimestamp))
+              .fontSize(11)
+              .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-              SymbolGlyph($r('sys.symbol.chevron_right'))
-                .fontSize(14)
-                .fontColor([ThemePalette.textTertiaryColor(this.effectiveTheme)])
-                .margin({ top: 6 })
-            }
-            .alignItems(HorizontalAlign.End)
-            .margin({ left: 8 })
+            SymbolGlyph($r('sys.symbol.chevron_right'))
+              .fontSize(14)
+              .fontColor([ThemePalette.textTertiaryColor(this.effectiveTheme)])
+              .margin({ top: 6 })
           }
+          .alignItems(HorizontalAlign.End)
+          .margin({ left: 8 })
         }
         .width('100%')
         .padding({
@@ -981,12 +936,94 @@ export struct ChatSessionRootView {
     .width('100%')
     .borderRadius($r('app.float.app_radius_md'))
     .border({ width: 0.5, color: ThemePalette.dividerColor(this.effectiveTheme) })
-    .gesture(
-      LongPressGesture()
-        .onAction(() => {
-          this.reorderChatId = this.reorderChatId === item.chat.id ? '' : item.chat.id;
-        })
-    )
+  }
+
+  /** 拖拽预览:被拖拽会话的简化卡片 */
+  @Builder
+  dragPreviewBuilder(itemIndex: number) {
+    Column() {
+      Row() {
+        Text(this.getDragPreviewTitle(itemIndex))
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
+        Text('⇕')
+          .fontSize(16)
+          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+          .margin({ left: 8 })
+      }
+      .width(240)
+      .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+      .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+      .borderRadius(10)
+      .border({ width: 1, color: ThemePalette.accentColor(this.effectiveTheme) })
+    }
+  }
+
+  /** 拖拽预览标题(由行索引映射到会话) */
+  private getDragPreviewTitle(itemIndex: number): string {
+    const rows: SessionListRowModel[] = this.buildRows();
+    if (itemIndex >= 0 && itemIndex < rows.length && !rows[itemIndex].isHeader) {
+      return this.getSessionTitle(rows[itemIndex].item!);
+    }
+    return '会话';
+  }
+
+  /**
+   * 拖拽落点处理。
+   * 仅在相同作用域(相同 worldId,未分组视为同一作用域)内重排:
+   * - 落到同组会话行前 → 移到该会话前
+   * - 落到本组分组头 → 移到本组最前
+   * - 落到末尾(尾部留白) → 移到本作用域末尾
+   * - 跨作用域(拖到其他组/其他组头) → 忽略
+   */
+  private handleSessionDragDrop(sourceIndex: number, insertIndex: number): void {
+    const rows: SessionListRowModel[] = this.buildRows();
+    if (sourceIndex < 0 || sourceIndex >= rows.length || rows[sourceIndex].isHeader) {
+      return;
+    }
+    const source: ChatSessionListItem = rows[sourceIndex].item!;
+    if (this.viewModel === null) {
+      return;
+    }
+    // 目标行:insertIndex 指向落点"之后"的下一行(不存在=末尾)
+    let beforeChatId: string | null = null;
+    let targetRow: SessionListRowModel | null = null;
+    if (insertIndex >= 0 && insertIndex < rows.length) {
+      targetRow = rows[insertIndex];
+    }
+    if (targetRow !== null && !targetRow.isHeader) {
+      // 落到会话行:仅同作用域有效,否则忽略
+      if (targetRow.item!.worldId !== source.worldId) {
+        return;
+      }
+      beforeChatId = targetRow.item!.chat.id;
+    } else if (targetRow !== null && targetRow.isHeader) {
+      // 落到分组头:仅同组有效(移到组内最前),跨组忽略
+      if (targetRow.worldId !== source.worldId) {
+        return;
+      }
+      beforeChatId = null;
+      for (let i = insertIndex + 1; i < rows.length; i++) {
+        if (!rows[i].isHeader && rows[i].item!.worldId === source.worldId) {
+          beforeChatId = rows[i].item!.chat.id;
+          break;
+        }
+      }
+    }
+    // targetRow === null(落到末尾):beforeChatId = null → 移到本作用域末尾
+    if (beforeChatId === source.chat.id) {
+      return;
+    }
+    void this.viewModel!.reorderChat(source.chat.id, beforeChatId).then((ok: boolean) => {
+      if (ok) {
+        this.syncSessions();
+        this.bumpListVersion();
+      }
+    });
   }
 
   /**
