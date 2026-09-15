@@ -102,10 +102,20 @@ export interface PromptBuildContext {
   characterBookActivationMode?: LorebookActivationMode;
   /** 深度注入位置(0-8,默认 2)。仅在 OnDemand 模式下生效 */
   lorebookDepth?: number;
+  /** v44: 记忆关键词检索命中的历史章节(可选开关,位置固定于对话前)。 */
+  memoryKeywordHits?: MemoryKeywordHit[];
   /** 用户身份(可选,提供时注入到提示词) */
   persona?: Persona;
   /** 用户身份注入深度(仅 persona.position = AtDepth 时使用,默认 4) */
   personaDepth?: number;
+}
+
+/**
+ * 记忆关键词检索命中条目(标题 + 内容),注入到 MemoryLegacy 之后、对话之前。
+ */
+export interface MemoryKeywordHit {
+  readonly title: string;
+  readonly detail: string;
 }
 
 /**
@@ -270,6 +280,24 @@ export class PromptBuilder {
         ChatMessageSource.MemorySummary
       );
       segments.push(memorySeg);
+    }
+
+    // 4.6 记忆关键词检索命中(可选开关,位置固定于对话前;内容随命中变化,仅开启时接受缓存代价)
+    if (context.memoryKeywordHits !== undefined && context.memoryKeywordHits.length > 0) {
+      const parts: string[] = [];
+      for (let i = 0; i < context.memoryKeywordHits.length; i++) {
+        const hit: MemoryKeywordHit = context.memoryKeywordHits[i];
+        parts.push('【' + hit.title + '】' + '\n' + hit.detail);
+      }
+      const kwSeg: PromptSegment = createPromptSegment(
+        'memory-keyword',
+        PromptSegmentPosition.MemoryKeyword,
+        ChatRole.System,
+        parts.join('\n\n'),
+        0,
+        ChatMessageSource.MemorySummary
+      );
+      segments.push(kwSeg);
     }
 
     // 5. Conversation:保留输入中的所有消息(包括合法 System 消息)

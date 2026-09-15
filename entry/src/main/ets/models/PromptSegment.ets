@@ -43,6 +43,8 @@ export enum PromptSegmentPosition {
   MemoryRolling = 'MemoryRolling',
   /** v12: 旧数据迁移摘要(只读) */
   MemoryLegacy = 'MemoryLegacy',
+  /** 记忆关键词检索命中的历史章节(可选开关,位置固定,靠近对话) */
+  MemoryKeyword = 'MemoryKeyword',
   /** 旧版单段长期记忆摘要(兼容,新代码应使用 MemoryCore/Chapter/Rolling) */
   MemorySummary = 'MemorySummary',
   /** 聊天历史(Conversation) */
@@ -102,9 +104,10 @@ const POSITION_ORDER: Record<string, number> = {
   'MemoryChapter': 8,
   'MemoryRolling': 9,
   'MemoryLegacy': 10,
-  'MemorySummary': 11,
-  'Conversation': 12,
-  'PostHistory': 13
+  'MemoryKeyword': 11,
+  'MemorySummary': 12,
+  'Conversation': 13,
+  'PostHistory': 14
 };
 
 /**

@@ -637,6 +637,20 @@ export struct ChatSessionRootView {
           }
         })
 
+      // 记忆管理入口:文件夹级记忆查看/编辑(章节时间线 + 手工记忆)
+      Button('记忆')
+        .fontSize(11)
+        .backgroundColor(Color.Transparent)
+        .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+        .height(28)
+        .padding({ left: 8, right: 8 })
+        .onClick(() => {
+          router.pushUrl({
+            url: 'pages/WorldMemoryPage',
+            params: { worldId: row.worldId, name: row.worldName }
+          });
+        })
+
       // 直接删除分组(确认后仅解除关联,不删会话)
       SymbolGlyph($r('sys.symbol.trash'))
         .fontSize(16)

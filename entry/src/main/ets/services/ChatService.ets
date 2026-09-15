@@ -32,7 +32,7 @@
 
 import { ModelService } from './ModelService';
 import { LorebookService } from './LorebookService';
-import { PromptBuilder, PromptBuildContext, PromptBuildResult, MemoryLayersInjection } from './PromptBuilder';
+import { PromptBuilder, PromptBuildContext, PromptBuildResult, MemoryLayersInjection, MemoryKeywordHit } from './PromptBuilder';
 import { TokenCounter } from './TokenCounter';
 import { HistoryTrimmer } from './HistoryTrimmer';
 import { RecentMessageSelector } from './RecentMessageSelector';
@@ -57,6 +57,7 @@ import {
 } from '../models/MessageSwipe';
 import { ImpersonateCandidate } from '../models/ImpersonateCandidate';
 import { ChatMessage, ChatMessageStatus, createChatMessage, mergeChatMessage } from '../models/ChatMessage';
+import { ChatMemory } from '../models/ChatMemory';
 import { ChatMessageSource } from '../models/ChatMessageSource';
 import { ChatRequest, ChatRequestOptions } from '../models/ChatRequest';
 import { ChatResponse } from '../models/ChatResponse';
@@ -128,6 +129,8 @@ export const LOREBOOK_ACTIVATION_DEFAULT_PREFS_KEY: string = 'lorebook_activatio
 
 /** 世界书深度注入位置 Preferences key(全局,跨会话,整数 0-8,默认 2) */
 export const LOREBOOK_INJECTION_DEPTH_PREFS_KEY: string = 'lorebook_injection_depth';
+/** v44: 记忆关键词检索开关(MemoryKeyword 注入段),默认关闭以保缓存命中率 */
+export const MEMORY_KEYWORD_RETRIEVAL_PREFS_KEY: string = 'memory_keyword_retrieval';
 
 /** 世界书全局默认激活方式默认值 */
 const DEFAULT_LOREBOOK_ACTIVATION_MODE: LorebookActivationMode = LorebookActivationMode.OnDemand;
@@ -395,6 +398,8 @@ export class ChatService {
   private lorebookActivationDefault: LorebookActivationMode = DEFAULT_LOREBOOK_ACTIVATION_MODE;
   /** 世界书深度注入位置(0-8,跨会话)。默认 2 */
   private lorebookInjectionDepth: number = DEFAULT_LOREBOOK_INJECTION_DEPTH;
+  /** v44: 记忆关键词检索开关(默认关,保持缓存命中率) */
+  private memoryKeywordRetrievalEnabled: boolean = false;
   /**
    * Prompt Cache 优化:是否启用自动记忆总结。
    * 默认 false(关闭自动总结,保持 Memory 段稳定)。
@@ -606,6 +611,9 @@ export class ChatService {
 
     // 加载世界书全局默认激活方式与深度注入偏好(全局,跨会话)
     this.loadLorebookPrefs();
+
+    // 加载记忆关键词检索开关(v44,全局,跨会话)
+    this.loadMemoryPrefs();
 
     // 无持久化服务:回退到同步 initContext
     if (this.persistenceService === null) {
@@ -2814,6 +2822,40 @@ export class ChatService {
   }
 
   /**
+   * 加载记忆关键词检索开关(v44,全局,跨会话)。默认关,保证缓存命中率。
+   */
+  private async loadMemoryPrefs(): Promise<void> {
+    if (this.appPreferences === null) {
+      return;
+    }
+    try {
+      const val: string = await this.appPreferences.getString(
+        MEMORY_KEYWORD_RETRIEVAL_PREFS_KEY, '');
+      this.memoryKeywordRetrievalEnabled = val === 'on';
+    } catch (_e) {
+      this.memoryKeywordRetrievalEnabled = false;
+    }
+  }
+
+  /**
+   * 设置记忆关键词检索开关并持久化。
+   */
+  setMemoryKeywordRetrievalEnabled(enabled: boolean): void {
+    this.memoryKeywordRetrievalEnabled = enabled;
+    if (this.appPreferences !== null) {
+      this.appPreferences.putString(MEMORY_KEYWORD_RETRIEVAL_PREFS_KEY, enabled ? 'on' : 'off')
+        .then((): void => {}).catch((_e: Object): void => {});
+    }
+  }
+
+  /**
+   * 获取记忆关键词检索开关。
+   */
+  isMemoryKeywordRetrievalEnabled(): boolean {
+    return this.memoryKeywordRetrievalEnabled;
+  }
+
+  /**
    * 设置世界书全局默认激活方式并持久化。
    * @param mode FullInject / OnDemand
    */
@@ -3747,6 +3789,43 @@ export class ChatService {
     // 解析有效 Persona
     const effectivePersona: Persona | null = await this.resolveEffectivePersona();
 
+    // v44: 记忆关键词召回(可选,仅世界分组且开关开启;排除恒定注入的章节,最多 3 条)
+    let memoryKeywordHits: MemoryKeywordHit[] | undefined = undefined;
+    if (this.memoryKeywordRetrievalEnabled
+      && this.memoryService !== null
+      && this.currentChat !== null
+      && this.currentChat.worldId.length > 0
+      && memoryLayers !== undefined) {
+      try {
+        const texts: string[] = [];
+        const endIdx: number = conversationMessages.length;
+        for (let i = Math.max(0, endIdx - 20); i < endIdx; i++) {
+          texts.push(conversationMessages[i].content);
+        }
+        const excludeIds: string[] = [];
+        const chapters: ChatMemory[] | undefined = memoryLayers.chapter;
+        if (chapters !== undefined) {
+          for (let i = 0; i < chapters.length; i++) {
+            excludeIds.push(chapters[i].id);
+          }
+        }
+        const hits: ChatMemory[] = await this.memoryService.retrieveKeywordMemories(
+          this.currentChat.worldId, texts, excludeIds, 3
+        );
+        if (hits.length > 0) {
+          memoryKeywordHits = hits.map((m: ChatMemory): MemoryKeywordHit => ({
+            title: m.title.length > 0 ? m.title : '历史记忆',
+            detail: m.summary
+          }));
+          Logger.info(LOG_TAG, 'memory keyword retrieval hits=' + hits.length
+            + ' worldId=' + this.currentChat.worldId);
+        }
+      } catch (e) {
+        Logger.warn(LOG_TAG, 'memory keyword retrieval failed: '
+          + (e instanceof Error ? e.message : String(e)));
+      }
+    }
+
     const context: PromptBuildContext = {
       character: this.character !== null ? this.character : undefined,
       characterBook: characterBook,
@@ -3758,6 +3837,8 @@ export class ChatService {
       // 角色绑定书的激活方式兜底(书级 FollowGlobal 遗留数据时用全局默认) + 深度注入位置
       characterBookActivationMode: this.lorebookActivationDefault,
       lorebookDepth: this.lorebookInjectionDepth,
+      // 记忆关键词召回命中(可选,开关开启时注入)
+      memoryKeywordHits: memoryKeywordHits,
       // Persona 注入
       persona: effectivePersona !== null ? effectivePersona : undefined
       // enablePostHistoryInstructions 默认为 true
