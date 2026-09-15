@@ -658,33 +658,35 @@ export class ChatService {
   }
 
   /**
-   * 创建新会话并注入 firstMessage(如果有角色且 firstMessage 非空)。
+   * 创建新会话并注入开场白(如果有角色且有开场白或备用开场白)。
    * 默认 title 使用角色名(无角色时为"新对话",由 persistenceService 兜底)。
    *
-   * V2 字段支持:
-   * - 若角色有 firstMessage 且有 alternateGreetings:
-   *   - firstMessage 作为 Candidate 0
-   *   - alternateGreetings[i] 作为 Candidate 1..N(不激活,默认显示 firstMessage)
-   *   - 用户后续可通过 Swipe 切换开场白
+   * 开场白池构建:
+   * - [firstMessage(非空时)] + alternateGreetings
+   * - 池[0] 作为首条消息内容(CharacterFirstMessage,即 Candidate 0)
+   * - 池[1..N] 作为 Swipe 候选(不激活,默认显示池[0])
+   * - 用户后续可通过 Swipe 切换开场白
+   *
+   * 兼容:角色只有 alternateGreetings、firstMessage 为空时,
+   * 池首条为 alternateGreetings[0],同样注入首条消息并允许切换其余备用开场白。
    */
   private async createNewSession(characterId?: string): Promise<void> {
     if (this.persistenceService === null) {
       return;
     }
 
-    const hasFirstMessage: boolean =
-      this.character !== null && this.character.firstMessage.length > 0;
+    const greetingPool: string[] = this.buildGreetingPool();
     // 默认 title 优先用角色名(规范:名称=角色名),无角色时传 undefined 由 persistence 兜底为"新对话"
     const defaultTitle: string | undefined =
       this.character !== null && this.character.name.length > 0
         ? this.character.name
         : undefined;
 
-    if (hasFirstMessage && this.character !== null) {
+    if (greetingPool.length > 0 && this.character !== null) {
       const firstMsg: ChatMessage = {
         id: 'msg-' + generateUuid(),
         role: ChatRole.Assistant,
-        content: this.character.firstMessage,
+        content: greetingPool[0],
         createdAt: Date.now(),
         isStreaming: false,
         status: ChatMessageStatus.Completed,
@@ -699,9 +701,8 @@ export class ChatService {
       this.messages = [firstMsg];
       this.currentSequenceNumber = 1;
 
-      // V2: 初始化 alternate_greetings 作为 Swipe 候选 1..N
-      // firstMessage 已作为 Candidate 0 的内容,不需要额外 activate
-      await this.initializeAlternateGreetingsAsSwipeCandidates(firstMsg.id);
+      // 初始化池[1..N]作为首条消息的 Swipe 候选(池[0]已是 Candidate 0 内容)
+      await this.initializeGreetingSwipeCandidates(firstMsg.id, greetingPool.slice(1));
     } else {
       const session: PersistedChatSession =
         await this.persistenceService.createSession(characterId, defaultTitle);
@@ -715,53 +716,71 @@ export class ChatService {
   }
 
   /**
-   * 将角色的 alternateGreetings 初始化为 firstMessage 的 Swipe 候选。
-   * - 调用 ensureSwipeState 创建 Candidate 0(firstMessage 已是消息内容)
-   * - 对每个 alternateGreeting 调用 appendCandidate(activate=false)作为 Candidate 1..N
+   * 构建开场白池:[firstMessage(非空时)] + alternateGreetings(trim 过滤空项)。
+   */
+  private buildGreetingPool(): string[] {
+    if (this.character === null) {
+      return [];
+    }
+    const pool: string[] = [];
+    if (this.character.firstMessage.trim().length > 0) {
+      pool.push(this.character.firstMessage.trim());
+    }
+    for (let i = 0; i < this.character.alternateGreetings.length; i++) {
+      const greeting: string = this.character.alternateGreetings[i].trim();
+      if (greeting.length > 0) {
+        pool.push(greeting);
+      }
+    }
+    return pool;
+  }
+
+  /**
+   * 将开场白候选列表初始化为首条消息的 Swipe 候选。
+   * - 调用 ensureSwipeState 创建 Group + Candidate 0(默认池[0]已是消息内容)
+   * - 对 candidates[i] 调用 appendCandidate(activate=false)作为 Candidate 1..N
    * - 失败不阻塞会话创建,仅记录 warning
    *
-   * @param firstMessageId firstMessage 的消息 ID
+   * @param firstMessageId 首条开场白消息的 ID
+   * @param candidates 除池[0]外的其余候选内容
    */
-  private async initializeAlternateGreetingsAsSwipeCandidates(
-    firstMessageId: string
+  private async initializeGreetingSwipeCandidates(
+    firstMessageId: string,
+    candidates: string[]
   ): Promise<void> {
     if (this.swipePersistenceService === null) {
       return;
     }
-    if (this.character === null) {
-      return;
-    }
-    const greetings: string[] = this.character.alternateGreetings;
-    if (greetings.length === 0) {
+    if (candidates.length === 0) {
       return;
     }
     try {
-      // ensureSwipeState 创建 Group + Candidate 0(以 firstMessage 内容)
+      // ensureSwipeState 创建 Group + Candidate 0(默认池[0]已是消息内容)
       await this.swipePersistenceService.ensureSwipeState(firstMessageId);
-      // 逐个追加 alternateGreeting 作为 Candidate 1..N,不 activate(默认显示 firstMessage)
-      for (let i = 0; i < greetings.length; i++) {
-        const greeting: string = greetings[i];
-        if (greeting.trim().length === 0) {
+      // 逐个追加候选作为 Candidate 1..N,不 activate(默认显示池[0])
+      for (let i = 0; i < candidates.length; i++) {
+        const candidate: string = candidates[i];
+        if (candidate.trim().length === 0) {
           continue;
         }
         try {
           await this.swipePersistenceService.appendCandidate(
             firstMessageId,
             {
-              content: greeting,
+              content: candidate,
               status: ChatMessageStatus.Completed,
               isStreaming: false
             },
-            false // activate=false,保持 firstMessage 为当前显示
+            false // activate=false,保持池[0]为当前显示
           );
         } catch (e) {
           // 单条追加失败不阻塞其他条目
-          Logger.warn(LOG_TAG, 'init alternate_greeting failed idx=' + String(i)
+          Logger.warn(LOG_TAG, 'init greeting candidate failed idx=' + String(i)
             + ': ' + (e instanceof Error ? e.message : String(e)));
         }
       }
     } catch (e) {
-      Logger.warn(LOG_TAG, 'initializeAlternateGreetings failed: '
+      Logger.warn(LOG_TAG, 'initializeGreetingSwipeCandidates failed: '
         + (e instanceof Error ? e.message : String(e)));
     }
   }
@@ -2087,8 +2106,8 @@ export class ChatService {
       this.lastTokenBudget = undefined;
       this.lastHistoryTrimResult = undefined;
       this.currentAssistantId = null;
-      this.swipeSummaries = [];
-      this.lastAssistantMessageId = '';
+      // 新建会话后重新加载 Swipe 摘要(首条开场白的 alternate_greetings 候选 1..N)
+      await this.reloadSwipeStateAfterNewSession();
       this.activeGeneration = null;
       // T-6.4B-1: 新建会话后刷新 Branch 状态
       await this.refreshBranchState();
@@ -2200,6 +2219,8 @@ export class ChatService {
         } else {
           // 无剩余会话,创建新会话
           await this.createNewSession(characterId);
+          // 新建会话后重新加载 Swipe 摘要与 lastAssistantMessageId(首条开场白候选)
+          await this.reloadSwipeStateAfterNewSession();
         }
         this.lastTokenBudget = undefined;
         this.lastHistoryTrimResult = undefined;
@@ -4284,6 +4305,24 @@ export class ChatService {
     }
   }
 
+  /**
+   * createNewSession 之后重新加载 Swipe 状态。
+   *
+   * createNewSession 只把 alternate_greetings 持久化为首条开场白消息的
+   * Swipe 候选 1..N,不会同步 this.swipeSummaries / this.lastAssistantMessageId。
+   * 会话列表"新建对话"与"删除当前会话后回退新建"两条路径必须调用本方法,
+   * 否则首条消息候选数读不到(开场白选择箭头不出现)且无法 Swipe。
+   */
+  private async reloadSwipeStateAfterNewSession(): Promise<void> {
+    this.swipeSummaries = [];
+    this.lastAssistantMessageId = '';
+    if (this.swipePersistenceService !== null && this.currentChatId !== undefined) {
+      this.swipeSummaries =
+        await this.swipePersistenceService.listSwipeSummariesByChatId(this.currentChatId);
+    }
+    this.updateLastAssistantMessageId();
+  }
+
   // ===== Swipe 公开方法 =====
 
   /**
@@ -4393,6 +4432,49 @@ export class ChatService {
       this.persistChatTimestamp();
       // v12: 切换候选后,失效该 Assistant position 之后的记忆(内容已变化,旧摘要可能不准确)
       // 失败不阻塞,只记录 warn
+      this.invalidateMemoryFromMessagePosition(assistantMessageId);
+      this.emitMessages(this.lastCallbacks);
+    } finally {
+      this.swipeOperationInProgress = false;
+    }
+  }
+
+  /**
+   * 激活指定索引的候选(开场白选择等场景的显式索引切换)。
+   * 语义同 activateNextCandidate,但允许任意合法索引(含回绕到 Candidate 0)。
+   * 索引越界时安全回退到 Candidate 0。
+   */
+  async activateCandidateIndex(assistantMessageId: string, index: number): Promise<void> {
+    if (!this.canOperateSwipe(assistantMessageId)) {
+      return;
+    }
+    if (this.isBusy()) {
+      Logger.warn(LOG_TAG, 'activateCandidateIndex rejected: busy');
+      return;
+    }
+    if (this.swipePersistenceService === null || this.currentChatId === undefined) {
+      return;
+    }
+    const summary: MessageSwipeSummary | undefined = this.getSummaryForMessage(assistantMessageId);
+    if (summary === undefined) {
+      return;
+    }
+    const target: number =
+      index >= 0 && index < summary.candidateCount ? index : 0;
+    if (target === summary.activeCandidateIndex) {
+      return;
+    }
+    this.swipeOperationInProgress = true;
+    try {
+      await this.swipePersistenceService.activateCandidate(assistantMessageId, target);
+      // 重新加载 messages
+      await this.reloadCurrentSession();
+      // 重新加载 summaries
+      this.swipeSummaries = await this.swipePersistenceService.listSwipeSummariesByChatId(this.currentChatId);
+      this.updateLastAssistantMessageId();
+      // 仅更新 updatedAt,不修改 lastMessageAt
+      this.persistChatTimestamp();
+      // v12: 切换候选后,失效该 Assistant position 之后的记忆
       this.invalidateMemoryFromMessagePosition(assistantMessageId);
       this.emitMessages(this.lastCallbacks);
     } finally {

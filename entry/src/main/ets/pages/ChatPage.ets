@@ -1041,6 +1041,19 @@ struct ChatPage {
             })
           }
 
+          // 开场白选择箭头(新会话首条消息时显示,点击切换开场白;开始聊天后自动消失)。
+          // 放在输入栏胶囊上方独立浮层,避免被胶囊背景遮挡。
+          if (this.showGreetingSwitcher()) {
+            Row() {
+              this.greetingSwitcherButton()
+            }
+            .width('100%')
+            .justifyContent(FlexAlign.End)
+            .padding({ right: 4, bottom: 6 })
+            // 空白区域点击穿透到消息列表(收起软键盘),箭头自身仍可点击
+            .hitTestBehavior(HitTestMode.Transparent)
+          }
+
           this.inputArea()
         }
         .width('100%')
@@ -2505,6 +2518,31 @@ struct ChatPage {
 
   // ===== 消息列表 =====
 
+  /**
+   * 开场白选择箭头(输入栏右上角)。
+   * 仅新会话首条开场白消息时显示,点击切换到下一条开场白(超出后回绕)。
+   * 用户发送首条消息后自动消失。
+   */
+  @Builder
+  greetingSwitcherButton() {
+    Row() {
+      Text(this.getGreetingCounterLabel())
+        .fontSize(12)
+        .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(14)
+        .fontColor([ThemePalette.accentColor(this.effectiveTheme)])
+        .margin({ left: 2 })
+    }
+    .padding({ left: 12, right: 10, top: 7, bottom: 7 })
+    .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+    .borderRadius(16)
+    .shadow({ radius: 8, color: 'rgba(0,0,0,0.15)' })
+    .onClick(() => {
+      this.switchNextGreeting();
+    })
+  }
+
   @Builder
   messageList() {
     Scroll(this.scroller) {
@@ -3748,6 +3786,73 @@ struct ChatPage {
     }
     const s: MessageSwipeSummary | undefined = this.viewModel!.getSwipeSummary(messageId);
     return s !== undefined ? s.candidateCount : 1;
+  }
+
+  /**
+   * 新会话首条开场白消息 ID(开始聊天前)。
+   * 判定:消息列表只有一条消息且为 CharacterFirstMessage(尚无用户消息)。
+   * 返回空串表示非"新会话开场白"状态。
+   */
+  private getOpeningFirstMessageId(): string {
+    if (this.viewModel === null || this.messages.length !== 1) {
+      return '';
+    }
+    const first: ChatMessage = this.messages[0];
+    if (first.source !== ChatMessageSource.CharacterFirstMessage) {
+      return '';
+    }
+    return first.id;
+  }
+
+  /**
+   * 是否显示开场白选择箭头:
+   * - 处于新会话首条开场白状态(尚未开始聊天)
+   * - 非初始化中、无错误
+   * - 开场白候选多于 1 条
+   */
+  private showGreetingSwitcher(): boolean {
+    if (this.viewModel === null || this.isInitialLoading() || this.hasInitError()) {
+      return false;
+    }
+    const firstId: string = this.getOpeningFirstMessageId();
+    if (firstId.length === 0) {
+      return false;
+    }
+    return this.getCandidateCount(firstId) > 1;
+  }
+
+  /** 开场白计数器文案,如 "1/3"。 */
+  private getGreetingCounterLabel(): string {
+    const firstId: string = this.getOpeningFirstMessageId();
+    if (firstId.length === 0) {
+      return '';
+    }
+    const total: number = this.getCandidateCount(firstId);
+    const active: number = this.getSwipeActiveIndex(firstId);
+    return String(active + 1) + '/' + String(total);
+  }
+
+  /**
+   * 切换到下一条开场白(超出后回绕到第一条)。
+   */
+  private switchNextGreeting(): void {
+    if (this.viewModel === null) {
+      return;
+    }
+    const firstId: string = this.getOpeningFirstMessageId();
+    if (firstId.length === 0) {
+      return;
+    }
+    const count: number = this.getCandidateCount(firstId);
+    if (count <= 1) {
+      return;
+    }
+    const active: number = this.getSwipeActiveIndex(firstId);
+    if (active < count - 1) {
+      this.viewModel!.swipeNext(firstId);
+    } else {
+      this.viewModel!.activateCandidate(firstId, 0);
+    }
   }
 
   private autoScrollToBottom(): void {

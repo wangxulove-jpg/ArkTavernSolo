@@ -543,6 +543,31 @@ export class ChatViewModel {
     await this.regenerate();
   }
 
+  /**
+   * 激活指定索引的候选(开场白选择等显式索引切换,支持回绕到 Candidate 0)。
+   * 语义同 swipeNext,但由调用方直接指定目标索引。
+   */
+  async activateCandidate(messageId: string, index: number): Promise<void> {
+    if (this.disposed || this.isGenerating || this.isSwipeOperating) {
+      return;
+    }
+    this.isSwipeOperating = true;
+    this.swipeError = '';
+    try {
+      await this.chatService.activateCandidateIndex(messageId, index);
+      this.swipeSummaries = this.chatService.getSwipeSummaries();
+      this.messages = [...this.chatService.getMessages()];
+      if (this.onMessagesUpdate !== undefined) {
+        this.onMessagesUpdate([...this.messages]);
+      }
+    } catch (e) {
+      this.swipeError = this.toUserError(String(e));
+      Logger.error(LOG_TAG, 'activateCandidate failed: ' + String(e));
+    } finally {
+      this.isSwipeOperating = false;
+    }
+  }
+
   // ===== T-4.5 会话列表方法 =====
 
   async openSessionList(): Promise<void> {
