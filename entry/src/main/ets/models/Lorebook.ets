@@ -24,6 +24,18 @@ export enum LorebookPosition {
 }
 
 /**
+ * 世界书激活方式。
+ * - FollowGlobal: 跟随全局默认激活方式
+ * - FullInject: 全量注入(所有 enabled 条目稳定注入头部,缓存最优)
+ * - OnDemand: 按需激活(constant 注入头部 + 关键词命中注入深度位置,省上下文)
+ */
+export enum LorebookActivationMode {
+  FollowGlobal = 'FollowGlobal',
+  FullInject = 'FullInject',
+  OnDemand = 'OnDemand'
+}
+
+/**
  * 世界书条目模型。
  */
 export interface LorebookEntry {
@@ -49,6 +61,10 @@ export interface Lorebook {
   readonly name: string;
   readonly description: string;
   readonly enabled: boolean;
+  /** 激活方式,FollowGlobal 表示跟随全局默认 */
+  readonly activationMode: LorebookActivationMode;
+  /** 注入预算(字符),0 表示使用默认预算 12000 */
+  readonly injectionBudgetChars: number;
   readonly entries: LorebookEntry[];
   readonly createdAt: number;
   readonly updatedAt: number;
@@ -57,6 +73,7 @@ export interface Lorebook {
 const MAX_NAME_LENGTH: number = 100;
 const MAX_ENTRY_CONTENT_LENGTH: number = 100000;
 const MAX_DESCRIPTION_LENGTH: number = 100000;
+const MAX_INJECTION_BUDGET_CHARS: number = 200000;
 
 /**
  * 创建世界书条目。
@@ -95,7 +112,9 @@ export function createLorebookEntry(
 export function createLorebook(
   name: string,
   description: string = '',
-  enabled: boolean = true
+  enabled: boolean = true,
+  activationMode: LorebookActivationMode = LorebookActivationMode.FollowGlobal,
+  injectionBudgetChars: number = 0
 ): Lorebook {
   const now: number = Date.now();
   return {
@@ -103,6 +122,8 @@ export function createLorebook(
     name: name.trim(),
     description: description.trim(),
     enabled: enabled,
+    activationMode: activationMode,
+    injectionBudgetChars: injectionBudgetChars,
     entries: [],
     createdAt: now,
     updatedAt: now
@@ -146,7 +167,23 @@ export function validateLorebook(lorebook: Lorebook): string | null {
   if (lorebook.description.length > MAX_DESCRIPTION_LENGTH) {
     return '世界书描述不能超过' + MAX_DESCRIPTION_LENGTH + '个字符';
   }
+  if (!isValidActivationMode(lorebook.activationMode)) {
+    return '激活方式不合法';
+  }
+  if (!Number.isFinite(lorebook.injectionBudgetChars) ||
+    lorebook.injectionBudgetChars < 0 || lorebook.injectionBudgetChars > MAX_INJECTION_BUDGET_CHARS) {
+    return '注入预算必须在 0 到 ' + MAX_INJECTION_BUDGET_CHARS + ' 之间';
+  }
   return null;
+}
+
+/**
+ * 判断激活方式是否为合法枚举值。
+ */
+export function isValidActivationMode(mode: LorebookActivationMode): boolean {
+  return mode === LorebookActivationMode.FollowGlobal ||
+    mode === LorebookActivationMode.FullInject ||
+    mode === LorebookActivationMode.OnDemand;
 }
 
 /**
@@ -156,6 +193,8 @@ export interface LorebookUpdates {
   name?: string;
   description?: string;
   enabled?: boolean;
+  activationMode?: LorebookActivationMode;
+  injectionBudgetChars?: number;
 }
 
 /**
@@ -170,6 +209,9 @@ export function updateLorebook(
     name: updates.name !== undefined ? updates.name.trim() : lorebook.name,
     description: updates.description !== undefined ? updates.description.trim() : lorebook.description,
     enabled: updates.enabled !== undefined ? updates.enabled : lorebook.enabled,
+    activationMode: updates.activationMode !== undefined ? updates.activationMode : lorebook.activationMode,
+    injectionBudgetChars: updates.injectionBudgetChars !== undefined
+      ? updates.injectionBudgetChars : lorebook.injectionBudgetChars,
     entries: lorebook.entries,
     createdAt: lorebook.createdAt,
     updatedAt: Date.now()
@@ -227,6 +269,8 @@ export function addEntryToLorebook(
     name: lorebook.name,
     description: lorebook.description,
     enabled: lorebook.enabled,
+    activationMode: lorebook.activationMode,
+    injectionBudgetChars: lorebook.injectionBudgetChars,
     entries: [...lorebook.entries, entry],
     createdAt: lorebook.createdAt,
     updatedAt: Date.now()
@@ -251,6 +295,8 @@ export function removeEntryFromLorebook(
     name: lorebook.name,
     description: lorebook.description,
     enabled: lorebook.enabled,
+    activationMode: lorebook.activationMode,
+    injectionBudgetChars: lorebook.injectionBudgetChars,
     entries: newEntries,
     createdAt: lorebook.createdAt,
     updatedAt: Date.now()
@@ -278,6 +324,8 @@ export function updateEntryInLorebook(
     name: lorebook.name,
     description: lorebook.description,
     enabled: lorebook.enabled,
+    activationMode: lorebook.activationMode,
+    injectionBudgetChars: lorebook.injectionBudgetChars,
     entries: newEntries,
     createdAt: lorebook.createdAt,
     updatedAt: Date.now()

@@ -15,7 +15,13 @@
  */
 
 import { relationalStore } from '@kit.ArkData';
-import { Lorebook, LorebookEntry, LorebookPosition } from '../models/Lorebook';
+import {
+  Lorebook,
+  LorebookEntry,
+  LorebookPosition,
+  LorebookActivationMode,
+  isValidActivationMode
+} from '../models/Lorebook';
 import { DatabaseError } from '../models/DatabaseError';
 import { isValidTimestamp } from './RepositoryMappers';
 import {
@@ -23,6 +29,8 @@ import {
   COLUMN_LOREBOOK_NAME,
   COLUMN_LOREBOOK_DESCRIPTION,
   COLUMN_LOREBOOK_ENABLED,
+  COLUMN_LOREBOOK_ACTIVATION_MODE,
+  COLUMN_LOREBOOK_INJECTION_BUDGET,
   COLUMN_LOREBOOK_CREATED_AT,
   COLUMN_LOREBOOK_UPDATED_AT,
   COLUMN_ENTRY_ID,
@@ -113,6 +121,18 @@ export function parsePosition(value: string): LorebookPosition {
 }
 
 /**
+ * 将数据库字符串解析为 LorebookActivationMode。
+ * 未知值容错回退 FollowGlobal,不抛错(兼容旧数据/未来值)。
+ */
+export function parseActivationMode(value: string): LorebookActivationMode {
+  const mode: LorebookActivationMode = value as LorebookActivationMode;
+  if (isValidActivationMode(mode)) {
+    return mode;
+  }
+  return LorebookActivationMode.FollowGlobal;
+}
+
+/**
  * 从 ResultSet 行构建 LorebookEntry
  */
 export function lorebookEntryFromRow(
@@ -175,6 +195,12 @@ export function lorebookFromMainRow(
   }
   const description: string = rs.getString(rs.getColumnIndex(COLUMN_LOREBOOK_DESCRIPTION));
   const enabled: boolean = intToBoolean(rs.getLong(rs.getColumnIndex(COLUMN_LOREBOOK_ENABLED)));
+  const activationMode: LorebookActivationMode =
+    parseActivationMode(rs.getString(rs.getColumnIndex(COLUMN_LOREBOOK_ACTIVATION_MODE)));
+  const injectionBudgetChars: number = rs.getLong(rs.getColumnIndex(COLUMN_LOREBOOK_INJECTION_BUDGET));
+  if (!Number.isFinite(injectionBudgetChars) || injectionBudgetChars < 0) {
+    throw DatabaseError.invalidData('lorebook injectionBudgetChars invalid');
+  }
   const createdAt: number = rs.getLong(rs.getColumnIndex(COLUMN_LOREBOOK_CREATED_AT));
   if (!isValidTimestamp(createdAt)) {
     throw DatabaseError.invalidData('lorebook createdAt invalid');
@@ -188,6 +214,8 @@ export function lorebookFromMainRow(
     name: name,
     description: description,
     enabled: enabled,
+    activationMode: activationMode,
+    injectionBudgetChars: injectionBudgetChars,
     entries: [],
     createdAt: createdAt,
     updatedAt: updatedAt
@@ -229,6 +257,8 @@ export function lorebookToBucket(
   bucket[COLUMN_LOREBOOK_NAME] = lorebook.name;
   bucket[COLUMN_LOREBOOK_DESCRIPTION] = lorebook.description;
   bucket[COLUMN_LOREBOOK_ENABLED] = booleanToInt(lorebook.enabled);
+  bucket[COLUMN_LOREBOOK_ACTIVATION_MODE] = lorebook.activationMode;
+  bucket[COLUMN_LOREBOOK_INJECTION_BUDGET] = lorebook.injectionBudgetChars;
   bucket[COLUMN_LOREBOOK_CREATED_AT] = lorebook.createdAt;
   bucket[COLUMN_LOREBOOK_UPDATED_AT] = lorebook.updatedAt;
   return bucket;

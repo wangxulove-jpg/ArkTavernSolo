@@ -241,6 +241,8 @@ export function buildLorebookFromParsed(parsed: ParsedLorebookFile): Lorebook {
     name: base.name,
     description: base.description,
     enabled: base.enabled,
+    activationMode: base.activationMode,
+    injectionBudgetChars: base.injectionBudgetChars,
     entries: parsed.entries,
     createdAt: base.createdAt,
     updatedAt: base.updatedAt

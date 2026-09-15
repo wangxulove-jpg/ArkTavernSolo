@@ -15,7 +15,8 @@
 
 import { relationalStore } from '@kit.ArkData';
 import { V1_TO_V2_STATEMENTS, V2_TO_V3_STATEMENTS, V3_TO_V4_STATEMENTS, V4_TO_V5_DDL_STATEMENTS, V5_TO_V6_STATEMENTS, V6_TO_V7_STATEMENTS, V7_TO_V8_DDL_STATEMENTS, V8_TO_V9_STATEMENTS, V9_TO_V10_DDL_STATEMENTS, V10_TO_V11_DDL_STATEMENTS, V11_TO_V12_DDL_STATEMENTS, V11_TO_V12_DATA_MIGRATION_STATEMENTS, V12_TO_V13_DDL_STATEMENTS, V13_TO_V14_DDL_STATEMENTS, V13_TO_V14_DATA_MIGRATION_STATEMENTS, V14_TO_V15_DDL_STATEMENTS, V15_TO_V16_DDL_STATEMENTS, V16_TO_V17_DDL_STATEMENTS, V17_TO_V18_DDL_STATEMENTS, V18_TO_V19_DDL_STATEMENTS, V19_TO_V20_DDL_STATEMENTS, V20_TO_V21_DDL_STATEMENTS, V21_TO_V22_DDL_STATEMENTS, V22_TO_V23_DDL_STATEMENTS, V23_TO_V24_DDL_STATEMENTS, V24_TO_V25_DDL_STATEMENTS, V25_TO_V26_DDL_STATEMENTS, V26_TO_V27_DDL_STATEMENTS, V27_TO_V28_DDL_STATEMENTS, V28_TO_V29_DDL_STATEMENTS, V29_TO_V30_DDL_STATEMENTS, V30_TO_V31_DDL_STATEMENTS, V31_TO_V32_DDL_STATEMENTS, V32_TO_V33_DDL_STATEMENTS, V33_TO_V34_DDL_STATEMENTS, V34_TO_V35_DDL_STATEMENTS, V35_TO_V36_DDL_STATEMENTS,   V36_TO_V37_DDL_STATEMENTS,
-  V37_TO_V38_DDL_STATEMENTS
+  V37_TO_V38_DDL_STATEMENTS,
+  V40_TO_V41_DDL_STATEMENTS
 } from './DatabaseSchema';
 import {
   TABLE_CHATS,
@@ -1317,6 +1318,26 @@ class V39ToV40Migration implements DatabaseMigration {
   async migrate(store: relationalStore.RdbStore): Promise<void> {
     for (let i = 0; i < V39_TO_V40_DDL_STATEMENTS.length; i++) {
       await store.executeSql(V39_TO_V40_DDL_STATEMENTS[i]);
+    }
+  }
+}
+
+/**
+ * 创建 v40→v41 数据迁移(lorebooks 表添加激活方式与注入预算列)。
+ * 旧库升级后 activation_mode 默认 'FollowGlobal',injection_budget_chars 默认 0,
+ * 行为与升级前一致。
+ */
+export function createV40ToV41Migration(): DatabaseMigration {
+  return new V40ToV41Migration();
+}
+
+class V40ToV41Migration implements DatabaseMigration {
+  readonly fromVersion: number = 40;
+  readonly toVersion: number = 41;
+
+  async migrate(store: relationalStore.RdbStore): Promise<void> {
+    for (let i = 0; i < V40_TO_V41_DDL_STATEMENTS.length; i++) {
+      await store.executeSql(V40_TO_V41_DDL_STATEMENTS[i]);
     }
   }
 }

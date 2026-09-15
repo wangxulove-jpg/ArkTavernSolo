@@ -60,6 +60,8 @@ import {
   COLUMN_LOREBOOK_NAME,
   COLUMN_LOREBOOK_DESCRIPTION,
   COLUMN_LOREBOOK_ENABLED,
+  COLUMN_LOREBOOK_ACTIVATION_MODE,
+  COLUMN_LOREBOOK_INJECTION_BUDGET,
   COLUMN_LOREBOOK_CREATED_AT,
   COLUMN_LOREBOOK_UPDATED_AT,
   COLUMN_ENTRY_ID,
@@ -594,6 +596,8 @@ const CREATE_LOREBOOKS_TABLE: string =
   `${COLUMN_LOREBOOK_NAME} TEXT NOT NULL, ` +
   `${COLUMN_LOREBOOK_DESCRIPTION} TEXT NOT NULL DEFAULT '', ` +
   `${COLUMN_LOREBOOK_ENABLED} INTEGER NOT NULL DEFAULT 1, ` +
+  `${COLUMN_LOREBOOK_ACTIVATION_MODE} TEXT NOT NULL DEFAULT 'FollowGlobal', ` +
+  `${COLUMN_LOREBOOK_INJECTION_BUDGET} INTEGER NOT NULL DEFAULT 0, ` +
   `${COLUMN_LOREBOOK_CREATED_AT} INTEGER NOT NULL, ` +
   `${COLUMN_LOREBOOK_UPDATED_AT} INTEGER NOT NULL` +
   `)`;
@@ -2394,6 +2398,12 @@ export const V37_TO_V38_DDL_STATEMENTS: string[] = [
   ALTER_CHARACTERS_ADD_NICKNAME
 ];
 
+/** v40→v41 迁移: lorebooks 表添加激活方式与注入预算列 */
+export const V40_TO_V41_DDL_STATEMENTS: string[] = [
+  `ALTER TABLE ${TABLE_LOREBOOKS} ADD COLUMN ${COLUMN_LOREBOOK_ACTIVATION_MODE} TEXT NOT NULL DEFAULT 'FollowGlobal'`,
+  `ALTER TABLE ${TABLE_LOREBOOKS} ADD COLUMN ${COLUMN_LOREBOOK_INJECTION_BUDGET} INTEGER NOT NULL DEFAULT 0`
+];
+
 /** v37 完整 Schema(新安装使用) */
 export const V37_SCHEMA_STATEMENTS: string[] = [
   ...V36_SCHEMA_STATEMENTS
@@ -2402,6 +2412,15 @@ export const V37_SCHEMA_STATEMENTS: string[] = [
 /** v38 完整 Schema(新安装使用) */
 export const V38_SCHEMA_STATEMENTS: string[] = [
   ...V37_SCHEMA_STATEMENTS
+];
+
+/**
+ * v41 完整 Schema(新安装使用)。
+ * v39/v40 仅通过 ALTER 给 characters 补列,无新表,建表 DDL 已同步更新,
+ * 因此 v41 新装语句与 v38 链保持一致。
+ */
+export const V41_SCHEMA_STATEMENTS: string[] = [
+  ...V38_SCHEMA_STATEMENTS
 ];
 
 export function getSchemaStatements(version: number): string[] {
@@ -2518,6 +2537,9 @@ export function getSchemaStatements(version: number): string[] {
   }
   if (version === 38) {
     return [...V38_SCHEMA_STATEMENTS];
+  }
+  if (version === 39 || version === 40 || version === 41) {
+    return [...V41_SCHEMA_STATEMENTS];
   }
   return [];
 }

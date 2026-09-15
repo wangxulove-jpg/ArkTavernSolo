@@ -147,6 +147,8 @@ export class LorebookService {
       name: base.name,
       description: base.description,
       enabled: base.enabled,
+      activationMode: base.activationMode,
+      injectionBudgetChars: base.injectionBudgetChars,
       entries: parsed.entries,
       createdAt: existing.createdAt,
       updatedAt: Date.now()

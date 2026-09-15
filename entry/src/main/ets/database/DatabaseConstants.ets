@@ -6,7 +6,7 @@
  */
 
 export const DATABASE_NAME: string = 'arktavern_solo.db';
-export const DATABASE_VERSION: number = 40;
+export const DATABASE_VERSION: number = 41;
 
 export const TABLE_CHARACTERS: string = 'characters';
 export const TABLE_CHATS: string = 'chats';
@@ -95,6 +95,8 @@ export const COLUMN_LOREBOOK_ID: string = 'id';
 export const COLUMN_LOREBOOK_NAME: string = 'name';
 export const COLUMN_LOREBOOK_DESCRIPTION: string = 'description';
 export const COLUMN_LOREBOOK_ENABLED: string = 'enabled';
+export const COLUMN_LOREBOOK_ACTIVATION_MODE: string = 'activation_mode';
+export const COLUMN_LOREBOOK_INJECTION_BUDGET: string = 'injection_budget_chars';
 export const COLUMN_LOREBOOK_CREATED_AT: string = 'created_at';
 export const COLUMN_LOREBOOK_UPDATED_AT: string = 'updated_at';
 

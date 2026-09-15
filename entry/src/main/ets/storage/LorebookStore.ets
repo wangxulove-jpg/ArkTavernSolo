@@ -17,7 +17,7 @@
 
 import { preferences } from '@kit.ArkData';
 import { common } from '@kit.AbilityKit';
-import { Lorebook, LorebookEntry, LorebookPosition, validateLorebook } from '../models/Lorebook';
+import { Lorebook, LorebookEntry, LorebookPosition, LorebookActivationMode, validateLorebook } from '../models/Lorebook';
 import { Logger } from '../utils/Logger';
 
 const LOG_TAG: string = 'LorebookStore';
@@ -232,6 +232,10 @@ export class LorebookStore {
       name: item['name'] as string,
       description: typeof item['description'] === 'string' ? item['description'] as string : '',
       enabled: typeof item['enabled'] === 'boolean' ? item['enabled'] as boolean : true,
+      activationMode: typeof item['activationMode'] === 'string'
+        ? (item['activationMode'] as LorebookActivationMode) : LorebookActivationMode.FollowGlobal,
+      injectionBudgetChars: typeof item['injectionBudgetChars'] === 'number'
+        ? item['injectionBudgetChars'] as number : 0,
       entries: entries,
       createdAt: typeof item['createdAt'] === 'number' ? item['createdAt'] as number : Date.now(),
       updatedAt: typeof item['updatedAt'] === 'number' ? item['updatedAt'] as number : Date.now()
