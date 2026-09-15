@@ -168,8 +168,8 @@ const MAX_FILE_SIZE_BYTES: number = 10 * 1024 * 1024;
 /** 字段最大长度:100000 字符(与 Character 模型一致;维持角色卡长文本不截断) */
 const MAX_FIELD_LENGTH: number = 100000;
 
-/** 备用开场白最大数量 */
-const MAX_ALTERNATE_GREETINGS: number = 40;
+/** 备用开场白最大数量(放宽到 60,支持大开场白池的卡) */
+const MAX_ALTERNATE_GREETINGS: number = 60;
 
 /** 标签最大数量 */
 const MAX_TAGS: number = 30;

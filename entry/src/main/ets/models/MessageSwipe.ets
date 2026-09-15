@@ -18,8 +18,9 @@ import { nowMillis } from '../utils/Time';
 
 // ===== 常量 =====
 
-/** 单条消息的最大候选数量(含 Candidate 0) */
-export const MAX_SWIPE_CANDIDATES: number = 8;
+/** 单条消息的最大候选数量(含 Candidate 0)。
+ *  放宽到 61:首条开场白 + 最多 60 条备用开场白,供开场白切换器选择。 */
+export const MAX_SWIPE_CANDIDATES: number = 61;
 
 // ===== 领域模型 =====
 

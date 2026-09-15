@@ -104,7 +104,8 @@ export interface V3CharacterFields {
 
 const MAX_NAME_LENGTH: number = 100;
 const MAX_FIELD_LENGTH: number = 100000;
-const MAX_ALTERNATE_GREETINGS: number = 40;
+/** 备用开场白上限(含导入截断),放宽到 60 以支持大开场白池的卡 */
+const MAX_ALTERNATE_GREETINGS: number = 60;
 const MAX_TAGS: number = 30;
 
 /**
