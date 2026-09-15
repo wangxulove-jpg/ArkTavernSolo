@@ -2456,11 +2456,13 @@ export const V41_TO_V42_DDL_STATEMENTS: string[] = [
 
 /**
  * v42 完整 Schema(新安装使用)。
- * CREATE_CHATS_TABLE / CREATE_CHAT_MEMORIES_TABLE 已包含 world_id 列,
- * 新安装不需要执行 ALTER,仅追加新增索引。
+ * CREATE_CHATS_TABLE 已包含 world_id 列(单常量,DCL 同步更新);
+ * chat_memories 表由 V7_TO_V8 以 v8 字段创建(无 world_id),此处先 ALTER 补列再建索引,
+ * 保证新安装也能建出 idx_chat_memories_world_id。
  */
 export const V42_SCHEMA_STATEMENTS: string[] = [
   ...V41_SCHEMA_STATEMENTS,
+  `ALTER TABLE ${TABLE_CHAT_MEMORIES} ADD COLUMN ${COLUMN_CHAT_MEMORIES_WORLD_ID} TEXT NOT NULL DEFAULT ''`,
   CREATE_INDEX_CHATS_WORLD_ID,
   CREATE_INDEX_CHAT_MEMORIES_WORLD_ID
 ];
