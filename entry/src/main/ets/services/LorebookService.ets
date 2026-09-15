@@ -415,6 +415,87 @@ export class LorebookService {
     return limited;
   }
 
+  /**
+   * FullInject 头部:收集所有 enabled 条目(忽略 constant/keys 语义)。
+   * 按 priority 降序 + 预算截断。预算 = 书级 injectionBudgetChars(0 用默认)。
+   */
+  collectAllEntries(lorebook: Lorebook): LorebookEntry[] {
+    const enabled: LorebookEntry[] = [];
+    for (let i = 0; i < lorebook.entries.length; i++) {
+      if (lorebook.entries[i].enabled) {
+        enabled.push(lorebook.entries[i]);
+      }
+    }
+    return this.sortAndLimitEntries(enabled, this.budgetForLorebook(lorebook));
+  }
+
+  /**
+   * OnDemand 头部:收集 enabled + constant 条目。
+   * 按 priority 降序 + 预算截断。
+   */
+  collectConstantEntries(lorebook: Lorebook): LorebookEntry[] {
+    const constants: LorebookEntry[] = [];
+    for (let i = 0; i < lorebook.entries.length; i++) {
+      const entry: LorebookEntry = lorebook.entries[i];
+      if (entry.enabled && entry.constant) {
+        constants.push(entry);
+      }
+    }
+    return this.sortAndLimitEntries(constants, this.budgetForLorebook(lorebook));
+  }
+
+  /**
+   * OnDemand 深度:收集非 constant 且关键词命中的条目。
+   * 复用最近 N 条消息扫描与 selective 匹配逻辑,不注入头部。
+   */
+  matchKeywordEntries(lorebook: Lorebook, messages: ChatMessage[]): LorebookEntry[] {
+    const recentTexts: string[] = [];
+    let count: number = 0;
+    for (let i = messages.length - 1; i >= 0 && count < this.maxScanMessages; i--) {
+      const msg: ChatMessage = messages[i];
+      if (msg.role === ChatRole.User || msg.role === ChatRole.Assistant) {
+        recentTexts.push(msg.content);
+        count++;
+      }
+    }
+    const matched: LorebookEntry[] = [];
+    for (let i = 0; i < lorebook.entries.length; i++) {
+      const entry: LorebookEntry = lorebook.entries[i];
+      if (!entry.enabled || entry.constant) {
+        continue;
+      }
+      if (this.isEntryMatched(entry, recentTexts)) {
+        matched.push(entry);
+      }
+    }
+    return this.sortAndLimitEntries(matched, this.budgetForLorebook(lorebook));
+  }
+
+  /**
+   * 计算书的注入预算:书级 injectionBudgetChars > 0 用之,否则用默认预算。
+   */
+  private budgetForLorebook(lorebook: Lorebook): number {
+    return lorebook.injectionBudgetChars > 0 ? lorebook.injectionBudgetChars : this.maxInjectionChars;
+  }
+
+  /**
+   * 按 priority 降序排序并按预算截断(累计字符不超预算)。
+   */
+  private sortAndLimitEntries(entries: LorebookEntry[], budget: number): LorebookEntry[] {
+    const sorted: LorebookEntry[] = [...entries];
+    sorted.sort((a: LorebookEntry, b: LorebookEntry): number => b.priority - a.priority);
+    const limited: LorebookEntry[] = [];
+    let totalChars: number = 0;
+    for (let i = 0; i < sorted.length; i++) {
+      const entryChars: number = sorted[i].content.length;
+      if (totalChars + entryChars <= budget) {
+        limited.push(sorted[i]);
+        totalChars += entryChars;
+      }
+    }
+    return limited;
+  }
+
   private isEntryMatched(entry: LorebookEntry, texts: string[]): boolean {
     if (entry.selective) {
       const primaryMatched: boolean = this.matchAnyKey(entry.keys, texts);

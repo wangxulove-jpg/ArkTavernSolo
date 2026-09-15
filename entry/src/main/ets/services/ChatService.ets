@@ -71,7 +71,7 @@ import {
 } from '../models/ChatStreamTypes';
 import { NetworkError } from '../models/NetworkError';
 import { Character, buildCharacterSystemContent, resolveCharacterDisplayName } from '../models/Character';
-import { Lorebook } from '../models/Lorebook';
+import { Lorebook, LorebookActivationMode } from '../models/Lorebook';
 import { MacroContext } from '../models/MacroContext';
 import { ProviderConfig } from '../models/ProviderConfig';
 import { TokenBudget, DEFAULT_CONTEXT_WINDOW, DEFAULT_RESERVED_OUTPUT_TOKENS } from '../models/TokenBudget';
@@ -120,6 +120,18 @@ export const GLOBAL_USER_NAME_KEY: string = 'global_user_name';
 
 /** 状态输出指令开关 Preferences key(全局,跨会话,默认 true) */
 export const STATUS_INSTRUCTION_PREFS_KEY: string = 'status_instruction_enabled';
+
+/** 世界书全局默认激活方式 Preferences key(全局,跨会话,默认 OnDemand) */
+export const LOREBOOK_ACTIVATION_DEFAULT_PREFS_KEY: string = 'lorebook_activation_default';
+
+/** 世界书深度注入位置 Preferences key(全局,跨会话,整数 0-8,默认 2) */
+export const LOREBOOK_INJECTION_DEPTH_PREFS_KEY: string = 'lorebook_injection_depth';
+
+/** 世界书全局默认激活方式默认值 */
+const DEFAULT_LOREBOOK_ACTIVATION_MODE: LorebookActivationMode = LorebookActivationMode.OnDemand;
+
+/** 世界书深度注入默认深度 */
+const DEFAULT_LOREBOOK_INJECTION_DEPTH: number = 2;
 
 /** 自动记忆总结开关 Preferences key(全局,跨会话,默认 false) */
 export const MEMORY_AUTO_SUMMARY_PREFS_KEY: string = 'memory_auto_summary_enabled';
@@ -374,13 +386,13 @@ export class ChatService {
   /** 当前角色(用于 PromptBuilder 构建) */
   private character: Character | null = null;
   /**
-   * Prompt Cache 优化:冻结的世界书条目 ID 集合。
-   * 首次 PromptBuilder 构建成功后,从 matchedLorebookEntryIds 捕获并冻结。
-   * 后续请求使用冻结 ID 而非重新匹配,保持 System 前缀稳定以命中缓存。
-   * 会话切换/角色切换/世界书变更时解冻(rehydrate)。
-   * null 表示未冻结(等待首次构建后冻结)。
+   * 世界书全局默认激活方式(跨会话)。
+   * 书级 activationMode = FollowGlobal 时使用此值解析有效模式。
+   * 默认 OnDemand。
    */
-  private frozenLorebookEntryIds: string[] | null = null;
+  private lorebookActivationDefault: LorebookActivationMode = DEFAULT_LOREBOOK_ACTIVATION_MODE;
+  /** 世界书深度注入位置(0-8,跨会话)。默认 2 */
+  private lorebookInjectionDepth: number = DEFAULT_LOREBOOK_INJECTION_DEPTH;
   /**
    * Prompt Cache 优化:是否启用自动记忆总结。
    * 默认 false(关闭自动总结,保持 Memory 段稳定)。
@@ -519,7 +531,6 @@ export class ChatService {
    */
   initContext(character: Character | null): boolean {
     this.character = character;
-    this.frozenLorebookEntryIds = null;
     this.contextInitialized = true;
     if (this.messages.length > 0) {
       return false;
@@ -585,14 +596,14 @@ export class ChatService {
   private async doInitializeSession(character?: Character, forceNew: boolean = false): Promise<void> {
     this.character = character !== undefined ? character : null;
 
-    // 会话初始化:解冻 Lorebook 匹配结果(等待首次构建后重新冻结)
-    this.frozenLorebookEntryIds = null;
-
     // 加载自动记忆总结开关(全局偏好,跨会话)
     this.loadMemoryAutoSummaryPref();
 
     // 加载状态输出指令开关(全局偏好,跨会话)
     this.loadStatusInstructionPref();
+
+    // 加载世界书全局默认激活方式与深度注入偏好(全局,跨会话)
+    this.loadLorebookPrefs();
 
     // 无持久化服务:回退到同步 initContext
     if (this.persistenceService === null) {
@@ -2666,21 +2677,73 @@ export class ChatService {
   }
 
   /**
-   * Prompt Cache:解冻 Lorebook 匹配结果。
-   * 下次构建请求消息时将重新执行关键词匹配,并重新冻结匹配结果。
-   * 应在世界书条目编辑/新增/删除后调用。
+   * 加载世界书全局默认激活方式与深度注入偏好。
+   * 在会话初始化时调用(全局,跨会话)。
    */
-  unfreezeLorebookEntries(): void {
-    this.frozenLorebookEntryIds = null;
+  private async loadLorebookPrefs(): Promise<void> {
+    if (this.appPreferences === null) {
+      return;
+    }
+    try {
+      const modeVal: string = await this.appPreferences.getString(
+        LOREBOOK_ACTIVATION_DEFAULT_PREFS_KEY, '');
+      if (modeVal === LorebookActivationMode.FullInject
+        || modeVal === LorebookActivationMode.OnDemand) {
+        this.lorebookActivationDefault = modeVal as LorebookActivationMode;
+      } else {
+        this.lorebookActivationDefault = DEFAULT_LOREBOOK_ACTIVATION_MODE;
+      }
+    } catch (_e) {
+      this.lorebookActivationDefault = DEFAULT_LOREBOOK_ACTIVATION_MODE;
+    }
+    try {
+      const depthStr: string = await this.appPreferences.getString(
+        LOREBOOK_INJECTION_DEPTH_PREFS_KEY, '');
+      const parsed: number = Number(depthStr);
+      this.lorebookInjectionDepth = Number.isFinite(parsed) && parsed >= 0 && parsed <= 8
+        ? Math.floor(parsed) : DEFAULT_LOREBOOK_INJECTION_DEPTH;
+    } catch (_e) {
+      this.lorebookInjectionDepth = DEFAULT_LOREBOOK_INJECTION_DEPTH;
+    }
   }
 
   /**
-   * Prompt Cache:获取当前冻结的 Lorebook 条目 ID 列表(只读副本)。
-   * null 表示未冻结(等待首次构建)。
+   * 设置世界书全局默认激活方式并持久化。
+   * @param mode FullInject / OnDemand
    */
-  getFrozenLorebookEntryIds(): string[] | null {
-    return this.frozenLorebookEntryIds !== null
-      ? this.frozenLorebookEntryIds.slice() : null;
+  setLorebookActivationDefault(mode: LorebookActivationMode): void {
+    this.lorebookActivationDefault = mode;
+    if (this.appPreferences !== null) {
+      this.appPreferences.putString(LOREBOOK_ACTIVATION_DEFAULT_PREFS_KEY, mode)
+        .then((): void => {}).catch((_e: Object): void => {});
+    }
+  }
+
+  /**
+   * 获取世界书全局默认激活方式。
+   */
+  getLorebookActivationDefault(): LorebookActivationMode {
+    return this.lorebookActivationDefault;
+  }
+
+  /**
+   * 设置世界书深度注入位置并持久化(0-8)。
+   * @param depth 0 表示全部消息之后
+   */
+  setLorebookInjectionDepth(depth: number): void {
+    const clamped: number = Math.max(0, Math.min(8, Math.floor(depth)));
+    this.lorebookInjectionDepth = clamped;
+    if (this.appPreferences !== null) {
+      this.appPreferences.putString(LOREBOOK_INJECTION_DEPTH_PREFS_KEY, String(clamped))
+        .then((): void => {}).catch((_e: Object): void => {});
+    }
+  }
+
+  /**
+   * 获取世界书深度注入位置。
+   */
+  getLorebookInjectionDepth(): number {
+    return this.lorebookInjectionDepth;
   }
 
   /**
@@ -3593,8 +3656,10 @@ export class ChatService {
       presetSystemPrompt: presetSystemPrompt,
       // v12: 优先使用分层注入;memoryLayers 为 undefined 时 PromptBuilder 回退到 memorySummary(此处不传)
       memoryLayers: memoryLayers,
-      // Prompt Cache: 传入冻结的世界书条目 ID(未冻结时为 undefined,由 PromptBuilder 正常匹配)
-      frozenLorebookEntryIds: this.frozenLorebookEntryIds !== null ? this.frozenLorebookEntryIds : undefined,
+      // 世界书激活方式:全局默认 + 深度注入位置(书级 FollowGlobal 时由 PromptBuilder 解析)
+      lorebookActivationMode: this.lorebookActivationDefault,
+      characterBookActivationMode: this.lorebookActivationDefault,
+      lorebookDepth: this.lorebookInjectionDepth,
       // Persona 注入
       persona: effectivePersona !== null ? effectivePersona : undefined
       // enablePostHistoryInstructions 默认为 true
@@ -3602,11 +3667,6 @@ export class ChatService {
     };
 
     const result: PromptBuildResult = this.promptBuilder.build(context);
-
-    // Prompt Cache: 首次构建后冻结 Lorebook 匹配结果
-    if (this.frozenLorebookEntryIds === null && result.matchedLorebookEntryIds.length > 0) {
-      this.frozenLorebookEntryIds = result.matchedLorebookEntryIds.slice();
-    }
 
     // CHAT-STATUS-1A: 注入角色状态输出指令(仅当存在用户字段时)
     const finalMessages: ChatMessage[] = this.injectStatusInstruction(result.messages);

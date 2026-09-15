@@ -33,7 +33,7 @@ import {
   buildDefaultCharacterSystemContent,
   resolveCharacterDisplayName
 } from '../models/Character';
-import { Lorebook, LorebookEntry, LorebookPosition } from '../models/Lorebook';
+import { Lorebook, LorebookEntry, LorebookPosition, LorebookActivationMode } from '../models/Lorebook';
 import { ChatMessage, createChatMessage } from '../models/ChatMessage';
 import { ChatRole } from '../models/ChatRole';
 import { ChatMessageSource } from '../models/ChatMessageSource';
@@ -101,17 +101,34 @@ export interface PromptBuildContext {
    *  当角色有 postHistoryInstructions 但此 flag 为 false 时不注入。 */
   enablePostHistoryInstructions?: boolean;
   /**
-   * 冻结的世界书条目 ID 列表(可选)。
-   * 提供时跳过关键词匹配,直接使用这些 ID 从世界书中提取条目。
-   * constant 条目始终包含,不受此字段影响。
-   * 用于 Prompt Cache 优化:首次匹配后冻结结果,保持前缀稳定。
+   * 全局默认激活方式(可选)。
+   * 书级 activationMode = FollowGlobal 时使用此值解析有效模式;
+   * undefined 时回退现状行为(关键词匹配注入头部)。
    */
-  frozenLorebookEntryIds?: string[];
+  lorebookActivationMode?: LorebookActivationMode;
+  /** 角色专属世界书的全局默认激活方式(可选,语义同上) */
+  characterBookActivationMode?: LorebookActivationMode;
+  /** 深度注入位置(0-8,默认 2)。仅在 OnDemand 模式下生效 */
+  lorebookDepth?: number;
   /** 用户身份(可选,提供时注入到提示词) */
   persona?: Persona;
   /** 用户身份注入深度(仅 persona.position = AtDepth 时使用,默认 4) */
   personaDepth?: number;
 }
+
+/**
+ * 世界书深度注入计划。
+ * content 非空时表示有命中条目,按 depth 注入到对话尾部。
+ */
+interface LorebookDepthPlan {
+  /** 深度注入内容(多条以 \n\n 连接),空表示无需深度注入 */
+  readonly content: string;
+  /** 深度值(0-8),0 表示全部消息之后 */
+  readonly depth: number;
+}
+
+/** OnDemand 深度注入默认深度 */
+const DEFAULT_LOREBOOK_DEPTH: number = 2;
 
 /**
  * Prompt 构建结果。
@@ -169,7 +186,15 @@ export class PromptBuilder {
 
     // 2. 世界书(BeforeCharacter + AfterCharacter)
     // 全局 lorebook 与角色 characterBook 叠加
-    this.collectLorebookSegments(context, segments, matchedIds);
+    // OnDemand 模式下的关键词命中条目由深度计划返回,在步骤 5 按深度注入
+    let lorebookDepthContent: string = '';
+    let lorebookDepthValue: number = 0;
+    const lorebookDepthPlan: LorebookDepthPlan =
+      this.collectLorebookSegments(context, segments, matchedIds);
+    if (lorebookDepthPlan.content.length > 0) {
+      lorebookDepthContent = lorebookDepthPlan.content;
+      lorebookDepthValue = lorebookDepthPlan.depth;
+    }
 
     // 3. Character System Prompt(支持 {{original}})
     if (context.character !== undefined && context.character !== null) {
@@ -262,6 +287,9 @@ export class PromptBuilder {
     // Persona AtDepth:按深度在 Conversation 消息中插入 System 消息
     let firstAssistantSeen: boolean = false;
     let injectedPersonaAtDepth: boolean = false;
+    let injectedLorebookDepth: boolean = false;
+    // 世界书深度注入点:在倒数第 depth 条消息之前(按全部消息从底部计数,depth=0 表示全部消息之后)
+    const lorebookDepthInsertIndex: number = Math.max(0, context.messages.length - lorebookDepthValue);
     // 计算消息中 Assistant 消息的索引(从后往前数深度)
     // depth=0 表示最底部(最新消息),depth=4 表示倒数第5条 Assistant 消息之前
     const assistantMsgCount: number = this.countAssistantMessages(context.messages);
@@ -269,6 +297,19 @@ export class PromptBuilder {
     let assistantSeenSoFar: number = 0;
     for (let i = 0; i < context.messages.length; i++) {
       const msg: ChatMessage = context.messages[i];
+      // 世界书 OnDemand 深度注入点:在倒数第 lorebookDepth 条消息之前
+      if (!injectedLorebookDepth && lorebookDepthContent.length > 0 && i === lorebookDepthInsertIndex) {
+        const lorebookDepthSeg: PromptSegment = createPromptSegment(
+          'lorebook-depth',
+          PromptSegmentPosition.Conversation,
+          ChatRole.System,
+          lorebookDepthContent,
+          0,
+          ChatMessageSource.LorebookDepth
+        );
+        segments.push(lorebookDepthSeg);
+        injectedLorebookDepth = true;
+      }
       // Persona AtDepth 注入点:在指定深度的 Assistant 消息之后
       if (!injectedPersonaAtDepth && personaAtDepthContent.length > 0
         && msg.role === ChatRole.Assistant) {
@@ -305,6 +346,18 @@ export class PromptBuilder {
         source
       );
       segments.push(convSeg);
+    }
+    // depth=0(或深度超过消息数)时,世界书深度注入放在全部消息之后
+    if (!injectedLorebookDepth && lorebookDepthContent.length > 0) {
+      const lorebookDepthSeg: PromptSegment = createPromptSegment(
+        'lorebook-depth',
+        PromptSegmentPosition.Conversation,
+        ChatRole.System,
+        lorebookDepthContent,
+        0,
+        ChatMessageSource.LorebookDepth
+      );
+      segments.push(lorebookDepthSeg);
     }
 
     // 6. Post-History Instructions(放在聊天历史之后)
@@ -459,88 +512,101 @@ export class PromptBuilder {
   /**
    * 收集世界书 segments(全局 + 角色专属)。
    * - 两个 Lorebook 都需要 enabled 才参与匹配
+   * - 每本书按各自有效激活方式独立处理:
+   *   - FullInject:全量 enabled 条目注入头部
+   *   - OnDemand:constant 注入头部 + 关键词命中条目累积到深度计划
+   *   - FollowGlobal + 全局默认 undefined:回退现状行为(关键词匹配注入头部)
    * - 同一关键词可能同时命中全局和角色专属条目,二者叠加
    * - 按 position 分到 BeforeCharacter / AfterCharacter
    * - priority 用于同位置内排序
+   * @returns 深度注入计划(OnDemand 命中条目),无命中时 content 为空
    */
   private collectLorebookSegments(
     context: PromptBuildContext,
     segments: PromptSegment[],
     matchedIds: string[]
-  ): void {
-    const allEntries: LorebookEntry[] = [];
-    if (context.frozenLorebookEntryIds !== undefined && context.frozenLorebookEntryIds.length > 0) {
-      // 冻结模式:使用冻结的 ID 提取条目 + constant 条目
-      if (context.lorebook !== undefined && context.lorebook !== null && context.lorebook.enabled) {
-        const frozen: LorebookEntry[] = this.lorebookService.getEntriesByIds(
-          context.lorebook, context.frozenLorebookEntryIds
-        );
-        for (let i = 0; i < frozen.length; i++) {
-          allEntries.push(frozen[i]);
-        }
-        for (let i = 0; i < context.lorebook.entries.length; i++) {
-          const entry: LorebookEntry = context.lorebook.entries[i];
-          if (entry.enabled && entry.constant) {
-            let alreadyIncluded: boolean = false;
-            for (let j = 0; j < frozen.length; j++) {
-              if (frozen[j].id === entry.id) {
-                alreadyIncluded = true;
-                break;
-              }
-            }
-            if (!alreadyIncluded) {
-              allEntries.push(entry);
-            }
-          }
-        }
-      }
-      if (context.characterBook !== undefined && context.characterBook !== null
-        && context.characterBook.enabled) {
-        const frozenChar: LorebookEntry[] = this.lorebookService.getEntriesByIds(
-          context.characterBook, context.frozenLorebookEntryIds
-        );
-        for (let i = 0; i < frozenChar.length; i++) {
-          allEntries.push(frozenChar[i]);
-        }
-        for (let i = 0; i < context.characterBook.entries.length; i++) {
-          const entry: LorebookEntry = context.characterBook.entries[i];
-          if (entry.enabled && entry.constant) {
-            let alreadyIncluded: boolean = false;
-            for (let j = 0; j < frozenChar.length; j++) {
-              if (frozenChar[j].id === entry.id) {
-                alreadyIncluded = true;
-                break;
-              }
-            }
-            if (!alreadyIncluded) {
-              allEntries.push(entry);
-            }
-          }
-        }
-      }
-    } else {
-      // 正常模式:关键词匹配
-      if (context.lorebook !== undefined && context.lorebook !== null && context.lorebook.enabled) {
-        const globalEntries: LorebookEntry[] = this.lorebookService.matchEntriesForLorebook(
-          context.lorebook, context.messages
-        );
-        for (let i = 0; i < globalEntries.length; i++) {
-          allEntries.push(globalEntries[i]);
-        }
-      }
-      if (context.characterBook !== undefined && context.characterBook !== null
-        && context.characterBook.enabled) {
-        const charEntries: LorebookEntry[] = this.lorebookService.matchEntriesForLorebook(
-          context.characterBook, context.messages
-        );
-        for (let i = 0; i < charEntries.length; i++) {
-          allEntries.push(charEntries[i]);
-        }
-      }
+  ): LorebookDepthPlan {
+    const depthParts: string[] = [];
+    if (context.lorebook !== undefined && context.lorebook !== null && context.lorebook.enabled) {
+      const mode: LorebookActivationMode | undefined = this.resolveBookMode(
+        context.lorebook, context.lorebookActivationMode
+      );
+      this.collectBookEntries(context.lorebook, mode, context, segments, matchedIds, depthParts);
     }
-    // 分发到 segments
-    for (let i = 0; i < allEntries.length; i++) {
-      const entry: LorebookEntry = allEntries[i];
+    if (context.characterBook !== undefined && context.characterBook !== null
+      && context.characterBook.enabled) {
+      const charMode: LorebookActivationMode | undefined = this.resolveBookMode(
+        context.characterBook, context.characterBookActivationMode
+      );
+      this.collectBookEntries(context.characterBook, charMode, context, segments, matchedIds, depthParts);
+    }
+    if (depthParts.length === 0) {
+      const empty: LorebookDepthPlan = { content: '', depth: 0 };
+      return empty;
+    }
+    const depthValue: number = context.lorebookDepth !== undefined
+      ? context.lorebookDepth : DEFAULT_LOREBOOK_DEPTH;
+    const plan: LorebookDepthPlan = {
+      content: depthParts.join('\n\n'),
+      depth: depthValue
+    };
+    return plan;
+  }
+
+  /**
+   * 解析一本书的有效激活方式。
+   * 书级 FollowGlobal 时用全局默认;全局默认 undefined 时返回 undefined(回退现状行为)。
+   */
+  private resolveBookMode(
+    book: Lorebook,
+    globalDefault: LorebookActivationMode | undefined
+  ): LorebookActivationMode | undefined {
+    if (book.activationMode !== LorebookActivationMode.FollowGlobal) {
+      return book.activationMode;
+    }
+    return globalDefault;
+  }
+
+  /**
+   * 按激活方式收集一本书的注入。
+   * mode undefined 时回退现状行为(matchEntriesForLorebook 注入头部)。
+   */
+  private collectBookEntries(
+    book: Lorebook,
+    mode: LorebookActivationMode | undefined,
+    context: PromptBuildContext,
+    segments: PromptSegment[],
+    matchedIds: string[],
+    depthParts: string[]
+  ): void {
+    if (mode === undefined) {
+      this.pushHeadSegments(this.lorebookService.matchEntriesForLorebook(book, context.messages),
+        segments, matchedIds);
+      return;
+    }
+    if (mode === LorebookActivationMode.FullInject) {
+      this.pushHeadSegments(this.lorebookService.collectAllEntries(book), segments, matchedIds);
+      return;
+    }
+    // OnDemand:constant 注入头部,命中条目累积到深度计划
+    this.pushHeadSegments(this.lorebookService.collectConstantEntries(book), segments, matchedIds);
+    const matched: LorebookEntry[] = this.lorebookService.matchKeywordEntries(book, context.messages);
+    for (let i = 0; i < matched.length; i++) {
+      matchedIds.push(matched[i].id);
+      depthParts.push(matched[i].content);
+    }
+  }
+
+  /**
+   * 把条目按 position 分发为头部 segments(BeforeCharacter / AfterCharacter)。
+   */
+  private pushHeadSegments(
+    entries: LorebookEntry[],
+    segments: PromptSegment[],
+    matchedIds: string[]
+  ): void {
+    for (let i = 0; i < entries.length; i++) {
+      const entry: LorebookEntry = entries[i];
       matchedIds.push(entry.id);
       const isBefore: boolean = entry.position === LorebookPosition.BeforeCharacter;
       const position: PromptSegmentPosition = isBefore

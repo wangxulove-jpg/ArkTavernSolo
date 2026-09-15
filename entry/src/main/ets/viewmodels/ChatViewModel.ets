@@ -1383,10 +1383,6 @@ export class ChatViewModel {
     }
   }
 
-  unfreezeLorebookEntries(): void {
-    this.chatService.unfreezeLorebookEntries();
-  }
-
   triggerManualMemorySummary(): void {
     this.chatService.triggerManualMemorySummary();
   }
