@@ -2465,6 +2465,11 @@ export const V42_SCHEMA_STATEMENTS: string[] = [
   CREATE_INDEX_CHAT_MEMORIES_WORLD_ID
 ];
 
+/** v43 完整 Schema(新安装使用),与 v42 一致 */
+export const V43_SCHEMA_STATEMENTS: string[] = [
+  ...V42_SCHEMA_STATEMENTS
+];
+
 export function getSchemaStatements(version: number): string[] {
   if (version === 1) {
     return [...VERSION_1_STATEMENTS];
@@ -2582,6 +2587,9 @@ export function getSchemaStatements(version: number): string[] {
   }
   if (version === 39 || version === 40 || version === 41 || version === 42) {
     return [...V42_SCHEMA_STATEMENTS];
+  }
+  if (version === 43) {
+    return [...V43_SCHEMA_STATEMENTS];
   }
   return [];
 }

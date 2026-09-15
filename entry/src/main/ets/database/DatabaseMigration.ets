@@ -22,6 +22,14 @@ import { V1_TO_V2_STATEMENTS, V2_TO_V3_STATEMENTS, V3_TO_V4_STATEMENTS, V4_TO_V5
 import {
   TABLE_CHATS,
   TABLE_MESSAGES,
+  TABLE_CHAT_MEMORIES,
+  TABLE_LOREBOOKS,
+  COLUMN_CHATS_WORLD_ID,
+  COLUMN_CHAT_MEMORIES_WORLD_ID,
+  COLUMN_LOREBOOK_ACTIVATION_MODE,
+  COLUMN_LOREBOOK_INJECTION_BUDGET,
+  INDEX_CHATS_WORLD_ID,
+  INDEX_CHAT_MEMORIES_WORLD_ID,
   TABLE_MESSAGE_SWIPE_GROUPS,
   TABLE_CONVERSATION_BRANCHES,
   TABLE_CHAT_BRANCH_STATE,
@@ -1364,6 +1372,68 @@ class V41ToV42Migration implements DatabaseMigration {
   async migrate(store: relationalStore.RdbStore): Promise<void> {
     for (let i = 0; i < V41_TO_V42_DDL_STATEMENTS.length; i++) {
       await store.executeSql(V41_TO_V42_DDL_STATEMENTS[i]);
+    }
+  }
+}
+
+/**
+ * 创建 v42→v43 自愈迁移。
+ *
+ * 背景:某些中间构建产生的 v42 库可能缺失 world_id / activation_mode 列
+ * (user_version=42 但表结构未同步),导致 ensureSchemaExists 建索引时报
+ * "no such column" 而启动失败("加载角色列表失败")。
+ *
+ * 本迁移逐表检查列是否存在,缺失才 ALTER 补列,再重建索引(IF NOT EXISTS 幂等)。
+ * 对正常库无操作,对残缺库自愈。
+ */
+export function createV42ToV43Migration(): DatabaseMigration {
+  return new V42ToV43Migration();
+}
+
+class V42ToV43Migration implements DatabaseMigration {
+  readonly fromVersion: number = 42;
+  readonly toVersion: number = 43;
+
+  async migrate(store: relationalStore.RdbStore): Promise<void> {
+    // chats.world_id
+    await this.ensureColumn(store, TABLE_CHATS, COLUMN_CHATS_WORLD_ID,
+      `ALTER TABLE ${TABLE_CHATS} ADD COLUMN ${COLUMN_CHATS_WORLD_ID} TEXT NOT NULL DEFAULT ''`);
+    // chat_memories.world_id
+    await this.ensureColumn(store, TABLE_CHAT_MEMORIES, COLUMN_CHAT_MEMORIES_WORLD_ID,
+      `ALTER TABLE ${TABLE_CHAT_MEMORIES} ADD COLUMN ${COLUMN_CHAT_MEMORIES_WORLD_ID} TEXT NOT NULL DEFAULT ''`);
+    // lorebooks.activation_mode / injection_budget_chars(v41 兜底)
+    await this.ensureColumn(store, TABLE_LOREBOOKS, COLUMN_LOREBOOK_ACTIVATION_MODE,
+      `ALTER TABLE ${TABLE_LOREBOOKS} ADD COLUMN ${COLUMN_LOREBOOK_ACTIVATION_MODE} TEXT NOT NULL DEFAULT 'FollowGlobal'`);
+    await this.ensureColumn(store, TABLE_LOREBOOKS, COLUMN_LOREBOOK_INJECTION_BUDGET,
+      `ALTER TABLE ${TABLE_LOREBOOKS} ADD COLUMN ${COLUMN_LOREBOOK_INJECTION_BUDGET} INTEGER NOT NULL DEFAULT 0`);
+    // 索引(列存在后创建,幂等)
+    await store.executeSql(
+      `CREATE INDEX IF NOT EXISTS ${INDEX_CHATS_WORLD_ID} ON ${TABLE_CHATS}(${COLUMN_CHATS_WORLD_ID})`);
+    await store.executeSql(
+      `CREATE INDEX IF NOT EXISTS ${INDEX_CHAT_MEMORIES_WORLD_ID} ON ${TABLE_CHAT_MEMORIES}(${COLUMN_CHAT_MEMORIES_WORLD_ID})`);
+  }
+
+  private async ensureColumn(
+    store: relationalStore.RdbStore,
+    table: string,
+    column: string,
+    alterSql: string
+  ): Promise<void> {
+    const rs: relationalStore.ResultSet = await store.querySql(`PRAGMA table_info(${table})`);
+    let found: boolean = false;
+    try {
+      while (rs.goToNextRow()) {
+        const colIndex: number = rs.getColumnIndex('name');
+        if (colIndex >= 0 && rs.getString(colIndex) === column) {
+          found = true;
+          break;
+        }
+      }
+    } finally {
+      rs.close();
+    }
+    if (!found) {
+      await store.executeSql(alterSql);
     }
   }
 }

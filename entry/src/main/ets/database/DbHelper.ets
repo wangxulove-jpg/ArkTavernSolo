@@ -66,6 +66,7 @@ import {
   createV39ToV40Migration,
   createV40ToV41Migration,
   createV41ToV42Migration,
+  createV42ToV43Migration,
   DatabaseMigration,
   MigrationPath
 } from './DatabaseMigration';
@@ -181,7 +182,7 @@ export class DbHelper {
 
   constructor(
     databaseName: string = DATABASE_NAME,
-    migrations: ReadonlyArray<DatabaseMigration> = [createV1ToV2Migration(), createV2ToV3Migration(), createV3ToV4Migration(), createV4ToV5Migration(), createV5ToV6Migration(), createV6ToV7Migration(), createV7ToV8Migration(), createV8ToV9Migration(), createV9ToV10Migration(), createV10ToV11Migration(), createV11ToV12Migration(), createV12ToV13Migration(), createV13ToV14Migration(), createV14ToV15Migration(), createV15ToV16Migration(), createV16ToV17Migration(), createV17ToV18Migration(), createV18ToV19Migration(), createV19ToV20Migration(), createV20ToV21Migration(), createV21ToV22Migration(), createV22ToV23Migration(), createV23ToV24Migration(), createV24ToV25Migration(), createV25ToV26Migration(), createV26ToV27Migration(), createV27ToV28Migration(), createV28ToV29Migration(), createV29ToV30Migration(), createV30ToV31Migration(), createV31ToV32Migration(), createV32ToV33Migration(), createV33ToV34Migration(), createV34ToV35Migration(), createV35ToV36Migration(), createV36ToV37Migration(), createV37ToV38Migration(), createV38ToV39Migration(), createV39ToV40Migration(), createV40ToV41Migration(), createV41ToV42Migration()]
+    migrations: ReadonlyArray<DatabaseMigration> = [createV1ToV2Migration(), createV2ToV3Migration(), createV3ToV4Migration(), createV4ToV5Migration(), createV5ToV6Migration(), createV6ToV7Migration(), createV7ToV8Migration(), createV8ToV9Migration(), createV9ToV10Migration(), createV10ToV11Migration(), createV11ToV12Migration(), createV12ToV13Migration(), createV13ToV14Migration(), createV14ToV15Migration(), createV15ToV16Migration(), createV16ToV17Migration(), createV17ToV18Migration(), createV18ToV19Migration(), createV19ToV20Migration(), createV20ToV21Migration(), createV21ToV22Migration(), createV22ToV23Migration(), createV23ToV24Migration(), createV24ToV25Migration(), createV25ToV26Migration(), createV26ToV27Migration(), createV27ToV28Migration(), createV28ToV29Migration(), createV29ToV30Migration(), createV30ToV31Migration(), createV31ToV32Migration(), createV32ToV33Migration(), createV33ToV34Migration(), createV34ToV35Migration(), createV35ToV36Migration(), createV36ToV37Migration(), createV37ToV38Migration(), createV38ToV39Migration(), createV39ToV40Migration(), createV40ToV41Migration(), createV41ToV42Migration(), createV42ToV43Migration()]
   ) {
     this.databaseName = databaseName;
     this.migrations = migrations;
