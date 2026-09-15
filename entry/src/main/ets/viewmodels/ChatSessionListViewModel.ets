@@ -301,7 +301,7 @@ export class ChatSessionListViewModel {
     return UNKNOWN_WORLD_NAME;
   }
 
-  /** 组内章节标签:组内会话按 createdAt 升序的序号("第N章") */
+  /** 组内章节标签:组内会话按 sortOrder(平局 createdAt)升序的序号("第N章") */
   getChapterLabel(chatId: string): string {
     let target: ChatSessionListItem | null = null;
     for (let i = 0; i < this.sessions.length; i++) {
@@ -319,9 +319,12 @@ export class ChatSessionListViewModel {
         sameWorld.push(this.sessions[i]);
       }
     }
-    sameWorld.sort((a: ChatSessionListItem, b: ChatSessionListItem): number =>
-      a.chat.createdAt - b.chat.createdAt
-    );
+    sameWorld.sort((a: ChatSessionListItem, b: ChatSessionListItem): number => {
+      if (a.chat.sortOrder !== b.chat.sortOrder) {
+        return a.chat.sortOrder - b.chat.sortOrder;
+      }
+      return a.chat.createdAt - b.chat.createdAt;
+    });
     for (let i = 0; i < sameWorld.length; i++) {
       if (sameWorld[i].chat.id === chatId) {
         return '第' + (i + 1).toString() + '章';
@@ -344,6 +347,30 @@ export class ChatSessionListViewModel {
     } catch (e) {
       this.errorMessage = '创建分组失败: ' + String(e);
       Logger.error(LOG_TAG, 'createWorldGroup failed: ' + String(e));
+      return false;
+    } finally {
+      this.isGroupOperating = false;
+    }
+  }
+
+  /**
+   * 新建文件夹并将会话移入(一步到位)。
+   * 由 WorldGroupService.create 直接返回新分组 id,不依赖列表排序。
+   */
+  async createWorldGroupAndMove(name: string, chatId: string): Promise<boolean> {
+    if (this.disposed) {
+      return false;
+    }
+    this.isGroupOperating = true;
+    this.errorMessage = '';
+    try {
+      const group: WorldGroup = await AppServices.getWorldGroupService().create(name);
+      await AppServices.getWorldGroupService().moveChatToWorld(chatId, group.id);
+      await this.reload();
+      return true;
+    } catch (e) {
+      this.errorMessage = '创建文件夹失败: ' + String(e);
+      Logger.error(LOG_TAG, 'createWorldGroupAndMove failed: ' + String(e));
       return false;
     } finally {
       this.isGroupOperating = false;

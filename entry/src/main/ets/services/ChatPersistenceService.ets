@@ -830,8 +830,9 @@ export class ChatPersistenceService {
   }
 
   /**
-   * 上移会话卡片(与上一条交换 sort_order)。
-   * 已是第一条时无操作返回。
+   * 上移会话卡片(与同组/同区上一条交换 sort_order)。
+   * 组内会话只与同 worldId 的会话交换,未分组会话只与未分组会话交换,
+   * 已是最前一条时无操作返回。
    */
   async moveSessionUp(chatId: string): Promise<void> {
     const chats: Chat[] = await this.chatRepository.list({
@@ -849,11 +850,18 @@ export class ChatPersistenceService {
     if (index <= 0) {
       return;
     }
-    await this.chatRepository.swapSortOrder(chatId, chats[index - 1].id);
+    const targetWorldId: string = chats[index].worldId;
+    for (let i = index - 1; i >= 0; i--) {
+      if (chats[i].worldId === targetWorldId) {
+        await this.chatRepository.swapSortOrder(chatId, chats[i].id);
+        return;
+      }
+    }
   }
 
   /**
-   * 下移会话卡片(与下一条交换 sort_order)。
+   * 下移会话卡片(与同组/同区下一条交换 sort_order)。
+   * 组内会话只与同 worldId 的会话交换,未分组会话只与未分组会话交换,
    * 已是最后一条时无操作返回。
    */
   async moveSessionDown(chatId: string): Promise<void> {
@@ -872,6 +880,12 @@ export class ChatPersistenceService {
     if (index < 0 || index >= chats.length - 1) {
       return;
     }
-    await this.chatRepository.swapSortOrder(chatId, chats[index + 1].id);
+    const targetWorldId: string = chats[index].worldId;
+    for (let i = index + 1; i < chats.length; i++) {
+      if (chats[i].worldId === targetWorldId) {
+        await this.chatRepository.swapSortOrder(chatId, chats[i].id);
+        return;
+      }
+    }
   }
 }
