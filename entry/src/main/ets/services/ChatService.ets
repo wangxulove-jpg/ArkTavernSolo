@@ -3558,7 +3558,11 @@ export class ChatService {
     let memoryEndPosition: number = -1;
     if (this.memoryService !== null && this.activeBranchId.length > 0) {
       try {
-        const multi = await this.memoryService.getMultiLayerInjectionContext(this.activeBranchId);
+        // v42: 传入当前 chat 的 worldId,世界分组内 core/chapter 跨会话共享
+        const multi = await this.memoryService.getMultiLayerInjectionContext(
+          this.activeBranchId,
+          this.currentChat !== null ? this.currentChat.worldId : ''
+        );
         if (multi.enabled) {
           // v12: 使用分层注入
           memoryLayers = {

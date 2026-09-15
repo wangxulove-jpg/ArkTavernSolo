@@ -54,7 +54,8 @@ import { MessageSwipePersistenceService } from './MessageSwipePersistenceService
 import { ConversationBranchPersistenceService } from './ConversationBranchPersistenceService';
 import { ChatMemoryRepository } from '../repositories/ChatMemoryRepository';
 import { MemoryPersistenceService } from './MemoryPersistenceService';
-import { MemoryService } from './MemoryService';
+import { MemoryService, DEFAULT_CHAPTER_TRIGGER } from './MemoryService';
+import { DEFAULT_SUMMARY_POINTS, DEFAULT_MEMORY_TRIGGER } from '../models/ChatMemory';
 import { ForkChatService } from './ForkChatService';
 import { ContextBudgetService } from './ContextBudgetService';
 import { ChatService } from './ChatService';
@@ -296,10 +297,14 @@ export class AppServices {
       this.memoryPersistenceService,
       new ChatParticipantRepository(this.dbHelper)
     );
-    // v8: MemoryService(依赖 ModelService + MemoryPersistenceService)
+    // v8: MemoryService(依赖 ModelService + MemoryPersistenceService;v42 注入 ChatRepository 解析世界分组)
     this.memoryService = new MemoryService(
       this.memoryPersistenceService,
-      this.modelService
+      this.modelService,
+      DEFAULT_SUMMARY_POINTS,
+      DEFAULT_MEMORY_TRIGGER,
+      DEFAULT_CHAPTER_TRIGGER,
+      this.chatRepository
     );
     // v8: ForkChatService(从分支创建独立对话)
     this.forkChatService = new ForkChatService(

@@ -39,7 +39,8 @@ import {
   COLUMN_MEMORY_DETAIL,
   COLUMN_MEMORY_IMPORTANCE,
   COLUMN_MEMORY_KEYWORDS_JSON,
-  COLUMN_MEMORY_SOURCE_HASH
+  COLUMN_MEMORY_SOURCE_HASH,
+  COLUMN_CHAT_MEMORIES_WORLD_ID
 } from '../database/DatabaseConstants';
 import { memoryFromRow, memoryToBucket } from './ChatMemoryRepositoryMapper';
 
@@ -191,6 +192,91 @@ export class ChatMemoryRepository {
   async listValidByBranchAndType(branchId: string, memoryType: MemoryType): Promise<ChatMemory[]> {
     const store: relationalStore.RdbStore = this.dbHelper.getStore();
     return await this.listValidByBranchAndTypeWithStore(store, branchId, memoryType);
+  }
+
+  // ===== v42: 世界分组查询 =====
+
+  /**
+   * v42: 获取指定世界分组的全部有效记忆(enabled=1 且 invalidated=0,按 endPosition ASC)。
+   * 世界分组内多个 Chat 共享 core/chapter 记忆,组外完全隔离。
+   */
+  async listValidByWorld(worldId: string): Promise<ChatMemory[]> {
+    const store: relationalStore.RdbStore = this.dbHelper.getStore();
+    const predicates: relationalStore.RdbPredicates =
+      new relationalStore.RdbPredicates(TABLE_CHAT_MEMORIES);
+    predicates.equalTo(COLUMN_CHAT_MEMORIES_WORLD_ID, worldId);
+    predicates.and();
+    predicates.equalTo(COLUMN_MEMORY_ENABLED, 1);
+    predicates.and();
+    predicates.equalTo(COLUMN_MEMORY_INVALIDATED, 0);
+    predicates.orderByAsc(COLUMN_MEMORY_END_POSITION);
+    const rs: relationalStore.ResultSet = await store.query(predicates);
+    const result: ChatMemory[] = [];
+    try {
+      while (rs.goToNextRow()) {
+        result.push(memoryFromRow(rs));
+      }
+    } finally {
+      rs.close();
+    }
+    return result;
+  }
+
+  /**
+   * v42: 获取指定世界分组某类型的有效记忆(enabled=1 且 invalidated=0)。
+   * 按 importance DESC, endPosition ASC 排序(与 listValidByBranchAndType 一致)。
+   */
+  async listValidByWorldAndType(worldId: string, memoryType: MemoryType): Promise<ChatMemory[]> {
+    const store: relationalStore.RdbStore = this.dbHelper.getStore();
+    const predicates: relationalStore.RdbPredicates =
+      new relationalStore.RdbPredicates(TABLE_CHAT_MEMORIES);
+    predicates.equalTo(COLUMN_CHAT_MEMORIES_WORLD_ID, worldId);
+    predicates.and();
+    predicates.equalTo(COLUMN_MEMORY_TYPE, memoryType);
+    predicates.and();
+    predicates.equalTo(COLUMN_MEMORY_ENABLED, 1);
+    predicates.and();
+    predicates.equalTo(COLUMN_MEMORY_INVALIDATED, 0);
+    predicates.orderByDesc(COLUMN_MEMORY_IMPORTANCE);
+    predicates.orderByAsc(COLUMN_MEMORY_END_POSITION);
+    const rs: relationalStore.ResultSet = await store.query(predicates);
+    const result: ChatMemory[] = [];
+    try {
+      while (rs.goToNextRow()) {
+        result.push(memoryFromRow(rs));
+      }
+    } finally {
+      rs.close();
+    }
+    return result;
+  }
+
+  /**
+   * v42: 获取指定世界分组的最新有效 Core 记忆(type='core' 且 invalidated=0)。
+   * 按 created_at DESC 取第一行,无则返回 null。世界单例 Core,跨会话共享。
+   */
+  async latestValidCoreByWorld(worldId: string): Promise<ChatMemory | null> {
+    const store: relationalStore.RdbStore = this.dbHelper.getStore();
+    const predicates: relationalStore.RdbPredicates =
+      new relationalStore.RdbPredicates(TABLE_CHAT_MEMORIES);
+    predicates.equalTo(COLUMN_CHAT_MEMORIES_WORLD_ID, worldId);
+    predicates.and();
+    predicates.equalTo(COLUMN_MEMORY_TYPE, 'core');
+    predicates.and();
+    predicates.equalTo(COLUMN_MEMORY_ENABLED, 1);
+    predicates.and();
+    predicates.equalTo(COLUMN_MEMORY_INVALIDATED, 0);
+    predicates.orderByDesc(COLUMN_CREATED_AT);
+    predicates.limitAs(1);
+    const rs: relationalStore.ResultSet = await store.query(predicates);
+    try {
+      if (!rs.goToFirstRow()) {
+        return null;
+      }
+      return memoryFromRow(rs);
+    } finally {
+      rs.close();
+    }
   }
 
   /**

@@ -29,6 +29,8 @@
 
 import { ChatMessage } from '../models/ChatMessage';
 import { ChatRole } from '../models/ChatRole';
+import { Chat } from '../models/Chat';
+import { ChatRepository } from '../repositories/ChatRepository';
 import {
   ChatMemory,
   createChatMemory,
@@ -131,24 +133,48 @@ export class MemoryService {
   private readonly summaryPoints: MemorySummaryPoints;
   private readonly triggerConfig: MemoryTriggerConfig;
   private readonly chapterConfig: ChapterTriggerConfig;
+  /** v42: 世界分组解析依赖(查 Chat.worldId),null 时不分组 */
+  private readonly chatRepository: ChatRepository | null;
 
   constructor(
     memoryPersistence: MemoryPersistenceService,
     modelService: ModelService,
     summaryPoints: MemorySummaryPoints = DEFAULT_SUMMARY_POINTS,
     triggerConfig: MemoryTriggerConfig = DEFAULT_MEMORY_TRIGGER,
-    chapterConfig: ChapterTriggerConfig = DEFAULT_CHAPTER_TRIGGER
+    chapterConfig: ChapterTriggerConfig = DEFAULT_CHAPTER_TRIGGER,
+    chatRepository: ChatRepository | null = null
   ) {
     this.memoryPersistence = memoryPersistence;
     this.modelService = modelService;
     this.summaryPoints = summaryPoints;
     this.triggerConfig = triggerConfig;
     this.chapterConfig = chapterConfig;
+    this.chatRepository = chatRepository;
   }
 
   /** 获取 MemoryPersistenceService(供 ChatService 事务内调用) */
   getPersistence(): MemoryPersistenceService {
     return this.memoryPersistence;
+  }
+
+  /**
+   * v42: 根据 chatId 解析所属世界分组 ID。
+   * 查不到 Chat 或查询失败时返回 ''(不分组,行为与现状一致)。
+   */
+  private async resolveWorldIdByChat(chatId: string): Promise<string> {
+    if (this.chatRepository === null) {
+      return '';
+    }
+    try {
+      const chat: Chat | null = await this.chatRepository.getById(chatId);
+      if (chat === null) {
+        return '';
+      }
+      return chat.worldId;
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'resolveWorldIdByChat failed: ' + String(e));
+      return '';
+    }
   }
 
   // ===== 加载 =====
@@ -180,9 +206,10 @@ export class MemoryService {
   /**
    * 获取注入 Prompt 的记忆上下文(旧版,兼容单条摘要)。
    * 优先返回最新的 rolling memory,回退到最新 memory。
+   * @param worldId v42: 世界分组 ID(非空时 core/chapter 以世界共享记忆为准),默认 ''。
    */
-  async getInjectionContext(branchId: string): Promise<MemoryInjectionContext> {
-    const multi: MultiLayerMemoryInjection = await this.getMultiLayerInjectionContext(branchId);
+  async getInjectionContext(branchId: string, worldId: string = ''): Promise<MemoryInjectionContext> {
+    const multi: MultiLayerMemoryInjection = await this.getMultiLayerInjectionContext(branchId, worldId);
     if (!multi.enabled) {
       return {
         summary: '',
@@ -204,15 +231,21 @@ export class MemoryService {
    * 按类型分组返回,供 PromptBuilder 分段注入。
    *
    * @param branchId 当前 Branch ID
+   * @param worldId v42: 世界分组 ID。非空时 core/chapter 以世界共享记忆为准
+   *        (世界章节跨分支,position 不可比,按 createdAt 降序取最近 N 条);
+   *        rolling/legacy 与窗口锚点仍只由本分支 allValid 计算。默认 ''(现状逻辑)。
    * @returns 多层记忆注入上下文(全空时 enabled=false)
    */
-  async getMultiLayerInjectionContext(branchId: string): Promise<MultiLayerMemoryInjection> {
+  async getMultiLayerInjectionContext(
+    branchId: string,
+    worldId: string = ''
+  ): Promise<MultiLayerMemoryInjection> {
     if (branchId.length === 0) {
       return createEmptyMultiLayerInjection();
     }
     try {
       const allValid: ChatMemory[] = await this.memoryPersistence.listValidByBranch(branchId);
-      if (allValid.length === 0) {
+      if (allValid.length === 0 && worldId.length === 0) {
         return createEmptyMultiLayerInjection();
       }
 
@@ -262,17 +295,33 @@ export class MemoryService {
       // Legacy 保留全部(通常是旧数据迁移的单条摘要)
       // 已按 endPosition ASC 排序
 
-      const combined: string = buildCombinedSummary(core, recentChapter, recentRolling, legacy);
+      // v42: 世界分组读路径——worldId 非空时 core/chapter 以世界共享记忆为准。
+      // 世界记忆来自不同分支,position 不可跨分支比较,chapter 按 createdAt 降序取最近 N 条。
+      let finalCore: ChatMemory[] = core;
+      let finalChapter: ChatMemory[] = recentChapter;
+      if (worldId.length > 0) {
+        const worldCore: ChatMemory | null =
+          await this.memoryPersistence.latestValidCoreByWorld(worldId);
+        finalCore = worldCore !== null ? [worldCore] : [];
+        const worldChapters: ChatMemory[] =
+          await this.memoryPersistence.listValidByWorldAndType(worldId, 'chapter');
+        worldChapters.sort((a: ChatMemory, b: ChatMemory): number => b.createdAt - a.createdAt);
+        finalChapter = worldChapters.slice(0, this.chapterConfig.recentChapterInjectCount);
+      }
+
+      const combined: string = buildCombinedSummary(finalCore, finalChapter, recentRolling, legacy);
       const enabled: boolean = combined.length > 0;
+      // 窗口锚点只由本分支 allValid 计算(世界 core/chapter 的 position 不参与本分支锚点)
+      const hasBranchAnchor: boolean = allValid.length > 0;
 
       return {
-        core,
-        chapter: recentChapter,
+        core: finalCore,
+        chapter: finalChapter,
         rolling: recentRolling,
         legacy,
         combinedSummary: combined,
-        startPosition: enabled ? minStart : 0,
-        endPosition: enabled ? maxEnd : -1,
+        startPosition: (enabled && hasBranchAnchor) ? minStart : 0,
+        endPosition: (enabled && hasBranchAnchor) ? maxEnd : -1,
         enabled
       };
     } catch (e) {
@@ -711,6 +760,8 @@ export class MemoryService {
       const lastMessage: ChatMessage = branchMessages[branchMessages.length - 1];
       const lastPosition: number = branchMessages.length - 1;
       const now: number = nowMillis();
+      // v42: 章节记忆带世界分组标记(世界内跨会话共享;章节边界仍按分支查询,作用域不变)
+      const worldId: string = await this.resolveWorldIdByChat(chatId);
       const newChapter: ChatMemory = createChatMemory(
         generateUuid(),
         chatId,
@@ -720,7 +771,9 @@ export class MemoryService {
         startIdx,
         lastPosition,
         response.content,
-        now
+        now,
+        undefined,
+        worldId
       );
       // 设置为 chapter 类型 + 元数据
       const typed: ChatMemory = withMemoryMetadata(
@@ -784,17 +837,27 @@ export class MemoryService {
     branchMessages: ChatMessage[]
   ): Promise<MemorySummaryResult> {
     try {
+      // v42: 世界分组内 Core/Chapter 跨会话共享(worldId 非空时以世界记忆为准)
+      const worldId: string = await this.resolveWorldIdByChat(chatId);
+
       // 读取现有 core memory
-      const coreList: ChatMemory[] = await this.memoryPersistence.listValidByBranchAndType(
-        branchId, 'core'
-      );
+      let coreList: ChatMemory[];
+      let chapterList: ChatMemory[];
+      if (worldId.length > 0) {
+        // 世界单例 Core:跨会话共享
+        const worldCore: ChatMemory | null =
+          await this.memoryPersistence.latestValidCoreByWorld(worldId);
+        coreList = worldCore !== null ? [worldCore] : [];
+        // 世界章节:跨会话供 core 演进
+        chapterList = await this.memoryPersistence.listValidByWorldAndType(worldId, 'chapter');
+      } else {
+        coreList = await this.memoryPersistence.listValidByBranchAndType(branchId, 'core');
+        chapterList = await this.memoryPersistence.listValidByBranchAndType(branchId, 'chapter');
+      }
       const existingCore: ChatMemory | null = coreList.length > 0 ? coreList[0] : null;
       const existingCoreText: string = existingCore !== null ? existingCore.summary : '';
 
       // 读取最近的章节(最近 2 个)
-      const chapterList: ChatMemory[] = await this.memoryPersistence.listValidByBranchAndType(
-        branchId, 'chapter'
-      );
       const recentChapters: ChatMemory[] = chapterList.slice(0, 2);
       if (recentChapters.length === 0) {
         // 无章节:不更新 core
@@ -842,7 +905,9 @@ export class MemoryService {
           0,
           lastPosition,
           response.content,
-          now
+          now,
+          undefined,
+          worldId
         );
         const typed: ChatMemory = withMemoryMetadata(
           newCore,

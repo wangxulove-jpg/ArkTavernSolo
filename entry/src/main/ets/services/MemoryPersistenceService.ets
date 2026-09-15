@@ -69,6 +69,28 @@ export class MemoryPersistenceService {
   }
 
   /**
+   * v42: 获取指定世界分组的全部有效记忆(enabled=1 且 invalidated=0)。
+   * 世界分组内多个 Chat 共享 core/chapter,组外完全隔离。
+   */
+  async listValidByWorld(worldId: string): Promise<ChatMemory[]> {
+    return await this.repository.listValidByWorld(worldId);
+  }
+
+  /**
+   * v42: 获取指定世界分组某类型的有效记忆(enabled=1 且 invalidated=0)。
+   */
+  async listValidByWorldAndType(worldId: string, memoryType: MemoryType): Promise<ChatMemory[]> {
+    return await this.repository.listValidByWorldAndType(worldId, memoryType);
+  }
+
+  /**
+   * v42: 获取指定世界分组的最新有效 Core 记忆(世界单例,跨会话共享)。
+   */
+  async latestValidCoreByWorld(worldId: string): Promise<ChatMemory | null> {
+    return await this.repository.latestValidCoreByWorld(worldId);
+  }
+
+  /**
    * 按 ID 查询 Memory。
    */
   async getById(memoryId: string): Promise<ChatMemory | null> {
