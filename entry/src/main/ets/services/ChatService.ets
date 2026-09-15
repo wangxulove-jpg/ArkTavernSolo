@@ -3610,13 +3610,7 @@ export class ChatService {
       return filtered;
     }
 
-    // 获取当前全局世界书
-    let lorebook: Lorebook | undefined = undefined;
-    if (this.lorebookService !== null) {
-      lorebook = await this.lorebookService.getCurrentLorebook() ?? undefined;
-    }
-
-    // 加载角色专属世界书(通过 characterBookId)
+    // 世界书只加载角色绑定的那本,不加载全局当前世界书(每本书只服务绑定它的角色)
     let characterBook: Lorebook | undefined = undefined;
     if (this.character !== null
       && this.character.characterBookId.length > 0
@@ -3634,13 +3628,9 @@ export class ChatService {
       }
     }
 
-    // 可观测性:记录本次请求实际加载到的世界书(全局/角色专属),用于排查"世界书是否参与注入"
+    // 可观测性:记录本次请求实际加载到的角色绑定世界书,用于排查"世界书是否参与注入"
     Logger.info(LOG_TAG,
-      'buildRequestMessages worldbook: global=' + (lorebook !== undefined
-        ? ('id=' + lorebook.id + ' name=' + lorebook.name + ' enabled=' + String(lorebook.enabled)
-          + ' entries=' + String(lorebook.entries.length))
-        : 'none')
-      + ' characterBook=' + (characterBook !== undefined
+      'buildRequestMessages worldbook: characterBook=' + (characterBook !== undefined
         ? ('id=' + characterBook.id + ' name=' + characterBook.name + ' enabled=' + String(characterBook.enabled)
           + ' entries=' + String(characterBook.entries.length))
         : 'none')
@@ -3759,15 +3749,13 @@ export class ChatService {
 
     const context: PromptBuildContext = {
       character: this.character !== null ? this.character : undefined,
-      lorebook: lorebook,
       characterBook: characterBook,
       messages: conversationMessages,
       macroContext: macroContext,
       presetSystemPrompt: presetSystemPrompt,
       // v12: 优先使用分层注入;memoryLayers 为 undefined 时 PromptBuilder 回退到 memorySummary(此处不传)
       memoryLayers: memoryLayers,
-      // 世界书激活方式:全局默认 + 深度注入位置(书级 FollowGlobal 时由 PromptBuilder 解析)
-      lorebookActivationMode: this.lorebookActivationDefault,
+      // 角色绑定书的激活方式兜底(书级 FollowGlobal 遗留数据时用全局默认) + 深度注入位置
       characterBookActivationMode: this.lorebookActivationDefault,
       lorebookDepth: this.lorebookInjectionDepth,
       // Persona 注入

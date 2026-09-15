@@ -37,8 +37,8 @@ import { ParsedLorebookFile, buildLorebookFromParsed } from '../parser/LorebookJ
 
 /** 默认扫描最近消息数 */
 const DEFAULT_SCAN_MESSAGES: number = 10;
-/** 默认最大注入字符数 */
-const DEFAULT_MAX_INJECTION_CHARS: number = 12000;
+/** 默认最大注入字符数(书级 injectionBudgetChars 为 0 时使用) */
+export const DEFAULT_MAX_INJECTION_CHARS: number = 12000;
 
 /**
  * 注入结果。

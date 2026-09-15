@@ -13,7 +13,7 @@ import {
   LorebookEntryUpdates,
   isValidActivationMode
 } from '../models/Lorebook';
-import { LorebookService } from '../services/LorebookService';
+import { LorebookService, DEFAULT_MAX_INJECTION_CHARS } from '../services/LorebookService';
 import { CharacterService } from '../services/CharacterService';
 import { CharacterBookRef } from '../repositories/CharacterRepository';
 import { parseLorebookJson, parseLorebookSource, serializeLorebook } from '../parser/LorebookJsonParser';
@@ -31,6 +31,20 @@ const GLOBAL_MODE_FULL_INJECT: LorebookActivationMode = LorebookActivationMode.F
 const GLOBAL_MODE_ON_DEMAND: LorebookActivationMode = LorebookActivationMode.OnDemand;
 /** 注入预算上限(与模型校验一致) */
 const MAX_INJECTION_BUDGET_CHARS: number = 200000;
+
+/** 世界书字符统计(供界面判断加载方式)。 */
+export interface LorebookStats {
+  /** 全部条目数 */
+  totalEntries: number;
+  /** 全部条目字符总数 */
+  totalChars: number;
+  /** 启用条目数 */
+  enabledEntries: number;
+  /** 启用条目字符总数 */
+  enabledChars: number;
+  /** constant 条目字符总数 */
+  constantChars: number;
+}
 
 @Observed
 export class LorebookViewModel {
@@ -291,7 +305,8 @@ export class LorebookViewModel {
     this.editingLorebook = null;
     this.editLorebookName = '';
     this.editLorebookDescription = '';
-    this.editLorebookActivationMode = 0;
+    // 新建默认按需激活(安全默认,可按需在编辑里切全量)
+    this.editLorebookActivationMode = 2;
     this.editLorebookBudget = '';
     this.showLorebookDialog = true;
   }
@@ -300,7 +315,8 @@ export class LorebookViewModel {
     this.editingLorebook = lorebook;
     this.editLorebookName = lorebook.name;
     this.editLorebookDescription = lorebook.description;
-    this.editLorebookActivationMode = this.activationModeToNumber(lorebook.activationMode);
+    // 每本书直接二选一:遗留 FollowGlobal 书按全局默认解析后显示,保存即固化
+    this.editLorebookActivationMode = this.resolveEditActivationMode(lorebook.activationMode);
     this.editLorebookBudget = lorebook.injectionBudgetChars > 0
       ? String(lorebook.injectionBudgetChars) : '';
     this.showLorebookDialog = true;
@@ -345,7 +361,18 @@ export class LorebookViewModel {
   }
 
   /**
-   * 激活方式枚举 → UI 档位(0=跟随全局/1=全量/2=按需)。
+   * 编辑弹窗显示档位:每本书直接二选一(1=全量/2=按需)。
+   * 遗留 FollowGlobal 书按全局默认解析为当前生效档位,保存后固化为具体值。
+   */
+  private resolveEditActivationMode(mode: LorebookActivationMode): number {
+    if (mode === LorebookActivationMode.FollowGlobal) {
+      return this.globalActivationMode === GLOBAL_MODE_FULL_INJECT ? 1 : 2;
+    }
+    return this.activationModeToNumber(mode);
+  }
+
+  /**
+   * 激活方式枚举 → UI 档位(1=全量/2=按需,0 仅供遗留 FollowGlobal 展示)。
    */
   activationModeToNumber(mode: LorebookActivationMode): number {
     if (mode === LorebookActivationMode.FullInject) {
@@ -358,7 +385,7 @@ export class LorebookViewModel {
   }
 
   /**
-   * UI 档位 → 激活方式枚举。
+   * UI 档位 → 激活方式枚举(编辑保存时不会产生 0)。
    */
   numberToActivationMode(value: number): LorebookActivationMode {
     if (value === 1) {
@@ -383,6 +410,86 @@ export class LorebookViewModel {
       return 0;
     }
     return Math.min(parsed, MAX_INJECTION_BUDGET_CHARS);
+  }
+
+  /**
+   * 世界书字符统计(供界面判断加载方式)。
+   */
+  computeLorebookStats(lorebook: Lorebook): LorebookStats {
+    let totalEntries: number = 0;
+    let totalChars: number = 0;
+    let enabledEntries: number = 0;
+    let enabledChars: number = 0;
+    let constantChars: number = 0;
+    for (let i = 0; i < lorebook.entries.length; i++) {
+      const entry: LorebookEntry = lorebook.entries[i];
+      totalEntries++;
+      totalChars += entry.content.length;
+      if (entry.enabled) {
+        enabledEntries++;
+        enabledChars += entry.content.length;
+        if (entry.constant) {
+          constantChars += entry.content.length;
+        }
+      }
+    }
+    return {
+      totalEntries: totalEntries,
+      totalChars: totalChars,
+      enabledEntries: enabledEntries,
+      enabledChars: enabledChars,
+      constantChars: constantChars
+    };
+  }
+
+  /** 数字紧凑格式化:K/W 单位(千/万)。 */
+  formatCompact(n: number): string {
+    if (n >= 10000) {
+      return (n / 10000).toFixed(1) + 'W';
+    }
+    if (n >= 1000) {
+      return (n / 1000).toFixed(1) + 'K';
+    }
+    return String(n);
+  }
+
+  /** 生效注入预算:书级 >0 用之,否则默认预算。 */
+  effectiveBudget(lorebook: Lorebook): number {
+    return lorebook.injectionBudgetChars > 0
+      ? lorebook.injectionBudgetChars : DEFAULT_MAX_INJECTION_CHARS;
+  }
+
+  /** 全量/跟随全局且启用字符超预算时的告警文本,不超时返回空串。
+   *  modeOverride 用于编辑弹窗按当前 UI 档位即时判断(不传则按书级设置)。 */
+  computeBudgetWarning(lorebook: Lorebook, modeOverride?: LorebookActivationMode): string {
+    const mode: LorebookActivationMode = modeOverride !== undefined
+      ? modeOverride : lorebook.activationMode;
+    if (mode === LorebookActivationMode.OnDemand) {
+      return '';
+    }
+    const stats: LorebookStats = this.computeLorebookStats(lorebook);
+    const budget: number = this.effectiveBudget(lorebook);
+    if (stats.enabledChars > budget && stats.enabledEntries > 0) {
+      return '超出注入预算 ' + this.formatCompact(budget)
+        + ',全部发送会被截断,建议切换按需加载';
+    }
+    return '';
+  }
+
+  /** 编辑弹窗按 UI 档位(1=全量/2=按需)即时判断超预算告警。 */
+  computeBudgetWarningForUi(lorebook: Lorebook, uiMode: number): string {
+    const mode: LorebookActivationMode = uiMode === 1
+      ? LorebookActivationMode.FullInject : LorebookActivationMode.OnDemand;
+    return this.computeBudgetWarning(lorebook, mode);
+  }
+
+  /** 编辑弹窗统计行文本:条目数/字符/启用/预算。 */
+  buildDialogStatsLine(lorebook: Lorebook): string {
+    const stats: LorebookStats = this.computeLorebookStats(lorebook);
+    return '共 ' + stats.totalEntries + ' 条目 · '
+      + this.formatCompact(stats.totalChars) + ' 字符'
+      + ' · 启用 ' + this.formatCompact(stats.enabledChars)
+      + ' · 预算 ' + this.formatCompact(this.effectiveBudget(lorebook));
   }
 
   /**
@@ -570,14 +677,19 @@ export class LorebookViewModel {
   }
 
   /**
-   * 获取条目数量文本。
+   * 获取条目数量与字符统计文本(书列表)。
    */
   getEntryCountText(lorebook: Lorebook): string {
-    const count: number = lorebook.entries.length;
-    if (count === 0) {
+    const stats: LorebookStats = this.computeLorebookStats(lorebook);
+    if (stats.totalEntries === 0) {
       return '无条目';
     }
-    return count.toString() + ' 个条目';
+    let text: string = stats.totalEntries + ' 个条目 · '
+      + this.formatCompact(stats.totalChars) + ' 字符';
+    if (stats.constantChars > 0) {
+      text += ' · 恒定 ' + this.formatCompact(stats.constantChars);
+    }
+    return text;
   }
 }
 

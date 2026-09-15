@@ -23,7 +23,7 @@
  * - character.postHistoryInstructions 非空时作为 PostHistory 段;
  *   若包含 {{original}},替换为空字符串(当前无全局 Post-History 概念)
  * - character.characterBookId 关联的角色专属 Lorebook 由调用方加载为 characterBook,
- *   与全局 lorebook 叠加参与关键词匹配
+ *   聊天只注入角色绑定的这本书(不再有全局书籍参与)
  * - tags / creator / characterVersion / creatorNotes 不进入 Prompt
  */
 
@@ -75,9 +75,7 @@ export interface MemoryLayersInjection {
 export interface PromptBuildContext {
   /** 当前角色(可选) */
   character?: Character;
-  /** 全局世界书(可选) */
-  lorebook?: Lorebook;
-  /** 角色专属世界书(可选,通过 character.characterBookId 加载) */
+  /** 角色专属世界书(可选,通过 character.characterBookId 加载;聊天只注入这本书) */
   characterBook?: Lorebook;
   /** 当前聊天消息列表 */
   messages: ChatMessage[];
@@ -100,13 +98,7 @@ export interface PromptBuildContext {
    *  Post-History Instructions 只有在对应提示词功能启用时才注入。
    *  当角色有 postHistoryInstructions 但此 flag 为 false 时不注入。 */
   enablePostHistoryInstructions?: boolean;
-  /**
-   * 全局默认激活方式(可选)。
-   * 书级 activationMode = FollowGlobal 时使用此值解析有效模式;
-   * undefined 时回退现状行为(关键词匹配注入头部)。
-   */
-  lorebookActivationMode?: LorebookActivationMode;
-  /** 角色专属世界书的全局默认激活方式(可选,语义同上) */
+  /** 角色专属世界书的全局默认激活方式(可选,书级遗留 FollowGlobal 时兜底) */
   characterBookActivationMode?: LorebookActivationMode;
   /** 深度注入位置(0-8,默认 2)。仅在 OnDemand 模式下生效 */
   lorebookDepth?: number;
@@ -510,13 +502,12 @@ export class PromptBuilder {
   }
 
   /**
-   * 收集世界书 segments(全局 + 角色专属)。
-   * - 两个 Lorebook 都需要 enabled 才参与匹配
-   * - 每本书按各自有效激活方式独立处理:
-   *   - FullInject:全量 enabled 条目注入头部
-   *   - OnDemand:constant 注入头部 + 关键词命中条目累积到深度计划
-   *   - FollowGlobal + 全局默认 undefined:回退现状行为(关键词匹配注入头部)
-   * - 同一关键词可能同时命中全局和角色专属条目,二者叠加
+   * 收集角色绑定世界书的 segments。
+   * - 书需要 enabled 才参与匹配
+   * - 按书级激活方式处理:
+   *   - FullInject:全量 enabled 条目注入头部(全部发给模型,缓存最优)
+   *   - OnDemand:constant 注入头部 + 关键词命中条目累积到深度计划(SillyTavern 式按需)
+   *   - 遗留 FollowGlobal:用全局默认解析,未解析时回退现状行为(关键词匹配注入头部)
    * - 按 position 分到 BeforeCharacter / AfterCharacter
    * - priority 用于同位置内排序
    * @returns 深度注入计划(OnDemand 命中条目),无命中时 content 为空
@@ -527,12 +518,6 @@ export class PromptBuilder {
     matchedIds: string[]
   ): LorebookDepthPlan {
     const depthParts: string[] = [];
-    if (context.lorebook !== undefined && context.lorebook !== null && context.lorebook.enabled) {
-      const mode: LorebookActivationMode | undefined = this.resolveBookMode(
-        context.lorebook, context.lorebookActivationMode
-      );
-      this.collectBookEntries(context.lorebook, mode, context, segments, matchedIds, depthParts);
-    }
     if (context.characterBook !== undefined && context.characterBook !== null
       && context.characterBook.enabled) {
       const charMode: LorebookActivationMode | undefined = this.resolveBookMode(

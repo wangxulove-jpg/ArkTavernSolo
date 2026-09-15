@@ -1348,7 +1348,6 @@ export class ChatViewModel {
     }
     try {
       const lorebookService: LorebookService = AppServices.getLorebookService();
-      const globalBook: Lorebook | null = await lorebookService.getCurrentLorebook();
       let characterBook: Lorebook | null = null;
       const character: Character | null = this.chatService.getCharacter();
       if (character !== null && character.characterBookId.length > 0) {
@@ -1357,9 +1356,6 @@ export class ChatViewModel {
       const books: LorebookPanelBook[] = [];
       if (characterBook !== null) {
         books.push(this.buildPanelBook(characterBook, true));
-      }
-      if (globalBook !== null) {
-        books.push(this.buildPanelBook(globalBook, false));
       }
       this.lorebookPanelData = books.length > 0 ? { books: books } : null;
     } catch (e) {
@@ -1405,14 +1401,13 @@ export class ChatViewModel {
     }
     try {
       const lorebookService: LorebookService = AppServices.getLorebookService();
-      const globalBook: Lorebook | null = await lorebookService.getCurrentLorebook();
       let characterBook: Lorebook | null = null;
       const character: Character | null = this.chatService.getCharacter();
       if (character !== null && character.characterBookId.length > 0) {
         characterBook = await lorebookService.getById(character.characterBookId);
       }
       const input: AiLorebookInput = {
-        globalBook: globalBook,
+        globalBook: null,
         characterBook: characterBook,
         recentMessages: this.messages,
         instruction: instruction,

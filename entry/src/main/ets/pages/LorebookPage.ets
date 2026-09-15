@@ -33,7 +33,6 @@ import { ThemePalette } from '../theme/ThemePalette';
 struct LorebookPage {
   @State viewModel: LorebookViewModel | null = null;
   @State lorebooks: Lorebook[] = [];
-  @State currentLorebookId: string | null = null;
   /** 本地 @State 镜像 ViewModel 的 UI 状态,确保属性变化触发重渲染 */
   @State showLorebookDialog: boolean = false;
   @State showEntryDialog: boolean = false;
@@ -67,9 +66,6 @@ struct LorebookPage {
   /** 本地 @State 镜像:世界书编辑对话框的激活方式与预算 */
   @State editLorebookActivationMode: number = 0;
   @State editLorebookBudget: string = '';
-  /** 本地 @State 镜像:全局默认激活方式与深度 */
-  @State globalActivationMode: string = 'OnDemand';
-  @State globalInjectionDepth: number = 2;
   /** 顶部状态栏避让高度(由 EntryAbility 写入 AppStorage) */
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   /** 底部手势条/导航栏避让高度(由 EntryAbility 写入 AppStorage) */
@@ -102,7 +98,6 @@ struct LorebookPage {
       return;
     }
     this.lorebooks = [...this.viewModel.lorebooks];
-    this.currentLorebookId = this.viewModel.currentLorebookId;
     this.showLorebookDialog = this.viewModel.showLorebookDialog;
     this.showEntryDialog = this.viewModel.showEntryDialog;
     this.expandedLorebookId = this.viewModel.expandedLorebookId;
@@ -124,9 +119,6 @@ struct LorebookPage {
     // 同步世界书编辑对话框的激活方式与预算
     this.editLorebookActivationMode = this.viewModel.editLorebookActivationMode;
     this.editLorebookBudget = this.viewModel.editLorebookBudget;
-    // 同步全局默认激活方式与深度
-    this.globalActivationMode = this.viewModel.globalActivationMode;
-    this.globalInjectionDepth = this.viewModel.globalInjectionDepth;
   }
 
   /** 选择并导入世界书文件(JSON)。成功后弹出操作弹窗。 */
@@ -217,9 +209,6 @@ struct LorebookPage {
             .width('100%')
             .padding({ left: 16, right: 16, top: 8, bottom: 4 })
         }
-
-        // 全局默认激活方式设置
-        this.globalSettingsPanel()
 
         // 内容区
         Column() {
@@ -324,133 +313,6 @@ struct LorebookPage {
     .alignItems(HorizontalAlign.Center)
   }
 
-  // ===== 全局默认激活方式设置 =====
-
-  @Builder
-  globalSettingsPanel() {
-    Column() {
-      Text('全局默认激活方式')
-        .fontSize(13)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-        .width('100%')
-        .margin({ bottom: 8 })
-
-      Row() {
-        Button('全量注入')
-          .fontSize(12)
-          .backgroundColor(this.globalActivationMode === 'FullInject'
-            ? ThemePalette.accentColor(this.effectiveTheme)
-            : ThemePalette.surface2Color(this.effectiveTheme))
-          .fontColor(this.globalActivationMode === 'FullInject'
-            ? $r('app.color.app_on_accent')
-            : ThemePalette.textPrimaryColor(this.effectiveTheme))
-          .borderRadius(16)
-          .height(32)
-          .layoutWeight(1)
-          .margin({ right: 8 })
-          .onClick(() => {
-            if (this.viewModel !== null) {
-              void this.viewModel.setGlobalActivationMode(LorebookActivationMode.FullInject).then(() => {
-                this.syncFromViewModel();
-              });
-            }
-          })
-
-        Button('按需激活')
-          .fontSize(12)
-          .backgroundColor(this.globalActivationMode === 'OnDemand'
-            ? ThemePalette.accentColor(this.effectiveTheme)
-            : ThemePalette.surface2Color(this.effectiveTheme))
-          .fontColor(this.globalActivationMode === 'OnDemand'
-            ? $r('app.color.app_on_accent')
-            : ThemePalette.textPrimaryColor(this.effectiveTheme))
-          .borderRadius(16)
-          .height(32)
-          .layoutWeight(1)
-          .onClick(() => {
-            if (this.viewModel !== null) {
-              void this.viewModel.setGlobalActivationMode(LorebookActivationMode.OnDemand).then(() => {
-                this.syncFromViewModel();
-              });
-            }
-          })
-      }
-      .width('100%')
-
-      Text(this.globalActivationMode === 'FullInject'
-        ? '全量:所有启用条目注入头部,缓存命中最高,上下文占用大'
-        : '按需:恒定条目注入头部,关键词命中条目注入对话尾部,最省上下文')
-        .fontSize(11)
-        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-        .width('100%')
-        .margin({ top: 6 })
-
-      // 深度注入位置(仅按需激活时显示)
-      if (this.globalActivationMode === 'OnDemand') {
-        Row() {
-          Text('深度注入位置')
-            .fontSize(12)
-            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-            .layoutWeight(1)
-          Button('-')
-            .fontSize(14)
-            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .borderRadius(14)
-            .width(28)
-            .height(28)
-            .margin({ right: 8 })
-            .enabled(this.globalInjectionDepth > 0)
-            .onClick(() => {
-              if (this.viewModel !== null && this.globalInjectionDepth > 0) {
-                void this.viewModel.setGlobalInjectionDepth(this.globalInjectionDepth - 1).then(() => {
-                  this.syncFromViewModel();
-                });
-              }
-            })
-          Text(this.globalInjectionDepth.toString())
-            .fontSize(14)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .width(24)
-            .textAlign(TextAlign.Center)
-            .margin({ right: 8 })
-          Button('+')
-            .fontSize(14)
-            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .borderRadius(14)
-            .width(28)
-            .height(28)
-            .enabled(this.globalInjectionDepth < 8)
-            .onClick(() => {
-              if (this.viewModel !== null && this.globalInjectionDepth < 8) {
-                void this.viewModel.setGlobalInjectionDepth(this.globalInjectionDepth + 1).then(() => {
-                  this.syncFromViewModel();
-                });
-              }
-            })
-        }
-        .width('100%')
-        .margin({ top: 8 })
-
-        Text(this.globalInjectionDepth === 0
-          ? '0 = 注入到全部消息之后'
-          : '命中条目注入到倒数第 ' + this.globalInjectionDepth.toString() + ' 条消息之前')
-          .fontSize(11)
-          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-          .width('100%')
-          .margin({ top: 4 })
-      }
-    }
-    .width('100%')
-    .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-    .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
-    .border({ width: 1, color: ThemePalette.dividerColor(this.effectiveTheme) })
-    .borderRadius(10)
-    .margin({ bottom: 4 })
-  }
-
   // ===== 世界书卡片 =====
 
   @Builder
@@ -460,15 +322,6 @@ struct LorebookPage {
       Row() {
         Column() {
           Row() {
-            if (this.currentLorebookId === lb.id) {
-              Text($r('app.string.lorebook_current_badge'))
-                .fontSize(11)
-                .fontColor($r('app.color.app_on_accent'))
-                .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
-                .borderRadius(8)
-                .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-                .margin({ right: 6 })
-            }
             if (!lb.enabled) {
               Text($r('app.string.lorebook_disabled'))
                 .fontSize(11)
@@ -522,6 +375,15 @@ struct LorebookPage {
           }
           .width('100%')
 
+          // 超预算告警(全量/跟随全局且启用字符超预算时)
+          if (this.viewModel !== null && this.viewModel.computeBudgetWarning(lb).length > 0) {
+            Text(this.viewModel.computeBudgetWarning(lb))
+              .fontSize(11)
+              .fontColor($r('app.color.app_danger'))
+              .margin({ top: 2 })
+              .width('100%')
+          }
+
           // 绑定角色行
           this.boundCharactersLine(lb.id)
         }
@@ -555,27 +417,6 @@ struct LorebookPage {
 
       // 操作按钮行
       Row() {
-        Button($r('app.string.lorebook_set_current'))
-          .fontSize(12)
-          .backgroundColor(this.currentLorebookId === lb.id
-            ? ThemePalette.surface2Color(this.effectiveTheme)
-            : Color.Transparent)
-          .fontColor(this.currentLorebookId === lb.id
-            ? ThemePalette.accentColor(this.effectiveTheme)
-            : ThemePalette.textSecondaryColor(this.effectiveTheme))
-          .height(28)
-          .padding({ left: 8, right: 8 })
-          .borderRadius(6)
-          .onClick(() => {
-            if (this.viewModel !== null) {
-              void this.viewModel.setCurrentLorebook(
-                this.currentLorebookId === lb.id ? null : lb.id
-              ).then(() => {
-                this.syncFromViewModel();
-              });
-            }
-          })
-
         Button($r('app.string.lorebook_edit'))
           .fontSize(12)
           .backgroundColor(Color.Transparent)
@@ -931,34 +772,15 @@ struct LorebookPage {
             }
           })
 
-        // 激活方式(三选一:跟随全局/全量/按需)
-        Text('激活方式')
+        // 激活方式(二选一:全量发给模型 / 按需加载)
+        Text('加载方式')
           .fontSize(13)
           .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
           .width('100%')
           .margin({ bottom: 4 })
 
         Row() {
-          Button('跟随全局')
-            .fontSize(12)
-            .backgroundColor(this.editLorebookActivationMode === 0
-              ? ThemePalette.accentColor(this.effectiveTheme)
-              : ThemePalette.surface2Color(this.effectiveTheme))
-            .fontColor(this.editLorebookActivationMode === 0
-              ? $r('app.color.app_on_accent')
-              : ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .borderRadius(16)
-            .height(32)
-            .layoutWeight(1)
-            .margin({ right: 6 })
-            .onClick(() => {
-              if (this.viewModel !== null) {
-                this.viewModel.editLorebookActivationMode = 0;
-              }
-              this.editLorebookActivationMode = 0;
-            })
-
-          Button('全量')
+          Button('全部发给模型')
             .fontSize(12)
             .backgroundColor(this.editLorebookActivationMode === 1
               ? ThemePalette.accentColor(this.effectiveTheme)
@@ -977,7 +799,7 @@ struct LorebookPage {
               this.editLorebookActivationMode = 1;
             })
 
-          Button('按需')
+          Button('按需加载')
             .fontSize(12)
             .backgroundColor(this.editLorebookActivationMode === 2
               ? ThemePalette.accentColor(this.effectiveTheme)
@@ -999,14 +821,32 @@ struct LorebookPage {
         .margin({ bottom: 4 })
 
         Text(this.editLorebookActivationMode === 1
-          ? '全量:所有启用条目注入头部,缓存命中最高,上下文占用大'
-          : (this.editLorebookActivationMode === 2
-            ? '按需:恒定条目注入头部,关键词命中条目注入对话尾部,最省上下文'
-            : '跟随:使用页面顶部的全局默认激活方式'))
+          ? '全量:整本世界书全部发给模型,内容固定、缓存命中最高,适合小书'
+          : '按需:恒定条目注入头部,关键词命中条目注入对话尾部,最省上下文,适合大书')
           .fontSize(11)
           .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
           .width('100%')
           .margin({ bottom: 12 })
+
+        // 字符统计 + 超预算告警(编辑已有书时,告警跟随当前所选加载方式即时判断)
+        if (this.viewModel !== null && this.viewModel.editingLorebook !== null) {
+          Text(this.viewModel.buildDialogStatsLine(this.viewModel.editingLorebook))
+            .fontSize(11)
+            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+            .width('100%')
+            .margin({ bottom: 6 })
+          if (this.viewModel.computeBudgetWarningForUi(
+            this.viewModel.editingLorebook, this.viewModel.editLorebookActivationMode
+          ).length > 0) {
+            Text(this.viewModel.computeBudgetWarningForUi(
+              this.viewModel.editingLorebook, this.viewModel.editLorebookActivationMode
+            ))
+              .fontSize(11)
+              .fontColor($r('app.color.app_danger'))
+              .width('100%')
+              .margin({ bottom: 6 })
+          }
+        }
 
         // 注入预算(字符)
         Text('注入预算(字符,0 = 默认 12000)')
@@ -1473,24 +1313,6 @@ struct LorebookPage {
           .fontSize(12)
           .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
           .margin({ bottom: 16 })
-
-        Button($r('app.string.lorebook_set_current'))
-          .fontSize(14)
-          .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
-          .fontColor($r('app.color.app_on_accent'))
-          .height(40)
-          .width('100%')
-          .borderRadius(20)
-          .margin({ bottom: 8 })
-          .onClick(() => {
-            const id: string = this.importedBook !== null ? this.importedBook.id : '';
-            this.importedBook = null;
-            if (id.length > 0 && this.viewModel !== null) {
-              void this.viewModel.setCurrentLorebook(id).then(() => {
-                this.syncFromViewModel();
-              });
-            }
-          })
 
         Button($r('app.string.lorebook_import_bind_character'))
           .fontSize(14)
