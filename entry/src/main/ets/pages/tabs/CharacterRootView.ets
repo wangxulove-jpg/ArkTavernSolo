@@ -219,6 +219,13 @@ export struct CharacterRootView {
     this.deleteTarget = null;
     await this.viewModel!.deleteCharacter(id);
     this.syncCharacters();
+    // 删除失败时明确提示(deleteCharacter 内部捕获异常,这里读取 errorMessage 展示)
+    if (this.viewModel!.errorMessage.length > 0) {
+      promptAction.showToast({
+        message: this.viewModel!.errorMessage,
+        duration: 2500
+      });
+    }
   }
 
   /** 取消删除 */

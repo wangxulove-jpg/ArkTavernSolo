@@ -303,10 +303,14 @@ export class CharacterService {
     }
     // 2. 删除 RDB Character(按 id,幂等)
     await this.repository.remove(id);
-    // 3. 若是当前角色,清空选择
-    const currentId: string | null = await this.selectionStore.getCurrentCharacterId();
-    if (currentId === id) {
-      await this.selectionStore.clear();
+    // 3. 若是当前角色,清空选择(失败不阻塞删除)
+    try {
+      const currentId: string | null = await this.selectionStore.getCurrentCharacterId();
+      if (currentId === id) {
+        await this.selectionStore.clear();
+      }
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'remove: clear selection failed, character record already deleted');
     }
     // 4. 删除头像文件(失败不回滚角色记录)
     try {

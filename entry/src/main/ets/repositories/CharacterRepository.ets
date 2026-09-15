@@ -592,14 +592,47 @@ export class CharacterRepository {
       throw DatabaseError.invalidData('character.remove: id empty');
     }
     const store: relationalStore.RdbStore = this.dbHelper.getStore();
-    const predicates: relationalStore.RdbPredicates =
-      new relationalStore.RdbPredicates(TABLE_CHARACTERS);
-    predicates.equalTo(COLUMN_ID, id);
-    try {
-      await store.delete(predicates);
-    } catch (err) {
-      throw DatabaseError.queryFailed(`character.remove: ${extractCauseMessage(err)}`);
-    }
+    await this.dbHelper.runInTransaction(
+      async (txStore: relationalStore.RdbStore): Promise<void> => {
+        // 1. 先压缩大字段:旧导入的超大角色卡(如含 2.9MB extensions_json)单行可能超过
+        //    RDB 共享块 2MB 上限,直接 DELETE 会抛共享块错误导致"删除无反应"。
+        //    先把可能超大的文本列置空/置小,再删除。
+        const shrinkBucket: relationalStore.ValuesBucket = {};
+        shrinkBucket[COLUMN_EXTENSIONS_JSON] = '{}';
+        shrinkBucket[COLUMN_ALTERNATE_GREETINGS_JSON] = '[]';
+        shrinkBucket[COLUMN_TAGS_JSON] = '[]';
+        shrinkBucket[COLUMN_GROUP_ONLY_GREETINGS_JSON] = '[]';
+        shrinkBucket[COLUMN_CREATOR_NOTES_MULTILINGUAL_JSON] = '{}';
+        shrinkBucket[COLUMN_SOURCE_JSON] = '[]';
+        shrinkBucket[COLUMN_ASSETS_JSON] = '[]';
+        shrinkBucket[COLUMN_DESCRIPTION] = '';
+        shrinkBucket[COLUMN_PERSONALITY] = '';
+        shrinkBucket[COLUMN_SCENARIO] = '';
+        shrinkBucket[COLUMN_FIRST_MESSAGE] = '';
+        shrinkBucket[COLUMN_MES_EXAMPLE] = '';
+        shrinkBucket[COLUMN_CREATOR_NOTES] = '';
+        shrinkBucket[COLUMN_SYSTEM_PROMPT] = '';
+        shrinkBucket[COLUMN_POST_HISTORY_INSTRUCTIONS] = '';
+        const shrinkPredicates: relationalStore.RdbPredicates =
+          new relationalStore.RdbPredicates(TABLE_CHARACTERS);
+        shrinkPredicates.equalTo(COLUMN_ID, id);
+        try {
+          await txStore.update(shrinkBucket, shrinkPredicates);
+        } catch (e) {
+          // 压缩失败不阻塞删除尝试(小行不会走到这一步)
+        }
+        // 2. 删除行(压缩后行已变小,不会再触发共享块错误)
+        const predicates: relationalStore.RdbPredicates =
+          new relationalStore.RdbPredicates(TABLE_CHARACTERS);
+        predicates.equalTo(COLUMN_ID, id);
+        try {
+          await txStore.delete(predicates);
+        } catch (err) {
+          throw DatabaseError.queryFailed(`character.remove: ${extractCauseMessage(err)}`);
+        }
+      },
+      'character_remove'
+    );
   }
 
   /**

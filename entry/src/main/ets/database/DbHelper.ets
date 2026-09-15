@@ -96,6 +96,7 @@ export type TransactionOperation =
   | 'chat_fork'
   | 'character_swap_sort_order'
   | 'chat_swap_sort_order'
+  | 'character_remove'
   | 'v5_migration'
   | 'v5_integrity_repair'
   | 'chat_archive_import'
