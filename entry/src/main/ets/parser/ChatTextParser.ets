@@ -934,6 +934,17 @@ interface CollapsibleParsed {
   readonly body: string;
 }
 
+/** _.set(...) 变量操作行提取结果 */
+interface SetOperationExtraction {
+  /** 移除变量操作行后的剩余文本 */
+  readonly residual: string;
+  /** 提取到的变量操作行(含可能的前后 ``` 围栏之间的内容) */
+  readonly lines: string[];
+}
+
+/** 折叠块 id 序号(保证 id 唯一) */
+let setSeqCounter: number = 0;
+
 /** 需要整体隐藏的指令块标签(含内容删除) */
 const INSTRUCTION_TAGS: string[] = ['思考', '变量思考', 'upstore', 'thought', 'reasoning'];
 
@@ -1013,14 +1024,27 @@ export function parseChatChunks(
  * 而是作为一个结构化表格分块交给渲染层做列对齐。
  */
 function buildLightChunks(text: string, options: ChatTextParserOptions): ChatRenderChunk[] {
+  const result: ChatRenderChunk[] = [];
   let s: string = text;
+  // 先提取 _.set(...) 变量操作行(含可能包裹的 ``` 围栏)→ 折叠块(默认收起,点击展开)
+  const setExtracted: SetOperationExtraction = extractSetOperationLines(s);
+  if (setExtracted.lines.length > 0) {
+    const setChunk: CollapsibleChatRenderChunk = {
+      type: 'collapsible',
+      id: 'set_' + setSeqCounter.toString(),
+      title: '变量初始化 (' + setExtracted.lines.length + ')',
+      content: setExtracted.lines.join('\n')
+    };
+    setSeqCounter++;
+    result.push(setChunk);
+  }
+  s = setExtracted.residual;
   s = stripInstructionBlocks(s);
   s = resolveDiceMacros(s);
   s = sanitizeHtmlTags(s);
   if (s.length === 0) {
     return [];
   }
-  const result: ChatRenderChunk[] = [];
   const lines: string[] = s.split('\n');
   // 累积的普通文本行(整段交给 parseChatText,保留内部换行语义)
   const textLines: string[] = [];
@@ -1278,6 +1302,58 @@ function stripInstructionBlocks(input: string): string {
   }
   s = s.replace(/[\n]+\s*$/, '\n');
   return s;
+}
+
+/**
+ * 提取 _.set(...) 变量操作行。
+ * AI 可能直接输出 `_.set('路径', 旧值, 新值); // 注释` 形式的变量操作(upstore 协议的另一种写法),
+ * 这些是给前端解析执行的状态配置,不应作为叙事正文展示,提取为可折叠块(默认收起)。
+ * 若变量操作行被 Markdown ``` 围栏包裹,围栏一并吸收,避免残留孤立的 ```。
+ */
+function extractSetOperationLines(input: string): SetOperationExtraction {
+  const lines: string[] = input.split('\n');
+  const removed: boolean[] = new Array(lines.length).fill(false);
+  const out: string[] = [];
+  const setRe: RegExp = /_\.set\(/;
+  const fenceRe: RegExp = /^\s*```/;
+  let i: number = 0;
+  while (i < lines.length) {
+    if (setRe.test(lines[i])) {
+      let j: number = i;
+      while (j < lines.length && setRe.test(lines[j])) {
+        out.push(lines[j]);
+        j++;
+      }
+      for (let k: number = i; k < j; k++) {
+        removed[k] = true;
+      }
+      // 吸收紧邻的前后 ``` 围栏行(若有),避免残留孤立围栏
+      const stripOpen: boolean = i > 0 && fenceRe.test(lines[i - 1]);
+      const stripClose: boolean = j < lines.length && fenceRe.test(lines[j]);
+      if (stripOpen) {
+        removed[i - 1] = true;
+      }
+      if (stripClose) {
+        removed[j] = true;
+        i = j + 1;
+      } else {
+        i = j;
+      }
+    } else {
+      i++;
+    }
+  }
+  const residualLines: string[] = [];
+  for (let k: number = 0; k < lines.length; k++) {
+    if (!removed[k]) {
+      residualLines.push(lines[k]);
+    }
+  }
+  const result: SetOperationExtraction = {
+    residual: residualLines.join('\n'),
+    lines: out
+  };
+  return result;
 }
 
 /**
