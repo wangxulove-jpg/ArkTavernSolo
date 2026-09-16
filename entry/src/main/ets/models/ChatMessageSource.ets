@@ -48,5 +48,7 @@ export enum ChatMessageSource {
   /** 旁白叙述指令(senderType='narrator'的System消息,受保护) */
   NarratorInstruction = 'narratorInstruction',
   /** OnDemand 世界书深度注入(受保护,不进入聊天历史) */
-  LorebookDepth = 'lorebookDepth'
+  LorebookDepth = 'lorebookDepth',
+  /** OnDemandPinned 固定世界书(受保护,记忆之后、对话之前,不进入聊天历史) */
+  LorebookPinned = 'lorebookPinned'
 }

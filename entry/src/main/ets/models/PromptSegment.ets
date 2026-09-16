@@ -47,6 +47,8 @@ export enum PromptSegmentPosition {
   MemoryKeyword = 'MemoryKeyword',
   /** 旧版单段长期记忆摘要(兼容,新代码应使用 MemoryCore/Chapter/Rolling) */
   MemorySummary = 'MemorySummary',
+  /** OnDemandPinned 固定世界书(记忆之后、对话之前,随手动记忆总结一起更新) */
+  LorebookPinned = 'LorebookPinned',
   /** 聊天历史(Conversation) */
   Conversation = 'Conversation',
   /** Post-History Instructions,位于聊天历史之后 */
@@ -106,8 +108,9 @@ const POSITION_ORDER: Record<string, number> = {
   'MemoryLegacy': 10,
   'MemoryKeyword': 11,
   'MemorySummary': 12,
-  'Conversation': 13,
-  'PostHistory': 14
+  'LorebookPinned': 13,
+  'Conversation': 14,
+  'PostHistory': 15
 };
 
 /**

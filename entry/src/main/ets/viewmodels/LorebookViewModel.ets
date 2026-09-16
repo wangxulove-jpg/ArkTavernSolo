@@ -29,6 +29,7 @@ const LOG_TAG: string = 'LorebookViewModel';
 /** 全局默认激活方式可选值(全局默认没有 FollowGlobal) */
 const GLOBAL_MODE_FULL_INJECT: LorebookActivationMode = LorebookActivationMode.FullInject;
 const GLOBAL_MODE_ON_DEMAND: LorebookActivationMode = LorebookActivationMode.OnDemand;
+const GLOBAL_MODE_ON_DEMAND_PINNED: LorebookActivationMode = LorebookActivationMode.OnDemandPinned;
 /** 注入预算上限(与模型校验一致) */
 const MAX_INJECTION_BUDGET_CHARS: number = 200000;
 
@@ -139,7 +140,8 @@ export class LorebookViewModel {
     try {
       const modeVal: string = await this.appPreferences.getString(
         LOREBOOK_ACTIVATION_DEFAULT_PREFS_KEY, '');
-      if (modeVal === GLOBAL_MODE_FULL_INJECT || modeVal === GLOBAL_MODE_ON_DEMAND) {
+      if (modeVal === GLOBAL_MODE_FULL_INJECT || modeVal === GLOBAL_MODE_ON_DEMAND
+        || modeVal === GLOBAL_MODE_ON_DEMAND_PINNED) {
         this.globalActivationMode = modeVal as LorebookActivationMode;
       } else {
         this.globalActivationMode = GLOBAL_MODE_ON_DEMAND;
@@ -371,18 +373,24 @@ export class LorebookViewModel {
   }
 
   /**
-   * 编辑弹窗显示档位:每本书直接二选一(1=全量/2=按需)。
+   * 编辑弹窗显示档位:每本书三选一(1=全量/2=按需/3=按需锁定)。
    * 遗留 FollowGlobal 书按全局默认解析为当前生效档位,保存后固化为具体值。
    */
   private resolveEditActivationMode(mode: LorebookActivationMode): number {
     if (mode === LorebookActivationMode.FollowGlobal) {
-      return this.globalActivationMode === GLOBAL_MODE_FULL_INJECT ? 1 : 2;
+      if (this.globalActivationMode === GLOBAL_MODE_FULL_INJECT) {
+        return 1;
+      }
+      if (this.globalActivationMode === GLOBAL_MODE_ON_DEMAND_PINNED) {
+        return 3;
+      }
+      return 2;
     }
     return this.activationModeToNumber(mode);
   }
 
   /**
-   * 激活方式枚举 → UI 档位(1=全量/2=按需,0 仅供遗留 FollowGlobal 展示)。
+   * 激活方式枚举 → UI 档位(1=全量/2=按需/3=按需锁定,0 仅供遗留 FollowGlobal 展示)。
    */
   activationModeToNumber(mode: LorebookActivationMode): number {
     if (mode === LorebookActivationMode.FullInject) {
@@ -390,6 +398,9 @@ export class LorebookViewModel {
     }
     if (mode === LorebookActivationMode.OnDemand) {
       return 2;
+    }
+    if (mode === LorebookActivationMode.OnDemandPinned) {
+      return 3;
     }
     return 0;
   }
@@ -403,6 +414,9 @@ export class LorebookViewModel {
     }
     if (value === 2) {
       return LorebookActivationMode.OnDemand;
+    }
+    if (value === 3) {
+      return LorebookActivationMode.OnDemandPinned;
     }
     return LorebookActivationMode.FollowGlobal;
   }
@@ -504,7 +518,8 @@ export class LorebookViewModel {
   computeBudgetWarning(lorebook: Lorebook, modeOverride?: LorebookActivationMode): string {
     const mode: LorebookActivationMode = modeOverride !== undefined
       ? modeOverride : lorebook.activationMode;
-    if (mode === LorebookActivationMode.OnDemand) {
+    if (mode === LorebookActivationMode.OnDemand
+      || mode === LorebookActivationMode.OnDemandPinned) {
       return '';
     }
     const stats: LorebookStats = this.computeLorebookStats(lorebook);
@@ -516,10 +531,9 @@ export class LorebookViewModel {
     return '';
   }
 
-  /** 编辑弹窗按 UI 档位(1=全量/2=按需)即时判断超预算告警。 */
+  /** 编辑弹窗按 UI 档位(1=全量/2=按需/3=按需锁定)即时判断超预算告警。 */
   computeBudgetWarningForUi(lorebook: Lorebook, uiMode: number): string {
-    const mode: LorebookActivationMode = uiMode === 1
-      ? LorebookActivationMode.FullInject : LorebookActivationMode.OnDemand;
+    const mode: LorebookActivationMode = this.numberToActivationMode(uiMode);
     return this.computeBudgetWarning(lorebook, mode);
   }
 
@@ -542,6 +556,9 @@ export class LorebookViewModel {
     }
     if (mode === LorebookActivationMode.OnDemand) {
       return '按需';
+    }
+    if (mode === LorebookActivationMode.OnDemandPinned) {
+      return '按需锁定';
     }
     return '跟随全局';
   }

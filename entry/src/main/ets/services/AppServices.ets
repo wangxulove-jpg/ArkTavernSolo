@@ -32,6 +32,7 @@ import { LorebookSelectionStore } from '../storage/LorebookSelectionStore';
 import { CharacterService } from './CharacterService';
 import { CharacterMigrationService } from './CharacterMigrationService';
 import { LorebookService } from './LorebookService';
+import { LorebookPinService } from './LorebookPinService';
 import { LorebookMigrationService } from './LorebookMigrationService';
 import { MacroReplacer } from './MacroReplacer';
 import { PromptBuilder } from './PromptBuilder';
@@ -53,6 +54,7 @@ import { PromptPresetService } from './PromptPresetService';
 import { MessageSwipePersistenceService } from './MessageSwipePersistenceService';
 import { ConversationBranchPersistenceService } from './ConversationBranchPersistenceService';
 import { ChatMemoryRepository } from '../repositories/ChatMemoryRepository';
+import { ChatLorebookPinRepository } from '../repositories/ChatLorebookPinRepository';
 import { MemoryPersistenceService } from './MemoryPersistenceService';
 import { MemoryService, DEFAULT_CHAPTER_TRIGGER } from './MemoryService';
 import { DEFAULT_SUMMARY_POINTS, DEFAULT_MEMORY_TRIGGER } from '../models/ChatMemory';
@@ -106,6 +108,8 @@ export class AppServices {
   readonly characterService: CharacterService;
   /** LorebookService 世界书服务 */
   readonly lorebookService: LorebookService;
+  /** v45: LorebookPinService 按需锁定世界书会话钉选服务 */
+  readonly lorebookPinService: LorebookPinService;
   /** PromptBuilder 提示词构建器 */
   readonly promptBuilder: PromptBuilder;
   /** TokenCounter 上下文 Token 估算服务(不对页面公开) */
@@ -251,6 +255,11 @@ export class AppServices {
     this.lorebookService = new LorebookService(
       this.lorebookRepository,
       this.lorebookSelectionStore
+    );
+    // v45: 按需锁定世界书会话钉选服务(OnDemandPinned)
+    this.lorebookPinService = new LorebookPinService(
+      new ChatLorebookPinRepository(this.dbHelper),
+      this.lorebookService
     );
     this.lorebookMigrationService = new LorebookMigrationService(
       this.lorebookStore,
@@ -510,6 +519,13 @@ export class AppServices {
   }
 
   /**
+   * 获取 LorebookPinService 实例(v45 按需锁定世界书会话钉选)。
+   */
+  static getLorebookPinService(): LorebookPinService {
+    return AppServices.getInstance().lorebookPinService;
+  }
+
+  /**
    * 获取 PromptPresetService 实例(T-6.1B 接入 Chat 后使用)。
    */
   static getPromptPresetService(): PromptPresetService {
@@ -667,7 +683,8 @@ export class AppServices {
       services.memoryService,
       services.contextBudgetService,
       services.appPreferences,
-      services.recentMessageSelector
+      services.recentMessageSelector,
+      services.lorebookPinService
     );
   }
 

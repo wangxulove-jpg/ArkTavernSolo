@@ -102,6 +102,12 @@ export interface PromptBuildContext {
   characterBookActivationMode?: LorebookActivationMode;
   /** 深度注入位置(0-8,默认 2)。仅在 OnDemand 模式下生效 */
   lorebookDepth?: number;
+  /**
+   * v45: OnDemandPinned(按需锁定)模式的会话钉选条目(可选)。
+   * 由调用方通过 LorebookPinService.ensurePinnedEntries 预先解析后传入;
+   * 注入到记忆之后、对话之前(LorebookPinned 位置),随手动记忆总结一起更新。
+   */
+  pinnedLorebookEntries?: LorebookEntry[];
   /** v44: 记忆关键词检索命中的历史章节(可选开关,位置固定于对话前)。 */
   memoryKeywordHits?: MemoryKeywordHit[];
   /** 用户身份(可选,提供时注入到提示词) */
@@ -298,6 +304,28 @@ export class PromptBuilder {
         ChatMessageSource.MemorySummary
       );
       segments.push(kwSeg);
+    }
+
+    // 4.7 OnDemandPinned 固定世界书(v45)
+    // 位置:记忆之后、对话之前;内容由会话钉选决定,仅随手动记忆总结刷新
+    // (constant 条目已由步骤 2 注入头部,此处只注入非 constant 的钉选条目)
+    if (context.pinnedLorebookEntries !== undefined) {
+      for (let i = 0; i < context.pinnedLorebookEntries.length; i++) {
+        const entry: LorebookEntry = context.pinnedLorebookEntries[i];
+        if (entry.constant) {
+          continue;
+        }
+        matchedIds.push(entry.id);
+        const pinnedSeg: PromptSegment = createPromptSegment(
+          'lorebook-pinned-' + entry.id,
+          PromptSegmentPosition.LorebookPinned,
+          ChatRole.System,
+          entry.content,
+          entry.priority,
+          ChatMessageSource.LorebookPinned
+        );
+        segments.push(pinnedSeg);
+      }
     }
 
     // 5. Conversation:保留输入中的所有消息(包括合法 System 消息)
@@ -601,8 +629,14 @@ export class PromptBuilder {
       this.pushHeadSegments(this.lorebookService.collectAllEntries(book), segments, matchedIds);
       return;
     }
-    // OnDemand:constant 注入头部,命中条目累积到深度计划
+    // OnDemand / OnDemandPinned:constant 注入头部
     this.pushHeadSegments(this.lorebookService.collectConstantEntries(book), segments, matchedIds);
+    if (mode === LorebookActivationMode.OnDemandPinned) {
+      // OnDemandPinned:非 constant 条目由会话钉选决定(context.pinnedLorebookEntries),
+      // 在步骤 4.7 注入到记忆之后、对话之前;不做逐次关键词匹配与深度注入
+      return;
+    }
+    // OnDemand:命中条目累积到深度计划
     const matched: LorebookEntry[] = this.lorebookService.matchKeywordEntries(book, context.messages);
     for (let i = 0; i < matched.length; i++) {
       matchedIds.push(matched[i].id);

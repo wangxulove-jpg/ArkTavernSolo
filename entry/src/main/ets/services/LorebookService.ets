@@ -459,7 +459,6 @@ export class LorebookService {
    * 复用最近 N 条消息扫描与 selective 匹配逻辑,不注入头部。
    */
   matchKeywordEntries(lorebook: Lorebook, messages: ChatMessage[]): LorebookEntry[] {
-    // 复用最近 N 条消息扫描与 selective 匹配逻辑,不注入头部
     const scanDepth: number = lorebook.scanDepth > 0 ? lorebook.scanDepth : this.maxScanMessages;
     const recentTexts: string[] = [];
     let count: number = 0;
@@ -470,13 +469,23 @@ export class LorebookService {
         count++;
       }
     }
+    return this.matchKeywordEntriesAgainstTexts(lorebook, recentTexts);
+  }
+
+  /**
+   * 对给定文本列表(通常是全部对话消息)做关键词匹配,收集非 constant 且命中的条目。
+   * 供 OnDemandPinned(按需锁定)的首次钉选与手动总结刷新使用:
+   * 不限制扫描深度,扫描调用方提供的全部文本,命中即纳入(宁多勿少)。
+   * 按 priority 降序 + 书级预算截断。
+   */
+  matchKeywordEntriesAgainstTexts(lorebook: Lorebook, texts: string[]): LorebookEntry[] {
     const matched: LorebookEntry[] = [];
     for (let i = 0; i < lorebook.entries.length; i++) {
       const entry: LorebookEntry = lorebook.entries[i];
       if (!entry.enabled || entry.constant) {
         continue;
       }
-      if (this.isEntryMatched(entry, recentTexts)) {
+      if (this.isEntryMatched(entry, texts)) {
         matched.push(entry);
       }
     }

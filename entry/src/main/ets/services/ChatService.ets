@@ -32,6 +32,7 @@
 
 import { ModelService } from './ModelService';
 import { LorebookService } from './LorebookService';
+import { LorebookPinService } from './LorebookPinService';
 import { PromptBuilder, PromptBuildContext, PromptBuildResult, MemoryLayersInjection, MemoryKeywordHit } from './PromptBuilder';
 import { TokenCounter } from './TokenCounter';
 import { HistoryTrimmer } from './HistoryTrimmer';
@@ -72,7 +73,7 @@ import {
 } from '../models/ChatStreamTypes';
 import { NetworkError } from '../models/NetworkError';
 import { Character, buildCharacterSystemContent, resolveCharacterDisplayName } from '../models/Character';
-import { Lorebook, LorebookActivationMode } from '../models/Lorebook';
+import { Lorebook, LorebookEntry, LorebookActivationMode } from '../models/Lorebook';
 import { MacroContext } from '../models/MacroContext';
 import { ProviderConfig } from '../models/ProviderConfig';
 import { TokenBudget, DEFAULT_CONTEXT_WINDOW, DEFAULT_RESERVED_OUTPUT_TOKENS } from '../models/TokenBudget';
@@ -376,6 +377,8 @@ export class ChatService {
   private startTimerId: number = -1;
   private readonly modelService: ModelService;
   private readonly lorebookService: LorebookService | null;
+  /** v45: 按需锁定世界书会话钉选服务(OnDemandPinned) */
+  private readonly lorebookPinService: LorebookPinService | null;
   private readonly promptBuilder: PromptBuilder | null;
   private readonly tokenCounter: TokenCounter | null;
   private readonly historyTrimmer: HistoryTrimmer | null;
@@ -504,10 +507,12 @@ export class ChatService {
     memoryService: MemoryService | null = null,
     contextBudgetService: ContextBudgetService | null = null,
     appPreferences: AppPreferences | null = null,
-    recentMessageSelector: RecentMessageSelector | null = null
+    recentMessageSelector: RecentMessageSelector | null = null,
+    lorebookPinService: LorebookPinService | null = null
   ) {
     this.modelService = modelService;
     this.lorebookService = lorebookService;
+    this.lorebookPinService = lorebookPinService;
     this.promptBuilder = promptBuilder;
     this.tokenCounter = tokenCounter;
     this.historyTrimmer = historyTrimmer;
@@ -2802,7 +2807,8 @@ export class ChatService {
       const modeVal: string = await this.appPreferences.getString(
         LOREBOOK_ACTIVATION_DEFAULT_PREFS_KEY, '');
       if (modeVal === LorebookActivationMode.FullInject
-        || modeVal === LorebookActivationMode.OnDemand) {
+        || modeVal === LorebookActivationMode.OnDemand
+        || modeVal === LorebookActivationMode.OnDemandPinned) {
         this.lorebookActivationDefault = modeVal as LorebookActivationMode;
       } else {
         this.lorebookActivationDefault = DEFAULT_LOREBOOK_ACTIVATION_MODE;
@@ -2921,10 +2927,38 @@ export class ChatService {
         } else {
           this.notifyMemoryChanged();
           // v8.4: 窗口锚点由章节边界与保留条数动态派生,总结成功后无需额外持久化
+          // v45: 手动总结成功后刷新 OnDemandPinned 会话钉选(记忆段与世界书段一起变化)
+          this.refreshLorebookPinAsync(chatId, branchMessages);
         }
       })
       .catch((e: Object): void => {
         Logger.warn(LOG_TAG, 'ManualMemorySummary | forced chapter exception: '
+          + (e instanceof Error ? e.message : String(e)));
+      });
+  }
+
+  /**
+   * v45: 手动记忆总结成功后刷新 OnDemandPinned(按需锁定)会话钉选。
+   * 按当前角色绑定世界书 + 全部对话消息重新全量关键词匹配,替换原钉选。
+   * 后台执行,失败仅记录日志。
+   */
+  private refreshLorebookPinAsync(chatId: string, messages: ChatMessage[]): void {
+    if (this.lorebookPinService === null || this.lorebookService === null) {
+      return;
+    }
+    if (this.character === null || this.character.characterBookId.length === 0) {
+      return;
+    }
+    const bookId: string = this.character.characterBookId;
+    this.lorebookService.getById(bookId)
+      .then((book: Lorebook | null): Promise<void> => {
+        if (book === null || !book.enabled) {
+          return Promise.resolve();
+        }
+        return this.lorebookPinService!.refreshPinnedEntries(chatId, book, messages);
+      })
+      .catch((e: Object): void => {
+        Logger.warn(LOG_TAG, 'ManualMemorySummary | lorebook pin refresh failed: '
           + (e instanceof Error ? e.message : String(e)));
       });
   }
@@ -3678,6 +3712,32 @@ export class ChatService {
         : 'none')
       + ' characterBookId=' + (this.character !== null ? this.character.characterBookId : ''));
 
+    // v45: OnDemandPinned(按需锁定)会话钉选加载
+    // - 已有钉选记录 → 直接按记录取条目(切换会话/重新生成都不重算,缓存前缀稳定)
+    // - 无钉选记录 → 按当前全部消息(新会话即首条消息)首次钉选并落库
+    let pinnedLorebookEntries: LorebookEntry[] | undefined = undefined;
+    if (characterBook !== undefined
+      && this.lorebookPinService !== null
+      && this.currentChatId !== undefined
+      && this.currentChatId.length > 0) {
+      const effectiveMode: LorebookActivationMode =
+        characterBook.activationMode !== LorebookActivationMode.FollowGlobal
+          ? characterBook.activationMode : this.lorebookActivationDefault;
+      if (effectiveMode === LorebookActivationMode.OnDemandPinned) {
+        try {
+          pinnedLorebookEntries = await this.lorebookPinService.ensurePinnedEntries(
+            this.currentChatId, characterBook, sourceMessages
+          );
+          Logger.info(LOG_TAG, 'buildRequestMessages lorebookPin: entries='
+            + String(pinnedLorebookEntries.length));
+        } catch (e) {
+          Logger.warn(LOG_TAG, 'lorebook pin ensure failed: '
+            + (e instanceof Error ? e.message : String(e)));
+          pinnedLorebookEntries = [];
+        }
+      }
+    }
+
     // 通过 PromptBuilder.buildMacroContext 构建宏替换上下文
     // (包含 description / personality / scenario / mesExample / lastMessage / originalContent)
     // 用户称呼优先级:对话覆盖 > 角色设置 > 全局设置 > 'User'
@@ -3741,7 +3801,10 @@ export class ChatService {
       && this.activeBranchId.length > 0) {
       try {
         const chapterBoundary: number =
-          await this.memoryService.getChapterBoundaryPosition(this.activeBranchId);
+          await this.memoryService.getChapterBoundaryPosition(
+            this.activeBranchId,
+            this.currentChatId !== undefined ? this.currentChatId : ''
+          );
         const derivedAnchor: number = chapterBoundary - recentWindowTarget;
         memoryEndPosition = derivedAnchor >= 0 ? derivedAnchor : -1;
         Logger.info(LOG_TAG, 'buildRequestMessages | window anchor derived'
@@ -3837,6 +3900,8 @@ export class ChatService {
       // 角色绑定书的激活方式兜底(书级 FollowGlobal 遗留数据时用全局默认) + 深度注入位置
       characterBookActivationMode: this.lorebookActivationDefault,
       lorebookDepth: this.lorebookInjectionDepth,
+      // v45: OnDemandPinned 会话钉选条目(记忆之后、对话之前注入)
+      pinnedLorebookEntries: pinnedLorebookEntries,
       // 记忆关键词召回命中(可选,开关开启时注入)
       memoryKeywordHits: memoryKeywordHits,
       // Persona 注入

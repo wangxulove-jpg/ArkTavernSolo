@@ -6,7 +6,7 @@
  */
 
 export const DATABASE_NAME: string = 'arktavern_solo.db';
-export const DATABASE_VERSION: number = 44;
+export const DATABASE_VERSION: number = 45;
 
 export const TABLE_CHARACTERS: string = 'characters';
 export const TABLE_CHATS: string = 'chats';
@@ -214,6 +214,14 @@ export const INDEX_CHAT_MEMORIES_BRANCH_END_POSITION: string = 'idx_chat_memorie
 export const INDEX_CHAT_MEMORIES_BRANCH_TYPE: string = 'idx_chat_memories_branch_type';
 /** v42: chat_memories.world_id 索引(章节记忆共享) */
 export const INDEX_CHAT_MEMORIES_WORLD_ID: string = 'idx_chat_memories_world_id';
+
+// ===== v45: 按需锁定世界书会话钉选(OnDemandPinned) =====
+/** 会话钉选表:每个 chat 一行,记录该会话固定注入的世界书条目 ID 列表 */
+export const TABLE_CHAT_LOREBOOK_PINS: string = 'chat_lorebook_pins';
+
+export const COLUMN_PIN_CHAT_ID: string = 'chat_id';
+export const COLUMN_PIN_LOREBOOK_ID: string = 'lorebook_id';
+export const COLUMN_PIN_ENTRY_IDS_JSON: string = 'entry_ids_json';
 
 // ===== messages 表扩展字段(原 v10/v11 引入,已内建到 CREATE 语句) =====
 export const COLUMN_SENDER_TYPE: string = 'sender_type';

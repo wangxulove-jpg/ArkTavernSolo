@@ -114,6 +114,10 @@ import {
   INDEX_BRANCH_MESSAGES_MESSAGE_ID,
   INDEX_BRANCH_SWIPE_SELECTIONS_MESSAGE_ID,
   COLUMN_SORT_ORDER,
+  TABLE_CHAT_LOREBOOK_PINS,
+  COLUMN_PIN_CHAT_ID,
+  COLUMN_PIN_LOREBOOK_ID,
+  COLUMN_PIN_ENTRY_IDS_JSON,
   TABLE_CHAT_MEMORIES,
   COLUMN_MEMORY_ID,
   COLUMN_MEMORY_CHAT_ID,
@@ -2495,6 +2499,31 @@ export const V44_SCHEMA_STATEMENTS: string[] = [
   `ALTER TABLE ${TABLE_LOREBOOKS} ADD COLUMN ${COLUMN_LOREBOOK_SCAN_DEPTH} INTEGER NOT NULL DEFAULT 0`
 ];
 
+// ===== v45: 按需锁定世界书会话钉选(OnDemandPinned) =====
+/** 会话钉选表(每个 chat 一行,chat_id 主键) */
+const CREATE_CHAT_LOREBOOK_PINS_TABLE: string =
+  `CREATE TABLE IF NOT EXISTS ${TABLE_CHAT_LOREBOOK_PINS} (` +
+  `${COLUMN_PIN_CHAT_ID} TEXT PRIMARY KEY NOT NULL, ` +
+  `${COLUMN_PIN_LOREBOOK_ID} TEXT NOT NULL, ` +
+  `${COLUMN_PIN_ENTRY_IDS_JSON} TEXT NOT NULL DEFAULT '[]', ` +
+  `${COLUMN_CREATED_AT} INTEGER NOT NULL, ` +
+  `${COLUMN_UPDATED_AT} INTEGER NOT NULL` +
+  `)`;
+
+/**
+ * v44→v45 迁移 DDL(按需锁定世界书会话钉选表)。
+ * 安全性:仅 CREATE TABLE IF NOT EXISTS,幂等,不动现有数据。
+ */
+export const V44_TO_V45_DDL_STATEMENTS: string[] = [
+  CREATE_CHAT_LOREBOOK_PINS_TABLE
+];
+
+/** v45 完整 Schema(新安装使用) */
+export const V45_SCHEMA_STATEMENTS: string[] = [
+  ...V44_SCHEMA_STATEMENTS,
+  CREATE_CHAT_LOREBOOK_PINS_TABLE
+];
+
 export function getSchemaStatements(version: number): string[] {
   if (version === 1) {
     return [...VERSION_1_STATEMENTS];
@@ -2619,6 +2648,9 @@ export function getSchemaStatements(version: number): string[] {
   if (version === 44) {
     return [...V44_SCHEMA_STATEMENTS];
   }
+  if (version === 45) {
+    return [...V45_SCHEMA_STATEMENTS];
+  }
   return [];
 }
 
@@ -2638,6 +2670,7 @@ export function getCreateTableStatements(): string[] {
     CREATE_CONVERSATION_BRANCH_SWIPE_SELECTIONS_TABLE,
     CREATE_CHAT_MEMORIES_TABLE,
     CREATE_CHAT_PARTICIPANTS_TABLE,
+    CREATE_CHAT_LOREBOOK_PINS_TABLE,
     CREATE_WORLDS_TABLE,
     CREATE_WORLD_LOCATIONS_TABLE,
     CREATE_WORLD_LOCATION_EDGES_TABLE,

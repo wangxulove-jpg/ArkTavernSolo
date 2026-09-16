@@ -28,11 +28,14 @@ export enum LorebookPosition {
  * - FollowGlobal: 跟随全局默认激活方式
  * - FullInject: 全量注入(所有 enabled 条目稳定注入头部,缓存最优)
  * - OnDemand: 按需激活(constant 注入头部 + 关键词命中注入深度位置,省上下文)
+ * - OnDemandPinned: 按需锁定(首次按需匹配后固定注入到记忆之后、对话之前,
+ *   按会话持久化;仅在手动记忆总结成功后用全量对话重新匹配刷新,缓存友好)
  */
 export enum LorebookActivationMode {
   FollowGlobal = 'FollowGlobal',
   FullInject = 'FullInject',
-  OnDemand = 'OnDemand'
+  OnDemand = 'OnDemand',
+  OnDemandPinned = 'OnDemandPinned'
 }
 
 /**

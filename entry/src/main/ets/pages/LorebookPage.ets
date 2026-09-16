@@ -776,7 +776,7 @@ struct LorebookPage {
             }
           })
 
-        // 激活方式(二选一:全量发给模型 / 按需加载)
+        // 激活方式(三选一:全量发给模型 / 按需加载 / 按需锁定)
         Text('加载方式')
           .fontSize(13)
           .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
@@ -795,7 +795,7 @@ struct LorebookPage {
             .borderRadius(16)
             .height(32)
             .layoutWeight(1)
-            .margin({ right: 6 })
+            .margin({ right: 4 })
             .onClick(() => {
               if (this.viewModel !== null) {
                 this.viewModel.editLorebookActivationMode = 1;
@@ -814,11 +814,30 @@ struct LorebookPage {
             .borderRadius(16)
             .height(32)
             .layoutWeight(1)
+            .margin({ right: 4 })
             .onClick(() => {
               if (this.viewModel !== null) {
                 this.viewModel.editLorebookActivationMode = 2;
               }
               this.editLorebookActivationMode = 2;
+            })
+
+          Button('按需锁定')
+            .fontSize(12)
+            .backgroundColor(this.editLorebookActivationMode === 3
+              ? ThemePalette.accentColor(this.effectiveTheme)
+              : ThemePalette.surface2Color(this.effectiveTheme))
+            .fontColor(this.editLorebookActivationMode === 3
+              ? $r('app.color.app_on_accent')
+              : ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .borderRadius(16)
+            .height(32)
+            .layoutWeight(1)
+            .onClick(() => {
+              if (this.viewModel !== null) {
+                this.viewModel.editLorebookActivationMode = 3;
+              }
+              this.editLorebookActivationMode = 3;
             })
         }
         .width('100%')
@@ -826,6 +845,8 @@ struct LorebookPage {
 
         Text(this.editLorebookActivationMode === 1
           ? '全量:整本世界书全部发给模型,内容固定、缓存命中最高,适合小书'
+          : this.editLorebookActivationMode === 3
+          ? '按需锁定:首次按消息匹配后固定注入到记忆之后、对话之前,切换对话/重新生成都不变化,手动记忆总结时才刷新,缓存友好,适合大书'
           : '按需:恒定条目注入头部,关键词命中条目注入对话尾部,最省上下文,适合大书')
           .fontSize(11)
           .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))

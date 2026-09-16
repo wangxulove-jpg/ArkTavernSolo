@@ -31,6 +31,7 @@ import { AppServices } from '../services/AppServices';
 import { ChatMemory, MemoryType } from '../models/ChatMemory';
 import { ChatMessage } from '../models/ChatMessage';
 import { WorldGroup } from '../models/WorldGroup';
+import { PersistedChatSession } from '../models/PersistedChatSession';
 import { Logger } from '../utils/Logger';
 
 const LOG_TAG: string = 'MemoryMgmtVM';
@@ -192,7 +193,25 @@ export class MemoryManagementViewModel {
       }
 
       // 加载全部 Memory(按类型分组)
-      const allMemories: ChatMemory[] = await this.memoryService.listByBranch(branchId);
+      let allMemories: ChatMemory[] = await this.memoryService.listByBranch(branchId);
+      // v45: 世界分组会话合并世界池有效记忆(按 ID 去重)。
+      // 重新生成 fork 新分支后,世界共享记忆仍留在原分支,只查分支会误显示"记忆丢失"。
+      const worldId: string = await this.memoryService.getWorldIdByChat(this.chatId);
+      if (worldId.length > 0) {
+        const worldMemories: ChatMemory[] = await this.memoryService.listWorldMemories(worldId);
+        const seen: Set<string> = new Set<string>();
+        const merged: ChatMemory[] = [];
+        for (let i = 0; i < allMemories.length; i++) {
+          seen.add(allMemories[i].id);
+          merged.push(allMemories[i]);
+        }
+        for (let i = 0; i < worldMemories.length; i++) {
+          if (!seen.has(worldMemories[i].id)) {
+            merged.push(worldMemories[i]);
+          }
+        }
+        allMemories = merged;
+      }
       // v42: 解析记忆所属世界分组名(世界共享记忆的 worldId 非空)
       const worldNameMap: Map<string, string> = new Map<string, string>();
       for (let i = 0; i < allMemories.length; i++) {
@@ -491,6 +510,8 @@ export class MemoryManagementViewModel {
       if (result.success) {
         this.statusMessage = result.memory !== null ? '已生成章节' : '无新消息需归档';
         this.notifyMemoryChanged();
+        // v45: 手动总结成功后刷新按需锁定世界书会话钉选(记忆段与世界书段一起变化)
+        await this.refreshLorebookPinAsync(messages);
       } else {
         this.errorMessage = '生成失败: ' + (result.error !== undefined ? result.error : '未知错误');
         this.statusMessage = '';
@@ -502,6 +523,36 @@ export class MemoryManagementViewModel {
       Logger.error(LOG_TAG, 'regenerateSummary failed: ' + String(e));
     } finally {
       this.isOperating = false;
+    }
+  }
+
+  /**
+   * v45: 手动记忆总结成功后刷新 OnDemandPinned(按需锁定)会话钉选。
+   * 解析当前会话角色绑定的世界书,按全部对话消息重新全量关键词匹配。
+   * 失败仅记录日志,不影响总结结果。
+   */
+  private async refreshLorebookPinAsync(messages: ChatMessage[]): Promise<void> {
+    try {
+      const session: PersistedChatSession | null =
+        await AppServices.getChatPersistenceService().loadSession(this.chatId);
+      const characterId: string = session !== null ? (session.chat.characterId ?? '') : '';
+      if (characterId.length === 0) {
+        return;
+      }
+      const character = await AppServices.getCharacterService()
+        .getById(characterId);
+      if (character === null || character.characterBookId.length === 0) {
+        return;
+      }
+      const book = await AppServices.getLorebookService()
+        .getById(character.characterBookId);
+      if (book === null || !book.enabled) {
+        return;
+      }
+      await AppServices.getLorebookPinService()
+        .refreshPinnedEntries(this.chatId, book, messages);
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'refreshLorebookPinAsync failed: ' + String(e));
     }
   }
 
