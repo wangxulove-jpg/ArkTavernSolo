@@ -25,8 +25,6 @@ import { AppServices } from '../../services/AppServices';
 import { EmptyStateView } from '../../components/EmptyStateView';
 import { PressableCard } from '../../components/PressableCard';
 import { CharacterImageView } from '../../components/CharacterImageView';
-import { AppDialog } from '../../components/ui/AppDialog';
-import { AppButton } from '../../components/ui/AppButton';
 import { router, promptAction } from '@kit.ArkUI';
 import { picker } from '@kit.CoreFileKit';
 import { fileIo } from '@kit.CoreFileKit';
@@ -832,51 +830,66 @@ export struct CharacterRootView {
 
   @Builder
   deleteConfirmDialog() {
-    // 用外层 if 控制挂载/销毁,而不是给 AppDialog 翻转 visible:
-    // @Builder 传参方式下部分基础版的 AppDialog visible 状态机不同步,
-    // 会导致"点击左滑删除后弹窗不出现"(回归自 3be05b5 修复的同类问题)。
+    // 用外层 if 控制挂载/销毁。
+    // 卡片形式与 ChatSessionRootView 删除会话弹窗保持一致:
+    // surface1 背景 / radius_lg / 80% 宽度 / 透明取消 + danger 实底删除。
     if (this.deleteTarget !== null) {
-      AppDialog({
-        visible: true,
-        title: '',
-        layout: 'center',
-        actions: [
-          {
-            label: $r('app.string.character_delete_confirm_cancel'),
-            style: 'secondary',
-            enabled: true,
-            onTap: () => {
-              this.cancelDelete();
-            }
-          },
-          {
-            label: $r('app.string.character_delete_confirm_ok'),
-            style: 'danger',
-            enabled: true,
-            onTap: () => {
-              this.confirmDelete();
-            }
-          }
-        ],
-        onClose: () => {
-          // 点击外部取消
-          this.cancelDelete();
-        }
-      }) {
-        // 正文两行布局与 ChatSessionListPanel 删除会话弹窗一致:
-        // 主问题(15/主色) + 副说明(13/次色)
+      Stack() {
         Column() {
-          Text(this.formatDeleteMessage(this.deleteTarget!.name))
-            .fontSize(15)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .margin({ bottom: 8 })
-          Text('此操作不可撤销。')
-            .fontSize(13)
-            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-            .margin({ bottom: 20 })
+          Column() {
+            Text(this.formatDeleteMessage(this.deleteTarget!.name))
+              .fontSize(17)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+              .margin({ bottom: 12 })
+
+            Text('此操作不可撤销。')
+              .fontSize(14)
+              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+              .margin({ bottom: 20 })
+
+            Row() {
+              Button($r('app.string.character_delete_confirm_cancel'))
+                .fontSize(14)
+                .backgroundColor(Color.Transparent)
+                .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+                .layoutWeight(1)
+                .height(40)
+                .onClick(() => {
+                  this.cancelDelete();
+                })
+
+              Button($r('app.string.character_delete_confirm_ok'))
+                .fontSize(14)
+                .backgroundColor($r('app.color.app_danger'))
+                .fontColor(Color.White)
+                .borderRadius($r('app.float.app_radius_sm'))
+                .layoutWeight(1)
+                .height(40)
+                .margin({ left: 12 })
+                .onClick(() => {
+                  this.confirmDelete();
+                })
+            }
+            .width('100%')
+          }
+          .width('80%')
+          .padding(20)
+          .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+          .borderRadius($r('app.float.app_radius_lg'))
         }
         .width('100%')
+        .height('100%')
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
       }
+      .width('100%')
+      .height('100%')
+      .backgroundColor('rgba(0,0,0,0.5)')
+      .onClick(() => {
+        // 点击外部取消
+        this.cancelDelete();
+      })
     }
   }
 
@@ -884,54 +897,74 @@ export struct CharacterRootView {
 
   @Builder
   exportFormatDialog() {
-    // 同删除弹窗:外层 if 控制挂载/销毁,避免 AppDialog visible 状态机不同步
+    // 外层 if 控制挂载/销毁。卡片形式与删除会话/角色弹窗保持一致。
     if (this.exportTarget !== null) {
-      AppDialog({
-        visible: true,
-        title: '',
-        layout: 'center',
-        actions: [],
-        onClose: () => {
-          // 点击外部取消
-          this.cancelExport();
-        }
-      }) {
-        // 标题两行布局与删除弹窗一致(空 AppDialog 标题 + 正文文字)
+      Stack() {
         Column() {
-          Text($r('app.string.character_export_choose_format'))
-            .fontSize(15)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .margin({ bottom: 8 })
-          Text('选择导出为 PNG 图片或 JSON 文件。')
-            .fontSize(13)
-            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-            .margin({ bottom: 20 })
-          AppButton({
-            variant: 'primary',
-            label: $r('app.string.character_export_png'),
-            onPress: () => {
-              this.chooseExportPng();
-            }
-          }).margin({ bottom: 8 })
+          Column() {
+            Text($r('app.string.character_export_choose_format'))
+              .fontSize(17)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+              .margin({ bottom: 12 })
 
-          AppButton({
-            variant: 'secondary',
-            label: $r('app.string.character_export_json'),
-            onPress: () => {
-              this.chooseExportJson();
-            }
-          }).margin({ bottom: 8 })
+            Text('选择导出为 PNG 图片或 JSON 文件。')
+              .fontSize(14)
+              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+              .margin({ bottom: 20 })
 
-          AppButton({
-            variant: 'text',
-            label: $r('app.string.character_export_cancel'),
-            onPress: () => {
-              this.cancelExport();
-            }
-          })
+            Button($r('app.string.character_export_png'))
+              .fontSize(14)
+              .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
+              .fontColor($r('app.color.app_on_accent'))
+              .borderRadius($r('app.float.app_radius_sm'))
+              .height(40)
+              .width('100%')
+              .margin({ bottom: 8 })
+              .onClick(() => {
+                this.chooseExportPng();
+              })
+
+            Button($r('app.string.character_export_json'))
+              .fontSize(14)
+              .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+              .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+              .border({ width: 1, color: ThemePalette.dividerColor(this.effectiveTheme) })
+              .borderRadius($r('app.float.app_radius_sm'))
+              .height(40)
+              .width('100%')
+              .margin({ bottom: 8 })
+              .onClick(() => {
+                this.chooseExportJson();
+              })
+
+            Button($r('app.string.character_export_cancel'))
+              .fontSize(14)
+              .backgroundColor(Color.Transparent)
+              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+              .height(40)
+              .width('100%')
+              .onClick(() => {
+                this.cancelExport();
+              })
+          }
+          .width('80%')
+          .padding(20)
+          .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+          .borderRadius($r('app.float.app_radius_lg'))
         }
         .width('100%')
+        .height('100%')
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
       }
+      .width('100%')
+      .height('100%')
+      .backgroundColor('rgba(0,0,0,0.5)')
+      .onClick(() => {
+        // 点击外部取消
+        this.cancelExport();
+      })
     }
   }
 }
