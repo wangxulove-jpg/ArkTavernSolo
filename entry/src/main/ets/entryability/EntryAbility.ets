@@ -3,6 +3,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window, KeyboardAvoidMode, display } from '@kit.ArkUI';
 import { AppServices } from '../services/AppServices';
 import { WebDavSyncService } from '../services/sync/WebDavSyncService';
+import { LogBuffer } from '../utils/LogBuffer';
 
 const DOMAIN = 0x0000;
 
@@ -10,6 +11,8 @@ const SYSTEM_DARK_KEY: string = 'systemDark';
 
 export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
+    // 诊断日志缓冲尽早初始化(加载上次落盘的历史日志,本次启动日志从头收集)
+    LogBuffer.init(this.context);
     const systemColorMode: ConfigurationConstant.ColorMode =
       this.context.config?.colorMode ?? ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
     const systemDark: boolean = systemColorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK;

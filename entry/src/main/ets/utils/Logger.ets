@@ -6,6 +6,7 @@
  */
 
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { LogBuffer } from './LogBuffer';
 
 const LOG_DOMAIN: number = 0x0000;
 const LOG_TAG: string = 'ArkTavern';
@@ -172,6 +173,7 @@ function formatMessage(message: string, details?: string | Record<string, string
 /**
  * 日志工具类,提供分级日志方法。
  * 所有日志在输出前均经过脱敏处理。
+ * 除 hilog 外,同步写入 LogBuffer 诊断缓冲(供应用内导出日志)。
  */
 export class Logger {
   /**
@@ -181,6 +183,7 @@ export class Logger {
    */
   static debug(message: string, details?: string | Record<string, string>): void {
     const formatted: string = formatMessage(message, details);
+    LogBuffer.append('D', message, formatted);
     hilog.debug(LOG_DOMAIN, LOG_TAG, '%{public}s', formatted);
   }
 
@@ -191,6 +194,7 @@ export class Logger {
    */
   static info(message: string, details?: string | Record<string, string>): void {
     const formatted: string = formatMessage(message, details);
+    LogBuffer.append('I', message, formatted);
     hilog.info(LOG_DOMAIN, LOG_TAG, '%{public}s', formatted);
   }
 
@@ -201,6 +205,7 @@ export class Logger {
    */
   static warn(message: string, details?: string | Record<string, string>): void {
     const formatted: string = formatMessage(message, details);
+    LogBuffer.append('W', message, formatted);
     hilog.warn(LOG_DOMAIN, LOG_TAG, '%{public}s', formatted);
   }
 
@@ -211,6 +216,7 @@ export class Logger {
    */
   static error(message: string, details?: string | Record<string, string>): void {
     const formatted: string = formatMessage(message, details);
+    LogBuffer.append('E', message, formatted);
     hilog.error(LOG_DOMAIN, LOG_TAG, '%{public}s', formatted);
   }
 }

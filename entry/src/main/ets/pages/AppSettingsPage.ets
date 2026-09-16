@@ -9,7 +9,9 @@
  */
 
 import { router, promptAction } from '@kit.ArkUI';
+import { picker, fileIo } from '@kit.CoreFileKit';
 import { AppServices } from '../services/AppServices';
+import { LogBuffer } from '../utils/LogBuffer';
 import { AppPreferences } from '../storage/AppPreferences';
 import { ThemeManager } from '../services/ThemeManager';
 import { ThemeMode } from '../models/ThemeMode';
@@ -50,11 +52,14 @@ struct AppSettingsPage {
   @State smartGripSupported: boolean = true;
   /** 市场缓存大小文本(如 "128 KB") */
   @State marketCacheSize: string = '';
+  /** 诊断日志缓冲条数 */
+  @State logEntryCount: number = 0;
 
   private preferences: AppPreferences | null = null;
   private themeManager: ThemeManager | null = null;
 
   aboutToAppear(): void {
+    this.logEntryCount = LogBuffer.getEntryCount();
     AppServices.whenReady().then(() => {
       this.preferences = AppServices.getAppPreferences();
       this.themeManager = AppServices.getThemeManager();
@@ -194,6 +199,67 @@ struct AppSettingsPage {
     } catch (e) {
       this.marketCacheSize = '';
     }
+  }
+
+  /** 导出诊断日志:拼接缓冲文本,通过系统保存选择器写入用户选择的位置 */
+  private async exportLogs(): Promise<void> {
+    try {
+      const text: string = LogBuffer.getLogText();
+      if (text.trim().length === 0) {
+        promptAction.showToast({ message: '暂无日志可导出' });
+        return;
+      }
+      // 同步落盘一份磁盘镜像(导出的文本本身来自内存缓冲,落盘只为崩溃后留底)
+      LogBuffer.flushToDisk().catch(() => {});
+      const documentPicker = new picker.DocumentViewPicker();
+      const options = new picker.DocumentSaveOptions();
+      options.newFileNames = [this.buildLogFileName()];
+      const uris: string[] = await documentPicker.save(options);
+      if (uris.length === 0) {
+        return;
+      }
+      const file: fileIo.File = fileIo.openSync(
+        uris[0], fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC
+      );
+      try {
+        fileIo.writeSync(file.fd, text);
+      } finally {
+        fileIo.closeSync(file);
+      }
+      promptAction.showToast({ message: '日志已导出' });
+    } catch (e) {
+      promptAction.showToast({
+        message: '导出失败: ' + (e instanceof Error ? e.message : String(e))
+      });
+    }
+  }
+
+  /** 生成导出文件名:arktavern_log_YYYYMMDD_HHmmss.txt */
+  private buildLogFileName(): string {
+    const d: Date = new Date();
+    const pad = (n: number): string => n < 10 ? '0' + n.toString() : n.toString();
+    return 'arktavern_log_' + d.getFullYear().toString()
+      + pad(d.getMonth() + 1) + pad(d.getDate())
+      + '_' + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds())
+      + '.txt';
+  }
+
+  /** 弹出确认框,确认后清空诊断日志 */
+  private confirmClearLogs(): void {
+    promptAction.showDialog({
+      title: '清空日志',
+      message: '将清空内存缓冲与已落盘的日志,该操作不可恢复。确定清空吗?',
+      buttons: [
+        { text: '清空', color: $r('app.color.app_danger') },
+        { text: $r('app.string.market_cancel'), color: $r('app.color.page_secondary_text') }
+      ]
+    }).then((result: promptAction.ShowDialogSuccessResponse) => {
+      if (result.index === 0) {
+        LogBuffer.clear();
+        this.logEntryCount = 0;
+        promptAction.showToast({ message: '日志已清空' });
+      }
+    }).catch(() => {});
   }
 
   /** 字节数格式化为可读文本 */
@@ -464,6 +530,93 @@ struct AppSettingsPage {
             .alignItems(VerticalAlign.Center)
             .onClick(() => {
               this.confirmClearMarketCaches();
+            })
+
+            // ===== 诊断日志分区 =====
+            Text('诊断日志')
+              .fontSize($r('app.float.app_font_subtitle'))
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.page_primary_text'))
+              .width('100%')
+              .margin({ top: 24, bottom: 12 })
+
+            Text('应用运行日志会自动收集(含历史启动,error 后自动存档),遇到问题时导出发给我排查。日志已自动脱敏,不含 API Key。')
+              .fontSize($r('app.float.app_font_caption'))
+              .fontColor($r('app.color.page_secondary_text'))
+              .width('100%')
+              .margin({ bottom: 8 })
+
+            Row() {
+              Text('当前条数')
+                .fontSize($r('app.float.app_font_caption'))
+                .fontColor($r('app.color.page_secondary_text'))
+              Text(this.logEntryCount.toString())
+                .fontSize($r('app.float.app_font_caption'))
+                .fontColor($r('app.color.page_primary_text'))
+            }
+            .width('100%')
+            .alignItems(VerticalAlign.Top)
+            .margin({ bottom: 8 })
+
+            // 导出日志
+            Row() {
+              Column() {
+                Text('导出日志')
+                  .fontSize($r('app.float.app_font_body'))
+                  .fontColor($r('app.color.page_primary_text'))
+                  .width('100%')
+                Text('保存为 txt 文件到手机')
+                  .fontSize($r('app.float.app_font_caption'))
+                  .fontColor($r('app.color.page_secondary_text'))
+                  .width('100%')
+                  .margin({ top: 2 })
+              }
+              .layoutWeight(1)
+              .alignItems(HorizontalAlign.Start)
+
+              SymbolGlyph($r('sys.symbol.share'))
+                .fontSize(16)
+                .fontColor([$r('app.color.page_secondary_text')])
+            }
+            .width('100%')
+            .padding({ left: 12, right: 12, top: 12, bottom: 12 })
+            .borderRadius($r('app.float.app_radius_md'))
+            .backgroundColor($r('app.color.app_surface_1'))
+            .border({ width: 1, color: $r('app.color.app_divider') })
+            .alignItems(VerticalAlign.Center)
+            .onClick(() => {
+              this.exportLogs();
+            })
+
+            // 清空日志
+            Row() {
+              Column() {
+                Text('清空日志')
+                  .fontSize($r('app.float.app_font_body'))
+                  .fontColor($r('app.color.page_primary_text'))
+                  .width('100%')
+                Text('删除内存缓冲与已存档的日志')
+                  .fontSize($r('app.float.app_font_caption'))
+                  .fontColor($r('app.color.page_secondary_text'))
+                  .width('100%')
+                  .margin({ top: 2 })
+              }
+              .layoutWeight(1)
+              .alignItems(HorizontalAlign.Start)
+
+              SymbolGlyph($r('sys.symbol.trash'))
+                .fontSize(16)
+                .fontColor([$r('app.color.app_danger')])
+            }
+            .width('100%')
+            .padding({ left: 12, right: 12, top: 12, bottom: 12 })
+            .borderRadius($r('app.float.app_radius_md'))
+            .backgroundColor($r('app.color.app_surface_1'))
+            .border({ width: 1, color: $r('app.color.app_divider') })
+            .margin({ top: 8 })
+            .alignItems(VerticalAlign.Center)
+            .onClick(() => {
+              this.confirmClearLogs();
             })
 
             // ===== 发送按钮分区 =====
