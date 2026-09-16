@@ -75,5 +75,22 @@ export default function promptSegmentOrderTest() {
       expect(sorted[0].id).assertEqual('high');
       expect(sorted[1].id).assertEqual('low');
     });
+
+    it('memory_session_between_core_and_chapter', 0, () => {
+      const segments: PromptSegment[] = [
+        createPromptSegment('chapter', PromptSegmentPosition.MemoryChapter, ChatRole.System, 'ch'),
+        createPromptSegment('session', PromptSegmentPosition.MemorySession, ChatRole.System, 'ss'),
+        createPromptSegment('core', PromptSegmentPosition.MemoryCore, ChatRole.System, 'co'),
+        createPromptSegment('conversation', PromptSegmentPosition.Conversation, ChatRole.User, 'hi')
+      ];
+      const sorted: PromptSegment[] = sortSegments(segments);
+      const positions: PromptSegmentPosition[] = sorted
+        .map((s: PromptSegment): PromptSegmentPosition => s.position);
+      const coreIdx: number = positions.indexOf(PromptSegmentPosition.MemoryCore);
+      const sessionIdx: number = positions.indexOf(PromptSegmentPosition.MemorySession);
+      const chapterIdx: number = positions.indexOf(PromptSegmentPosition.MemoryChapter);
+      expect(coreIdx).assertLess(sessionIdx);
+      expect(sessionIdx).assertLess(chapterIdx);
+    });
   });
 }

@@ -60,6 +60,7 @@ import { MemoryService, DEFAULT_CHAPTER_TRIGGER } from './MemoryService';
 import { DEFAULT_SUMMARY_POINTS, DEFAULT_MEMORY_TRIGGER } from '../models/ChatMemory';
 import { ForkChatService } from './ForkChatService';
 import { ContextBudgetService } from './ContextBudgetService';
+import { MemoryLoadRefService } from './MemoryLoadRefService';
 import { ChatService } from './ChatService';
 import { ChatPersistenceService } from './ChatPersistenceService';
 import { ChatBackgroundService } from './ChatBackgroundService';
@@ -172,6 +173,8 @@ export class AppServices {
   private readonly forkChatService: ForkChatService;
   /** ContextBudgetService per-chat 上下文预算服务(v8.1) */
   private contextBudgetService: ContextBudgetService | null = null;
+  /** v46: MemoryLoadRefService 按需加载记忆引用服务。在 initialize 中创建。 */
+  private memoryLoadRefService: MemoryLoadRefService | null = null;
   /** ChatBackgroundService 聊天背景图服务(导入图片 + 模糊度 + 暗化)。在 initialize 中创建。 */
   private chatBackgroundService: ChatBackgroundService | null = null;
   /** 市场服务(Chub 公共只读浏览 + 搜索 + 详情 + 下载) */
@@ -397,6 +400,8 @@ export class AppServices {
         }
         // 创建 ContextBudgetService(只需 appPreferences)
         services.contextBudgetService = new ContextBudgetService(services.appPreferences);
+        // v46: 创建 MemoryLoadRefService(按需加载记忆引用,只需 appPreferences)
+        services.memoryLoadRefService = new MemoryLoadRefService(services.appPreferences);
         // 创建 MarketImportService(需要 appContext 写入临时 PNG 文件)
         if (services.appContext !== null) {
           services.marketImportService = new MarketImportService(
@@ -574,6 +579,14 @@ export class AppServices {
       throw new Error('ContextBudgetService not initialized');
     }
     return service;
+  }
+
+  /**
+   * 获取 MemoryLoadRefService 实例(v46 按需加载记忆引用)。
+   * 初始化未完成时返回 null。
+   */
+  static getMemoryLoadRefService(): MemoryLoadRefService | null {
+    return AppServices.getInstance().memoryLoadRefService;
   }
 
   /**

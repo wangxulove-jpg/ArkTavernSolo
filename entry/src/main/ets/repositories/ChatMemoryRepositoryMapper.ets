@@ -40,8 +40,11 @@ import {
   isValidSequence
 } from './RepositoryMappers';
 
-/** 合法记忆类型集合 */
-const VALID_MEMORY_TYPES: Set<string> = new Set(['core', 'chapter', 'rolling', 'legacy']);
+/**
+ * 合法记忆类型集合。
+ * v46 新增 session(会话记忆,世界级入口摘要,不绑定分支)。
+ */
+const VALID_MEMORY_TYPES: Set<string> = new Set(['core', 'chapter', 'rolling', 'legacy', 'session']);
 
 /** 将字符串安全转换为 MemoryType,非法值回退为默认 */
 function parseMemoryType(raw: string): MemoryType {
@@ -65,18 +68,12 @@ export function memoryFromRow(rs: relationalStore.ResultSet): ChatMemory {
   if (chatId.length === 0) {
     throw DatabaseError.invalidData('memory: chatId empty');
   }
+  // v46: branchId / startMessageId / endMessageId 允许为空——世界级记忆
+  // (session 会话记忆、addWorldMemory 世界手工记忆)不绑定具体分支/消息,
+  // 这些字段语义上为空,读取时不再抛错(此前会触发 invalid data 导致记忆加载失败)。
   const branchId: string = rs.getString(rs.getColumnIndex(COLUMN_MEMORY_BRANCH_ID));
-  if (branchId.length === 0) {
-    throw DatabaseError.invalidData('memory: branchId empty');
-  }
   const startMessageId: string = rs.getString(rs.getColumnIndex(COLUMN_MEMORY_START_MESSAGE_ID));
-  if (startMessageId.length === 0) {
-    throw DatabaseError.invalidData('memory: startMessageId empty');
-  }
   const endMessageId: string = rs.getString(rs.getColumnIndex(COLUMN_MEMORY_END_MESSAGE_ID));
-  if (endMessageId.length === 0) {
-    throw DatabaseError.invalidData('memory: endMessageId empty');
-  }
   const startPosition: number = rs.getLong(rs.getColumnIndex(COLUMN_MEMORY_START_POSITION));
   if (!isValidSequence(startPosition)) {
     throw DatabaseError.invalidData('memory: invalid startPosition');

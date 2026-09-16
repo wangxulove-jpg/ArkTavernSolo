@@ -47,6 +47,12 @@ import {
 import { ChatRequest } from '../models/ChatRequest';
 import { ModelService } from './ModelService';
 import { MemoryPersistenceService } from './MemoryPersistenceService';
+import {
+  buildEntityIndex,
+  serializeEntityIndex,
+  EntityIndex,
+  EntityIndexEntry
+} from './ChapterMemoryIndexer';
 import { Logger } from '../utils/Logger';
 import { generateUuid } from '../utils/Uuid';
 import { nowMillis } from '../utils/Time';
@@ -86,6 +92,8 @@ export interface MemoryInjectionContext {
 export interface MultiLayerMemoryInjection {
   /** Core 记忆(高优先级,全量注入) */
   core: ChatMemory[];
+  /** v46: Session 会话记忆(跨会话入口级摘要,createdAt 正序,上限 N 条) */
+  session: ChatMemory[];
   /** Chapter 记忆(按时间倒序,最近若干章节) */
   chapter: ChatMemory[];
   /** Rolling 记忆(最近 1-2 条) */
@@ -132,6 +140,9 @@ export const DEFAULT_CHAPTER_TRIGGER: ChapterTriggerConfig = {
   chunkSourceChars: 20000,
   chunkMaxMessages: 50
 };
+
+/** v46: 注入时保留的会话记忆上限(超出取最近 N 条,更旧的靠 core + 按需加载) */
+export const SESSION_MEMORY_INJECT_LIMIT: number = 8;
 
 /** v45: 归档边界解析结果(最新 chapter/rolling 的 endPosition 与其摘要)。 */
 interface ArchivedPosition {
@@ -251,11 +262,15 @@ export class MemoryService {
    * @param worldId v42: 世界分组 ID。非空时 core/chapter 以世界共享记忆为准
    *        (世界章节跨分支,position 不可比,按 createdAt 降序取最近 N 条);
    *        rolling/legacy 与窗口锚点仍只由本分支 allValid 计算。默认 ''(现状逻辑)。
+   * @param currentChatId v46: 当前会话 ID。世界分组会话章节隔离:
+   *        跨会话只注入 核心记忆 + 会话记忆(入口摘要),章节只注入本会话的最近 N 章;
+   *        其他会话细节通过"会话记忆 + 按需加载"串联。默认 '' 不启用(章节为空)。
    * @returns 多层记忆注入上下文(全空时 enabled=false)
    */
   async getMultiLayerInjectionContext(
     branchId: string,
-    worldId: string = ''
+    worldId: string = '',
+    currentChatId: string = ''
   ): Promise<MultiLayerMemoryInjection> {
     if (branchId.length === 0) {
       return createEmptyMultiLayerInjection();
@@ -314,7 +329,11 @@ export class MemoryService {
 
       // v42: 世界分组读路径——worldId 非空时 core/chapter 以世界共享记忆为准。
       // 世界记忆来自不同分支,position 不可跨分支比较,chapter 按 createdAt 降序取最近 N 条。
+      // v46: 会话隔离——跨会话只注入 核心记忆 + 会话记忆(入口摘要),
+      // 章节记忆永不注入其他会话的内容,只取本会话的最近 N 章。
+      // 其他会话的详细内容通过"会话记忆入口 + 按需加载(实体匹配/手动引用)"串联。
       let finalCore: ChatMemory[] = core;
+      let finalSession: ChatMemory[] = [];
       let finalChapter: ChatMemory[] = recentChapter;
       if (worldId.length > 0) {
         const worldCore: ChatMemory | null =
@@ -323,16 +342,25 @@ export class MemoryService {
         const worldChapters: ChatMemory[] =
           await this.memoryPersistence.listValidByWorldAndType(worldId, 'chapter');
         worldChapters.sort((a: ChatMemory, b: ChatMemory): number => b.createdAt - a.createdAt);
-        finalChapter = worldChapters.slice(0, this.chapterConfig.recentChapterInjectCount);
+
+        // v46: 会话记忆(按 chatId 去重取最新,createdAt 正序,上限 N 条)——跨会话入口级串联
+        finalSession = await this.resolveWorldSessionMemories(worldId);
+
+        // v46: 章节只注入本会话的最近 N 章(会话隔离,不再回退"全世界章节")
+        const ownChapters: ChatMemory[] = worldChapters.filter(
+          (m: ChatMemory): boolean => m.chatId === currentChatId
+        );
+        finalChapter = ownChapters.slice(0, this.chapterConfig.recentChapterInjectCount);
       }
 
-      const combined: string = buildCombinedSummary(finalCore, finalChapter, recentRolling, legacy);
+      const combined: string = buildCombinedSummary(finalCore, finalSession, finalChapter, recentRolling, legacy);
       const enabled: boolean = combined.length > 0;
       // 窗口锚点只由本分支 allValid 计算(世界 core/chapter 的 position 不参与本分支锚点)
       const hasBranchAnchor: boolean = allValid.length > 0;
 
       return {
         core: finalCore,
+        session: finalSession,
         chapter: finalChapter,
         rolling: recentRolling,
         legacy,
@@ -345,6 +373,26 @@ export class MemoryService {
       Logger.warn(LOG_TAG, 'getMultiLayerInjectionContext failed: ' + String(e));
       return createEmptyMultiLayerInjection();
     }
+  }
+
+  /**
+   * v46: 解析世界池会话记忆(按 chatId 去重取最新,createdAt 正序,上限 SESSION_MEMORY_INJECT_LIMIT)。
+   */
+  private async resolveWorldSessionMemories(worldId: string): Promise<ChatMemory[]> {
+    const worldSessions: ChatMemory[] =
+      await this.memoryPersistence.listValidByWorldAndType(worldId, 'session');
+    // 同 chatId 取 createdAt 最新一条
+    const latestByChat: Map<string, ChatMemory> = new Map<string, ChatMemory>();
+    for (let i = 0; i < worldSessions.length; i++) {
+      const m: ChatMemory = worldSessions[i];
+      const existing: ChatMemory | undefined = latestByChat.get(m.chatId);
+      if (existing === undefined || m.createdAt > existing.createdAt) {
+        latestByChat.set(m.chatId, m);
+      }
+    }
+    const sessions: ChatMemory[] = Array.from(latestByChat.values());
+    sessions.sort((a: ChatMemory, b: ChatMemory): number => a.createdAt - b.createdAt);
+    return sessions.slice(0, SESSION_MEMORY_INJECT_LIMIT);
   }
 
   /**
@@ -606,7 +654,7 @@ export class MemoryService {
         messages: summaryPrompt,
         temperature: 0.3,
         topP: 0.9,
-        maxTokens: 1024,
+        maxTokens: 4096,
         stream: false
       };
       const response = await this.modelService.sendChat(request);
@@ -836,7 +884,7 @@ export class MemoryService {
           messages: chapterPrompt,
           temperature: 0.4,
           topP: 0.9,
-          maxTokens: 4096,
+          maxTokens: 8192,
           stream: false
         };
         const response = await this.modelService.sendChat(request);
@@ -1022,7 +1070,7 @@ export class MemoryService {
         messages: corePrompt,
         temperature: 0.2,
         topP: 0.9,
-        maxTokens: 1024,
+        maxTokens: 4096,
         stream: false
       };
       const response = await this.modelService.sendChat(request);
@@ -1163,6 +1211,194 @@ export class MemoryService {
     ];
   }
 
+  // ===== v46: 会话记忆(入口级压缩摘要 + 实体索引) =====
+
+  /**
+   * v46: 生成会话记忆(仅手动触发,记忆管理页按钮)。
+   *
+   * 将一次对话记录(chat)的全部章节记忆 + 世界核心记忆压缩为 1~2k 的入口级摘要,
+   * 同时程序化构建实体索引(人名/地点/时间 → 章节映射)存入 detail,
+   * 实体名列表存入 keywordsJson(供按需加载匹配)。
+   *
+   * 规则:
+   * - 仅世界分组会话可用(worldId 非空)
+   * - 无章节记忆时返回失败(先"生成章节"再"生成会话记忆")
+   * - 重复生成:软失效同 chatId 旧 session 记忆再插入新记录(追加式)
+   * - 增量语义:旧会话记忆存在时,模型在旧版基础上合并全部章节(索引一并重建)
+   */
+  async generateSessionMemory(worldId: string, chatId: string): Promise<MemorySummaryResult> {
+    if (worldId.length === 0 || chatId.length === 0) {
+      return { success: false, memory: null, error: '仅世界分组会话支持会话记忆' };
+    }
+    if (this.chatRepository === null) {
+      return { success: false, memory: null, error: 'chat repository unavailable' };
+    }
+    try {
+      const chat: Chat | null = await this.chatRepository.getById(chatId);
+      if (chat === null) {
+        return { success: false, memory: null, error: 'chat not found' };
+      }
+      if (chat.worldId !== worldId) {
+        return { success: false, memory: null, error: 'chat world mismatch' };
+      }
+
+      // 收集该会话的全部有效章节
+      const worldChapters: ChatMemory[] =
+        await this.memoryPersistence.listValidByWorldAndType(worldId, 'chapter');
+      const chatChapters: ChatMemory[] = worldChapters.filter(
+        (m: ChatMemory): boolean => m.chatId === chatId
+      );
+      if (chatChapters.length === 0) {
+        return { success: false, memory: null, error: '该会话暂无章节记忆,请先生成章节' };
+      }
+
+      // 世界核心记忆(可无)
+      const worldCore: ChatMemory | null =
+        await this.memoryPersistence.latestValidCoreByWorld(worldId);
+
+      // 旧会话记忆(增量基础,同 chatId 取 createdAt 最新一条)
+      const worldSessions: ChatMemory[] =
+        await this.memoryPersistence.listValidByWorldAndType(worldId, 'session');
+      const oldSessions: ChatMemory[] = worldSessions.filter(
+        (m: ChatMemory): boolean => m.chatId === chatId
+      );
+      let oldSession: ChatMemory | null = null;
+      for (let i = 0; i < oldSessions.length; i++) {
+        if (oldSession === null || oldSessions[i].createdAt > oldSession.createdAt) {
+          oldSession = oldSessions[i];
+        }
+      }
+
+      // 解析当前 Provider 配置
+      const config = await this.modelService.getCurrentConfig();
+      if (config === null) {
+        return { success: false, memory: null, error: 'no current provider config' };
+      }
+      const modelName: string = config.modelName.trim();
+      if (modelName.length === 0) {
+        return { success: false, memory: null, error: 'current model name is empty' };
+      }
+
+      // 模型压缩正文
+      const sessionPrompt: ChatMessage[] = this.buildSessionPrompt(
+        oldSession !== null ? oldSession.summary : '',
+        chatChapters,
+        worldCore !== null ? worldCore.summary : ''
+      );
+      const request: ChatRequest = {
+        model: modelName,
+        messages: sessionPrompt,
+        temperature: 0.3,
+        topP: 0.9,
+        maxTokens: 8192,
+        stream: false
+      };
+      const response = await this.modelService.sendChat(request);
+      if (response.content.length === 0) {
+        return { success: false, memory: null, error: 'empty response' };
+      }
+
+      // 程序化构建实体索引(索引一并重建)
+      const entityIndex: EntityIndex = buildEntityIndex(chatChapters);
+      const indexJson: string = serializeEntityIndex(entityIndex);
+      const entityNames: string[] = entityIndex.entries.map(
+        (e: EntityIndexEntry): string => e.name
+      );
+
+      // 软失效同 chatId 旧 session 记忆
+      const now: number = nowMillis();
+      for (let i = 0; i < oldSessions.length; i++) {
+        const invalidatedOld: ChatMemory = withInvalidated(oldSessions[i], true, now);
+        await this.memoryPersistence.update(invalidatedOld);
+      }
+
+      // 插入新会话记忆
+      const base: ChatMemory = createChatMemory(
+        generateUuid(),
+        chatId,
+        '',
+        '',
+        '',
+        0,
+        0,
+        response.content,
+        now,
+        undefined,
+        worldId
+      );
+      const typed: ChatMemory = withMemoryMetadata(
+        base,
+        {
+          memoryType: 'session',
+          title: '会话记忆 · ' + (chat.title.length > 0 ? chat.title : '未命名会话'),
+          detail: indexJson,
+          importance: 80,
+          keywordsJson: JSON.stringify(entityNames),
+          sourceHash: ''
+        },
+        now
+      );
+      await this.memoryPersistence.insert(typed);
+      return { success: true, memory: typed };
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'generateSessionMemory failed: ' + String(e));
+      return { success: false, memory: null, error: String(e) };
+    }
+  }
+
+  /**
+   * v46: 构建会话记忆压缩提示词。
+   * 输出 ≤2000 字:剧情概要 + 人物简表 + 事件/地点/时间简表,作为跨会话注入的入口。
+   */
+  private buildSessionPrompt(
+    oldSessionSummary: string,
+    chapters: ChatMemory[],
+    coreSummary: string
+  ): ChatMessage[] {
+    const systemPrompt: string =
+      '你是对话记忆助手。任务:把一次完整对话记录的全部章节记忆压缩为一份"会话记忆",'
+      + '作为新会话了解这段过去的入口摘要。\n\n'
+      + '输出结构(严格使用以下小节标题):\n'
+      + '【剧情概要】\n'
+      + '本段对话的主线故事,约 800 字,包含起因-经过-关键转折-结果与结局状态。\n\n'
+      + '【人物】\n'
+      + '每人一行:人名 — 关键经历与最终现状(一句话)。\n\n'
+      + '【事件/地点/时间】\n'
+      + '关键事件、重要地点、时间线各若干行,一行一条。\n\n'
+      + '要求:\n'
+      + '- 总长不超过 2000 字\n'
+      + '- 保留人名、地名、时间等可检索的具名信息,不要泛化成"某个人/某个地方"\n'
+      + '- 不复制章节原文流水账,以信息密度为主\n'
+      + '- 若提供了旧版会话记忆,在其基础上合并全部章节后重新输出(保持结构不变)\n'
+      + '- 只输出会话记忆本身,不要解释'
+      + this.buildJailbreakInstruction();
+
+    const chaptersText: string = chapters
+      .map((c: ChatMemory, idx: number): string => '【章节 ' + (idx + 1) + '】\n' + c.summary)
+      .join('\n\n');
+
+    const userContent: string =
+      (oldSessionSummary.length > 0 ? '【旧版会话记忆】\n' + oldSessionSummary + '\n\n' : '') +
+      (coreSummary.length > 0 ? '【世界核心记忆】\n' + coreSummary + '\n\n' : '') +
+      '【全部章节记忆】\n' + chaptersText + '\n\n' +
+      '请输出压缩后的会话记忆:';
+
+    return [
+      {
+        id: 'memory-session-system',
+        role: ChatRole.System,
+        content: systemPrompt,
+        createdAt: 0
+      },
+      {
+        id: 'memory-session-user',
+        role: ChatRole.User,
+        content: userContent,
+        createdAt: 0
+      }
+    ];
+  }
+
   // ===== v44: 世界级手工记忆与关键词召回 =====
 
   /**
@@ -1205,6 +1441,17 @@ export class MemoryService {
   /** 列出文件夹全部有效记忆(供记忆管理页)。 */
   async listWorldMemories(worldId: string): Promise<ChatMemory[]> {
     return await this.memoryPersistence.listValidByWorld(worldId);
+  }
+
+  /**
+   * v46: 列出文件夹的会话记忆列表(按 chatId 去重取最新,createdAt 正序)。
+   * 供文件夹记忆根页树状展示(会话记忆作为第一层入口)。
+   */
+  async listWorldSessions(worldId: string): Promise<ChatMemory[]> {
+    if (worldId.length === 0) {
+      return [];
+    }
+    return await this.resolveWorldSessionMemories(worldId);
   }
 
   /**
@@ -1301,11 +1548,17 @@ export class MemoryService {
   /**
    * v12: 构建章节生成提示词。
    * 目标:生成 800-1500 字的结构化章节摘要。
+   * v46: 开头增加机器可解析的元数据行(参与者:/地点:/时间:),
+   * 供 ChapterMemoryIndexer 程序化构建实体索引,无需大模型重排。
    */
   private buildChapterPrompt(prevSummary: string, newMessages: ChatMessage[]): ChatMessage[] {
     const systemPrompt: string =
       '你是对话记忆助手。任务:为当前章节生成详细的结构化摘要。\n\n' +
-      '章节摘要必须包含以下结构(用 Markdown 标题分隔):\n' +
+      '输出的最前面必须是以下三行元数据(格式严格,一行一项,冒号后直接写内容,不要加 Markdown 符号):\n' +
+      '参与者: 人名1(身份), 人名2(身份)\n' +
+      '地点: 主要地点名称\n' +
+      '时间: 故事内时间(如:第三夜/次日清晨)\n\n' +
+      '元数据行之后,章节摘要必须包含以下结构(用 Markdown 标题分隔):\n' +
       '## 时间与地点\n' +
       '简要描述本章节的时间范围和地点。\n\n' +
       '## 参与者\n' +
@@ -1545,6 +1798,7 @@ export class MemoryService {
 function createEmptyMultiLayerInjection(): MultiLayerMemoryInjection {
   return {
     core: [],
+    session: [],
     chapter: [],
     rolling: [],
     legacy: [],
@@ -1557,10 +1811,11 @@ function createEmptyMultiLayerInjection(): MultiLayerMemoryInjection {
 
 /**
  * 构建合并后的摘要文本(供旧 PromptBuilder 路径兼容)。
- * 顺序:Core → Chapter(时间正序) → Rolling → Legacy
+ * 顺序:Core → Session(时间正序) → Chapter(时间正序) → Rolling → Legacy
  */
 function buildCombinedSummary(
   core: ChatMemory[],
+  session: ChatMemory[],
   chapter: ChatMemory[],
   rolling: ChatMemory[],
   legacy: ChatMemory[]
@@ -1571,6 +1826,14 @@ function buildCombinedSummary(
     parts.push('【核心记忆】');
     for (let i = 0; i < core.length; i++) {
       parts.push(core[i].summary);
+    }
+  }
+
+  if (session.length > 0) {
+    parts.push('【会话记忆】');
+    for (let i = 0; i < session.length; i++) {
+      const title: string = session[i].title.length > 0 ? session[i].title : '会话记忆';
+      parts.push('【' + title + '】\n' + session[i].summary);
     }
   }
 

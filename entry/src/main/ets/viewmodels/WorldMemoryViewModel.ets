@@ -24,6 +24,8 @@ export class WorldMemoryViewModel {
   worldId: string = '';
   core: ChatMemory | null = null;
   chapters: ChatMemory[] = [];
+  /** v46: 会话记忆列表(树状第一层,按 chatId 去重取最新,createdAt 正序) */
+  sessions: ChatMemory[] = [];
   loading: boolean = false;
   errorMessage: string = '';
 
@@ -65,6 +67,8 @@ export class WorldMemoryViewModel {
       chapters.sort((a: ChatMemory, b: ChatMemory): number => b.updatedAt - a.updatedAt);
       this.core = core;
       this.chapters = chapters;
+      // v46: 会话记忆列表(树状根层)
+      this.sessions = await this.memoryService.listWorldSessions(worldId);
     } catch (e) {
       this.errorMessage = '加载记忆失败: ' + String(e);
       Logger.error(LOG_TAG, 'load failed: ' + String(e));

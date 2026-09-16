@@ -25,7 +25,10 @@ import {
   TEMPERATURE_MIN,
   TEMPERATURE_MAX,
   TOP_P_MIN,
-  TOP_P_MAX
+  TOP_P_MAX,
+  MAX_TOKENS_MIN,
+  MAX_TOKENS_MAX,
+  MAX_TOKENS_DEFAULT
 } from '../models/ProviderConfig';
 import { router } from '@kit.ArkUI';
 import { ThemePalette } from '../theme/ThemePalette';
@@ -65,9 +68,14 @@ struct ModelConfigEditPage {
   /** 底部导航栏/手势条避让高度(由 EntryAbility 写入 AppStorage) */
   @StorageProp('navigationBarHeight') navigationBarHeight: number = 0;
   @StorageProp('effectiveTheme') effectiveTheme: string = 'dark';
+  /** Max Tokens 输入框文本(与 viewModel.maxTokens 双向同步) */
+  @State maxTokensInput: string = '';
 
   aboutToAppear(): void {
     this.viewModel = AppStorage.get<ModelSettingsViewModel>('ModelSettingsViewModel') ?? null;
+    if (this.viewModel !== null) {
+      this.maxTokensInput = this.viewModel.maxTokens.toString();
+    }
   }
 
   /** 递增 modelConfigListVersion,通知 ModelSettingsPage 重新刷新列表 */
@@ -513,6 +521,53 @@ struct ModelConfigEditPage {
               this.viewModel!.topP = n;
             }
           )
+
+          Divider().color(ThemePalette.dividerColor(this.effectiveTheme)).margin({ left: 16, right: 16, top: 4, bottom: 4 })
+
+          // Max Tokens
+          Column({ space: 6 }) {
+            Row() {
+              Column({ space: 2 }) {
+                Text($r('app.string.model_settings_max_tokens'))
+                  .fontSize($r('app.float.app_font_body'))
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+                Text($r('app.string.model_settings_max_tokens_desc'))
+                  .fontSize($r('app.float.app_font_caption'))
+                  .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+              }
+              .alignItems(HorizontalAlign.Start)
+              .layoutWeight(1)
+
+              TextInput({
+                text: this.maxTokensInput,
+                placeholder: MAX_TOKENS_DEFAULT.toString()
+              })
+                .type(InputType.Number)
+                .width(120)
+                .height(40)
+                .fontSize($r('app.float.app_font_body'))
+                .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+                .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+                .borderRadius($r('app.float.app_radius_sm'))
+                .padding({ left: 10, right: 10 })
+                .onChange((v: string) => {
+                  this.maxTokensInput = v;
+                  const parsed: number = Number.parseInt(v, 10);
+                  if (!Number.isNaN(parsed)) {
+                    this.viewModel!.maxTokens = parsed;
+                  }
+                })
+            }
+            .width('100%')
+
+            Text('范围 ' + MAX_TOKENS_MIN + ' ~ ' + MAX_TOKENS_MAX + ',过小会导致长回复被截断')
+              .fontSize($r('app.float.app_font_caption'))
+              .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+              .width('100%')
+          }
+          .width('100%')
+          .padding({ top: 4, bottom: 4 })
         }
         .width('100%')
         .padding({ top: 8, bottom: 8 })

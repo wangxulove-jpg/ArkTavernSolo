@@ -35,10 +35,10 @@ export const TOP_P_DEFAULT: number = 1.0;
 
 /** maxTokens 最小值 */
 export const MAX_TOKENS_MIN: number = 1;
-/** maxTokens 最大值 */
-export const MAX_TOKENS_MAX: number = 32768;
+/** maxTokens 最大值(与预设 MAX_OUTPUT_TOKENS_MAX 对齐) */
+export const MAX_TOKENS_MAX: number = 131072;
 /** maxTokens 默认值(角色扮演回复通常较长,默认调大以避免截断) */
-export const MAX_TOKENS_DEFAULT: number = 4096;
+export const MAX_TOKENS_DEFAULT: number = 20480;
 
 /** stream 默认值 */
 export const STREAM_DEFAULT: boolean = true;

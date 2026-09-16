@@ -210,6 +210,8 @@ export function sourceDisplayLabel(src: ChatMessageSource): string {
       return '记忆摘要';
     case ChatMessageSource.MemoryCore:
       return '核心记忆';
+    case ChatMessageSource.MemorySession:
+      return '会话记忆';
     case ChatMessageSource.MemoryChapter:
       return '章节记忆';
     case ChatMessageSource.MemoryRolling:

@@ -33,7 +33,7 @@
 import { ModelService } from './ModelService';
 import { LorebookService } from './LorebookService';
 import { LorebookPinService } from './LorebookPinService';
-import { PromptBuilder, PromptBuildContext, PromptBuildResult, MemoryLayersInjection, MemoryKeywordHit } from './PromptBuilder';
+import { PromptBuilder, PromptBuildContext, PromptBuildResult, MemoryLayersInjection } from './PromptBuilder';
 import { TokenCounter } from './TokenCounter';
 import { HistoryTrimmer } from './HistoryTrimmer';
 import { RecentMessageSelector } from './RecentMessageSelector';
@@ -44,6 +44,16 @@ import { MessageSwipePersistenceService } from './MessageSwipePersistenceService
 import { ConversationBranchPersistenceService, EditedBranchGenerationTarget } from './ConversationBranchPersistenceService';
 import { MemoryService, MemorySummaryResult } from './MemoryService';
 import { ContextBudgetService } from './ContextBudgetService';
+import {
+  MemoryLoadRefService,
+  MemoryLoadRef
+} from './MemoryLoadRefService';
+import {
+  matchEntityChapterIds,
+  parseEntityIndexJson,
+  EntityIndex,
+  EntityIndexEntry
+} from './ChapterMemoryIndexer';
 import { AppPreferences } from '../storage/AppPreferences';
 import {
   ConversationBranch,
@@ -220,9 +230,15 @@ export interface ChatServiceCallbacks {
 const DEFAULT_OPTIONS: ChatRequestOptions = {
   temperature: 0.7,
   topP: 1.0,
-  maxTokens: 1024,
+  maxTokens: 20480,
   stream: true
 };
+
+/** v46: 按需记忆块插入项(insertAfter=-1 表示插到窗口头部) */
+interface OnDemandInsert {
+  readonly insertAfter: number;
+  readonly message: ChatMessage;
+}
 
 /**
  * CHAT-STATUS-1A: 按字段名在条目列表中查找(精确匹配)。
@@ -492,6 +508,8 @@ export class ChatService {
 
   /** AppPreferences(用于读取全局用户称呼,v9 引入) */
   private readonly appPreferences: AppPreferences | null;
+  /** v46: 按需加载记忆引用服务(appPreferences 可用时创建) */
+  private readonly memoryLoadRefService: MemoryLoadRefService | null;
 
   constructor(
     modelService: ModelService,
@@ -524,6 +542,9 @@ export class ChatService {
     this.memoryService = memoryService;
     this.contextBudgetService = contextBudgetService;
     this.appPreferences = appPreferences;
+    this.memoryLoadRefService = appPreferences !== null
+      ? new MemoryLoadRefService(appPreferences)
+      : null;
     this.recentMessageSelector = recentMessageSelector;
   }
 
@@ -3757,14 +3778,18 @@ export class ChatService {
     if (this.memoryService !== null && this.activeBranchId.length > 0) {
       try {
         // v42: 传入当前 chat 的 worldId,世界分组内 core/chapter 跨会话共享
+        // v46: 同时传入 chatId——世界内存在会话记忆时,章节只注入本会话最近 N 章,
+        // 跨会话细节改由会话记忆(入口级)+ 按需加载提供
         const multi = await this.memoryService.getMultiLayerInjectionContext(
           this.activeBranchId,
-          this.currentChat !== null ? this.currentChat.worldId : ''
+          this.currentChat !== null ? this.currentChat.worldId : '',
+          this.currentChatId !== undefined ? this.currentChatId : ''
         );
         if (multi.enabled) {
           // v12: 使用分层注入
           memoryLayers = {
             core: multi.core,
+            session: multi.session,
             chapter: multi.chapter,
             rolling: multi.rolling,
             legacy: multi.legacy
@@ -3852,39 +3877,35 @@ export class ChatService {
     // 解析有效 Persona
     const effectivePersona: Persona | null = await this.resolveEffectivePersona();
 
-    // v44: 记忆关键词召回(可选,仅世界分组且开关开启;排除恒定注入的章节,最多 3 条)
-    let memoryKeywordHits: MemoryKeywordHit[] | undefined = undefined;
+    // v46: 按需加载记忆(自动实体匹配 + 锚点插入)。
+    // 替换 v44 关键词前置注入:命中记忆不再放到对话历史之前,而是记录引用(持久化),
+    // 在历史末尾锚点之后插入,后续对话续在其后,保持前缀缓存命中。
+    // 开关沿用 memoryKeywordRetrievalEnabled(仅世界分组生效)。
     if (this.memoryKeywordRetrievalEnabled
       && this.memoryService !== null
       && this.currentChat !== null
       && this.currentChat.worldId.length > 0
-      && memoryLayers !== undefined) {
+      && this.currentChatId !== undefined
+      && this.currentChatId.length > 0
+      && this.memoryLoadRefService !== null
+      && conversationMessages.length > 0) {
       try {
-        const texts: string[] = [];
-        const endIdx: number = conversationMessages.length;
-        for (let i = Math.max(0, endIdx - 20); i < endIdx; i++) {
-          texts.push(conversationMessages[i].content);
-        }
-        const excludeIds: string[] = [];
-        const chapters: ChatMemory[] | undefined = memoryLayers.chapter;
-        if (chapters !== undefined) {
-          for (let i = 0; i < chapters.length; i++) {
-            excludeIds.push(chapters[i].id);
-          }
-        }
-        const hits: ChatMemory[] = await this.memoryService.retrieveKeywordMemories(
-          this.currentChat.worldId, texts, excludeIds, 3
-        );
-        if (hits.length > 0) {
-          memoryKeywordHits = hits.map((m: ChatMemory): MemoryKeywordHit => ({
-            title: m.title.length > 0 ? m.title : '历史记忆',
-            detail: m.summary
-          }));
-          Logger.info(LOG_TAG, 'memory keyword retrieval hits=' + hits.length
-            + ' worldId=' + this.currentChat.worldId);
-        }
+        await this.autoLoadOnDemandMemories(conversationMessages, memoryLayers);
       } catch (e) {
-        Logger.warn(LOG_TAG, 'memory keyword retrieval failed: '
+        Logger.warn(LOG_TAG, 'auto on-demand memory load failed: '
+          + (e instanceof Error ? e.message : String(e)));
+      }
+    }
+
+    // v46: 注入已加载的按需记忆块(锚点消息之后插入;锚点不在窗口时插到窗口头部)
+    if (this.memoryService !== null
+      && this.currentChatId !== undefined
+      && this.currentChatId.length > 0
+      && this.memoryLoadRefService !== null) {
+      try {
+        conversationMessages = await this.injectOnDemandMemories(conversationMessages);
+      } catch (e) {
+        Logger.warn(LOG_TAG, 'inject on-demand memories failed: '
           + (e instanceof Error ? e.message : String(e)));
       }
     }
@@ -3902,8 +3923,6 @@ export class ChatService {
       lorebookDepth: this.lorebookInjectionDepth,
       // v45: OnDemandPinned 会话钉选条目(记忆之后、对话之前注入)
       pinnedLorebookEntries: pinnedLorebookEntries,
-      // 记忆关键词召回命中(可选,开关开启时注入)
-      memoryKeywordHits: memoryKeywordHits,
       // Persona 注入
       persona: effectivePersona !== null ? effectivePersona : undefined
       // enablePostHistoryInstructions 默认为 true
@@ -3915,6 +3934,186 @@ export class ChatService {
     // CHAT-STATUS-1A: 注入角色状态输出指令(仅当存在用户字段时)
     const finalMessages: ChatMessage[] = this.injectStatusInstruction(result.messages);
     return finalMessages;
+  }
+
+  /**
+   * v46: 自动实体匹配 → 追加按需加载引用。
+   *
+   * 数据源:世界池会话记忆 detail 中的实体索引(人名/地点/时间)
+   * + 章节记忆 keywordsJson 关键词(补充)。
+   * 匹配最近 20 条消息文本;排除已常驻注入与已引用的记忆;
+   * 单次构建最多新增 3 条(总量上限由 MemoryLoadRefService 控制)。
+   * 锚点 = 当前历史末尾消息 ID。
+   */
+  private async autoLoadOnDemandMemories(
+    conversationMessages: ChatMessage[],
+    memoryLayers: MemoryLayersInjection | undefined
+  ): Promise<void> {
+    const chatId: string | undefined = this.currentChatId;
+    if (chatId === undefined || chatId.length === 0
+      || this.memoryService === null || this.memoryLoadRefService === null
+      || this.currentChat === null || this.currentChat.worldId.length === 0) {
+      return;
+    }
+    const worldId: string = this.currentChat.worldId;
+
+    // 匹配文本:最近 20 条消息
+    const texts: string[] = [];
+    const endIdx: number = conversationMessages.length;
+    for (let i = Math.max(0, endIdx - 20); i < endIdx; i++) {
+      texts.push(conversationMessages[i].content);
+    }
+
+    // 排除:已常驻注入的章节 + 已引用的记忆
+    const excludeIds: Set<string> = new Set<string>();
+    if (memoryLayers !== undefined) {
+      for (let i = 0; i < memoryLayers.chapter.length; i++) {
+        excludeIds.add(memoryLayers.chapter[i].id);
+      }
+      for (let i = 0; i < memoryLayers.session.length; i++) {
+        excludeIds.add(memoryLayers.session[i].id);
+      }
+    }
+    const refs: MemoryLoadRef[] = await this.memoryLoadRefService.getRefs(chatId);
+    for (let i = 0; i < refs.length; i++) {
+      excludeIds.add(refs[i].memoryId);
+    }
+
+    // 1) 会话记忆实体索引匹配
+    const worldMemories: ChatMemory[] = await this.memoryService.listWorldMemories(worldId);
+    const mergedEntries: EntityIndexEntry[] = [];
+    for (let i = 0; i < worldMemories.length; i++) {
+      const m: ChatMemory = worldMemories[i];
+      if (m.memoryType === 'session' && !excludeIds.has(m.id)) {
+        const index: EntityIndex = parseEntityIndexJson(m.detail);
+        for (let j = 0; j < index.entries.length; j++) {
+          mergedEntries.push(index.entries[j]);
+        }
+      }
+    }
+    const mergedIndex: EntityIndex = { entries: mergedEntries };
+    const matchedIds: string[] = matchEntityChapterIds(mergedIndex, texts);
+
+    // 2) 章节关键词补充(排除实体命中与恒定注入)
+    const kwExclude: string[] = Array.from(excludeIds);
+    for (let i = 0; i < matchedIds.length; i++) {
+      kwExclude.push(matchedIds[i]);
+    }
+    const keywordHits: ChatMemory[] = await this.memoryService.retrieveKeywordMemories(
+      worldId, texts, kwExclude, 3
+    );
+
+    // 合并候选(实体命中优先),单次最多 3 条
+    const candidates: string[] = [];
+    for (let i = 0; i < matchedIds.length && candidates.length < 3; i++) {
+      if (!excludeIds.has(matchedIds[i])) {
+        candidates.push(matchedIds[i]);
+        excludeIds.add(matchedIds[i]);
+      }
+    }
+    for (let i = 0; i < keywordHits.length && candidates.length < 3; i++) {
+      if (!excludeIds.has(keywordHits[i].id)) {
+        candidates.push(keywordHits[i].id);
+        excludeIds.add(keywordHits[i].id);
+      }
+    }
+    if (candidates.length === 0) {
+      return;
+    }
+
+    // 锚点 = 当前历史末尾消息
+    const anchorMessageId: string = conversationMessages[conversationMessages.length - 1].id;
+    let added: number = 0;
+    for (let i = 0; i < candidates.length; i++) {
+      const ok: boolean = await this.memoryLoadRefService.addRef(chatId, candidates[i], anchorMessageId);
+      if (ok) {
+        added++;
+      }
+    }
+    if (added > 0) {
+      Logger.info(LOG_TAG, 'on-demand memory auto-loaded=' + added
+        + ' matched=' + matchedIds.length + ' keyword=' + keywordHits.length);
+    }
+  }
+
+  /**
+   * v46: 注入按需加载的记忆块。
+   * - 锚点消息在窗口内 → 紧随其后插入(后续对话续在其后,前缀缓存保持)
+   * - 锚点消息不在窗口(被裁剪/删除) → 插到窗口第一条消息之前
+   * - 记忆失效/禁用/已删 → 跳过并清理引用
+   */
+  private async injectOnDemandMemories(messages: ChatMessage[]): Promise<ChatMessage[]> {
+    const chatId: string | undefined = this.currentChatId;
+    if (chatId === undefined || chatId.length === 0
+      || this.memoryService === null || this.memoryLoadRefService === null) {
+      return messages;
+    }
+    const refs: MemoryLoadRef[] = await this.memoryLoadRefService.getRefs(chatId);
+    if (refs.length === 0) {
+      return messages;
+    }
+    // 按添加时间正序(同锚点保持加入顺序)
+    const sortedRefs: MemoryLoadRef[] = refs.slice().sort(
+      (a: MemoryLoadRef, b: MemoryLoadRef): number => a.addedAt - b.addedAt
+    );
+
+    const result: ChatMessage[] = messages.slice();
+    const headBlocks: ChatMessage[] = [];
+    const anchoredInserts: OnDemandInsert[] = [];
+
+    for (let i = 0; i < sortedRefs.length; i++) {
+      const ref: MemoryLoadRef = sortedRefs[i];
+      const memory: ChatMemory | null = await this.memoryService.getById(ref.memoryId);
+      if (memory === null || memory.invalidated || !memory.enabled) {
+        // 失效引用清理(静默,不阻塞构建)
+        await this.memoryLoadRefService.removeRef(chatId, ref.memoryId);
+        continue;
+      }
+      const title: string = memory.title.length > 0 ? memory.title : '历史记忆';
+      const block: ChatMessage = {
+        id: 'memref-' + memory.id,
+        role: ChatRole.System,
+        content: '【回忆 · ' + title + '】\n' + memory.summary,
+        createdAt: memory.createdAt,
+        status: ChatMessageStatus.Completed,
+        source: ChatMessageSource.MemoryChapter
+      };
+      let anchorIdx: number = -1;
+      for (let j = 0; j < result.length; j++) {
+        if (result[j].id === ref.anchorMessageId) {
+          anchorIdx = j;
+          break;
+        }
+      }
+      if (anchorIdx >= 0) {
+        anchoredInserts.push({ insertAfter: anchorIdx, message: block });
+      } else {
+        headBlocks.push(block);
+      }
+    }
+
+    if (anchoredInserts.length === 0 && headBlocks.length === 0) {
+      return result;
+    }
+
+    // 头部块:逆序 unshift,最终按 addedAt 正序排列在窗口最前
+    for (let i = headBlocks.length - 1; i >= 0; i--) {
+      result.unshift(headBlocks[i]);
+    }
+    // 锚点块:按 insertAfter 降序稳定排序后逆序 splice,
+    // 同锚点时后加入的先插入,先加入的排在前面(保持 addedAt 顺序)
+    anchoredInserts.sort((a: OnDemandInsert, b: OnDemandInsert): number =>
+      b.insertAfter - a.insertAfter
+    );
+    for (let i = anchoredInserts.length - 1; i >= 0; i--) {
+      const insert: OnDemandInsert = anchoredInserts[i];
+      result.splice(insert.insertAfter + 1, 0, insert.message);
+    }
+    if (anchoredInserts.length > 0 || headBlocks.length > 0) {
+      Logger.info(LOG_TAG, 'on-demand memory injected anchored=' + anchoredInserts.length
+        + ' head=' + headBlocks.length);
+    }
+    return result;
   }
 
 

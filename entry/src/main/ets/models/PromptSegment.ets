@@ -37,6 +37,8 @@ export enum PromptSegmentPosition {
   DialogueExamples = 'DialogueExamples',
   /** v12: 核心长期事实(最高优先级记忆) */
   MemoryCore = 'MemoryCore',
+  /** v46: 会话记忆(跨会话入口级摘要,核心记忆之后) */
+  MemorySession = 'MemorySession',
   /** v12: 章节摘要(按时间顺序) */
   MemoryChapter = 'MemoryChapter',
   /** v12: 近期滚动摘要 */
@@ -103,14 +105,15 @@ const POSITION_ORDER: Record<string, number> = {
   'AfterCharacter': 5,
   'DialogueExamples': 6,
   'MemoryCore': 7,
-  'MemoryChapter': 8,
-  'MemoryRolling': 9,
-  'MemoryLegacy': 10,
-  'MemoryKeyword': 11,
-  'MemorySummary': 12,
-  'LorebookPinned': 13,
-  'Conversation': 14,
-  'PostHistory': 15
+  'MemorySession': 8,
+  'MemoryChapter': 9,
+  'MemoryRolling': 10,
+  'MemoryLegacy': 11,
+  'MemoryKeyword': 12,
+  'MemorySummary': 13,
+  'LorebookPinned': 14,
+  'Conversation': 15,
+  'PostHistory': 16
 };
 
 /**

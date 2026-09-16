@@ -31,6 +31,8 @@ export enum ChatMessageSource {
   MemorySummary = 'memorySummary',
   /** v12: 核心长期事实(受保护,不进入聊天历史) */
   MemoryCore = 'memoryCore',
+  /** v46: 会话记忆(跨会话入口级摘要,受保护,不进入聊天历史) */
+  MemorySession = 'memorySession',
   /** v12: 章节摘要(受保护,不进入聊天历史) */
   MemoryChapter = 'memoryChapter',
   /** v12: 近期滚动摘要(受保护,不进入聊天历史) */

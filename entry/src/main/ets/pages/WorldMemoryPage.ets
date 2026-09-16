@@ -1,10 +1,9 @@
 /**
- * WorldMemoryPage 文件夹记忆管理页
+ * WorldMemoryPage 文件夹记忆管理页(v46 树状记忆界面·根页)
  *
- * 展示一个世界分组(文件夹)共享的记忆:
- * - 世界 core 核心记忆(单例,跨会话共享)
- * - 章节记忆时间线(按最后更新倒序)
- * 支持新建/编辑/删除文件夹级手工记忆,关键词供"记忆关键词召回层"使用。
+ * 树状结构第一层:会话记忆列表(每个会话一条入口级摘要)。
+ * - 点击会话记忆 → WorldMemoryDetailPage 查看详情,并从详情进入核心记忆 / 章节记忆
+ * - 保留"新建记忆"手工记忆能力(章节 / 核心,文件夹级)
  */
 
 import { router } from '@kit.ArkUI';
@@ -53,29 +52,45 @@ struct WorldMemoryPage {
     this.editDialogDummy = this.editDialogDummy + 1;
   }
 
+  private openSessionDetail(memoryId: string): void {
+    const vm: WorldMemoryViewModel | null = this.viewModel;
+    if (vm === null) {
+      return;
+    }
+    const p: Record<string, Object> = {
+      'worldId': vm.worldId,
+      'memoryId': memoryId,
+      'type': 'session'
+    };
+    router.pushUrl({ url: 'pages/WorldMemoryDetailPage', params: p });
+  }
+
+  private formatTime(ms: number): string {
+    const d: Date = new Date(ms);
+    const mm: string = (d.getMonth() + 1).toString().padStart(2, '0');
+    const dd: string = d.getDate().toString().padStart(2, '0');
+    const hh: string = d.getHours().toString().padStart(2, '0');
+    const mi: string = d.getMinutes().toString().padStart(2, '0');
+    return mm + '-' + dd + ' ' + hh + ':' + mi;
+  }
+
   @Builder
-  memoryCard(memory: ChatMemory, isCore: boolean) {
+  sessionCard(memory: ChatMemory) {
     Column() {
       Row() {
-        Text(memory.title.length > 0 ? memory.title
-          : (isCore ? '世界核心记忆' : '章节记忆'))
-          .fontSize(14)
+        Text(memory.title.length > 0 ? memory.title : '会话记忆')
+          .fontSize(15)
           .fontWeight(FontWeight.Medium)
           .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
-        Text(isCore ? '核心' : '章节')
+        Text('会话记忆')
           .fontSize(10)
           .fontColor(ThemePalette.accentColor(this.effectiveTheme))
           .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
           .borderRadius(8)
           .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-          .margin({ right: 6 })
-        Text('重要度 ' + memory.importance.toString())
-          .fontSize(10)
-          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-          .margin({ right: 6 })
       }
       .width('100%')
 
@@ -83,44 +98,32 @@ struct WorldMemoryPage {
         Text(memory.summary)
           .fontSize(12)
           .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-          .maxLines(5)
+          .maxLines(4)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
           .margin({ top: 6 })
       }
 
-      Text('更新于 ' + this.formatTime(memory.updatedAt))
-        .fontSize(10)
-        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-        .width('100%')
-        .margin({ top: 6 })
-
       Row() {
-        Button('编辑')
+        Text('更新于 ' + this.formatTime(memory.updatedAt))
+          .fontSize(11)
+          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+        Blank()
+        Text('查看详情 ›')
           .fontSize(12)
-          .backgroundColor(Color.Transparent)
           .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-          .height(28)
-          .onClick(() => {
-            this.openEdit(memory);
-          })
-        Button('删除')
-          .fontSize(12)
-          .backgroundColor(Color.Transparent)
-          .fontColor($r('app.color.app_danger'))
-          .height(28)
-          .onClick(() => {
-            this.removeMemory(memory);
-          })
       }
       .width('100%')
-      .margin({ top: 4 })
+      .margin({ top: 6 })
     }
     .width('100%')
     .padding(12)
     .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
     .borderRadius(10)
     .margin({ bottom: 8 })
+    .onClick(() => {
+      this.openSessionDetail(memory.id);
+    })
   }
 
   @Builder
@@ -264,21 +267,11 @@ struct WorldMemoryPage {
       .margin({ bottom: 4 })
   }
 
-  private openEdit(memory: ChatMemory): void {
-    if (this.viewModel === null) {
-      return;
-    }
-    this.viewModel.openEditDialog(memory);
-    this.syncFromViewModel();
-  }
-
-  private removeMemory(memory: ChatMemory): void {
-    if (this.viewModel === null) {
-      return;
-    }
-    void this.viewModel.remove(memory).then((): void => {
+  private openNewMemory(): void {
+    if (this.viewModel !== null) {
+      this.viewModel.openNewDialog(0);
       this.syncFromViewModel();
-    });
+    }
   }
 
   private saveMemory(): void {
@@ -288,15 +281,6 @@ struct WorldMemoryPage {
     void this.viewModel.save().then((ok: boolean): void => {
       this.syncFromViewModel();
     });
-  }
-
-  private formatTime(ms: number): string {
-    const d: Date = new Date(ms);
-    const mm: string = (d.getMonth() + 1).toString().padStart(2, '0');
-    const dd: string = d.getDate().toString().padStart(2, '0');
-    const hh: string = d.getHours().toString().padStart(2, '0');
-    const mi: string = d.getMinutes().toString().padStart(2, '0');
-    return mm + '-' + dd + ' ' + hh + ':' + mi;
   }
 
   build() {
@@ -322,17 +306,14 @@ struct WorldMemoryPage {
           .height(32)
           .borderRadius(16)
           .onClick(() => {
-            if (this.viewModel !== null) {
-              this.viewModel.openNewDialog(0);
-              this.syncFromViewModel();
-            }
+            this.openNewMemory();
           })
       }
       .width('100%')
       .padding({ left: 12, right: 12 })
       .margin({ top: this.statusBarHeight + 8, bottom: 8 })
 
-      Text('此文件夹内所有会话共享以下记忆')
+      Text('此文件夹内所有会话共享以下记忆 · 点击会话记忆查看详情与核心/章节记忆')
         .fontSize(12)
         .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
         .width('100%')
@@ -348,39 +329,72 @@ struct WorldMemoryPage {
           .margin({ bottom: 4 })
       }
 
-      List({ space: 8 }) {
-        if (this.viewModel !== null && this.viewModel.core !== null) {
-          ListItem() {
-            this.memoryCard(this.viewModel.core, true);
-          }
+      if (this.viewModel !== null && this.viewModel.loading) {
+        Column() {
+          Text('加载中...')
+            .fontSize(14)
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            .margin({ top: 40 })
         }
-        ForEach(this.viewModel !== null ? this.viewModel.chapters : [],
-          (m: ChatMemory) => {
+        .width('100%')
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Center)
+      } else {
+        List({ space: 4 }) {
+          if (this.viewModel !== null && this.viewModel.sessions.length > 0) {
             ListItem() {
-              this.memoryCard(m, false);
+              Column() {
+                Row() {
+                  Text('会话记忆')
+                    .fontSize(13)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+                  Blank()
+                  Text(this.viewModel.sessions.length.toString() + ' 段对话')
+                    .fontSize(11)
+                    .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+                }
+                .width('100%')
+                .padding({ top: 12, bottom: 6 })
+              }
             }
-          }, (m: ChatMemory) => m.id + '_' + this.editDialogDummy)
+            ForEach(this.viewModel.sessions,
+              (m: ChatMemory) => {
+                ListItem() {
+                  this.sessionCard(m)
+                }
+              }, (m: ChatMemory) => m.id + '_' + this.editDialogDummy)
+          }
 
-        if (this.viewModel === null
-          || (this.viewModel.core === null && this.viewModel.chapters.length === 0)) {
-          ListItem() {
-            Column() {
-              Text('暂无记忆')
-                .fontSize(14)
-                .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-              Text('自动章节生成后,或点击右上角"新建记忆"手动记录')
-                .fontSize(12)
-                .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-                .margin({ top: 4 })
+          if (this.viewModel === null || this.viewModel.sessions.length === 0) {
+            ListItem() {
+              Column({ space: 6 }) {
+                Text('暂无会话记忆')
+                  .fontSize(15)
+                  .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+                  .margin({ top: 32 })
+                Text('完成一段对话后,在对话记忆页先生成章节,再点"生成会话记忆",'
+                  + '即可在此看到该段对话的入口摘要')
+                  .fontSize(12)
+                  .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+                  .textAlign(TextAlign.Center)
+                  .lineHeight(18)
+                Text('或点击右上角"新建记忆"手动记录文件夹级记忆')
+                  .fontSize(12)
+                  .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+                  .margin({ top: 4 })
+              }
+              .width('100%')
+              .padding(24)
             }
-            .width('100%')
-            .padding(24)
           }
         }
+        .width('100%')
+        .layoutWeight(1)
+        .padding({ left: 12, right: 12 })
+        .scrollBar(BarState.Auto)
+        .edgeEffect(EdgeEffect.Spring)
       }
-      .width('100%')
-      .layoutWeight(1)
-      .padding({ left: 12, right: 12 })
 
       // 编辑对话框
       if (this.viewModel !== null && this.viewModel.showEditDialog) {

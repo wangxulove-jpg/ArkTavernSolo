@@ -24,7 +24,8 @@
 
 import { router, promptAction } from '@kit.ArkUI';
 import { AppServices } from '../services/AppServices';
-import { MemoryManagementViewModel, MemoryDisplayItem, MemoryTypeGroup } from '../viewmodels/MemoryManagementViewModel';
+import { MemoryManagementViewModel, MemoryDisplayItem, MemoryTypeGroup, EntityGroupView } from '../viewmodels/MemoryManagementViewModel';
+import { parseEntityIndexJson } from '../services/ChapterMemoryIndexer';
 import { Logger } from '../utils/Logger';
 import { ThemePalette } from '../theme/ThemePalette';
 import { MEMORY_AUTO_SUMMARY_PREFS_KEY } from '../services/ChatService';
@@ -52,6 +53,8 @@ struct MemoryManagementPage {
   @StorageProp('effectiveTheme') effectiveTheme: string = 'dark';
   /** 自动记忆总结开关(默认关闭,手动触发有利于缓存) */
   @State memoryAutoSummary: boolean = false;
+  /** v46: 章节记忆视图模式(false=时间线,true=按人物·事件分组) */
+  @State chapterEntityView: boolean = false;
 
   aboutToAppear(): void {
     this.handleReady();
@@ -269,10 +272,70 @@ struct MemoryManagementPage {
       .width('100%')
       .padding({ top: 12, bottom: 8 })
 
+      // v46: 章节记忆视图切换(时间线 / 按人物·事件,纯展示层重排)
+      if (group.memoryType === 'chapter'
+        && this.viewModel.chapterEntityGroups.length > 0) {
+        Row() {
+          Button('时间线')
+            .fontSize(12)
+            .height(30)
+            .padding({ left: 14, right: 14 })
+            .backgroundColor(!this.chapterEntityView
+              ? ThemePalette.accentColor(this.effectiveTheme) : Color.Transparent)
+            .fontColor(!this.chapterEntityView
+              ? ThemePalette.textPrimaryColor(this.effectiveTheme)
+              : ThemePalette.textSecondaryColor(this.effectiveTheme))
+            .onClick(() => {
+              this.chapterEntityView = false;
+            })
+          Button('按人物·事件')
+            .fontSize(12)
+            .height(30)
+            .padding({ left: 14, right: 14 })
+            .margin({ left: 8 })
+            .backgroundColor(this.chapterEntityView
+              ? ThemePalette.accentColor(this.effectiveTheme) : Color.Transparent)
+            .fontColor(this.chapterEntityView
+              ? ThemePalette.textPrimaryColor(this.effectiveTheme)
+              : ThemePalette.textSecondaryColor(this.effectiveTheme))
+            .onClick(() => {
+              this.chapterEntityView = true;
+            })
+        }
+        .width('100%')
+        .margin({ bottom: 4 })
+      }
+
       // 该类型的 Memory 列表
-      ForEach(group.items, (item: MemoryDisplayItem) => {
-        this.memoryItemCard(item)
-      }, (item: MemoryDisplayItem) => item.memory.id)
+      if (group.memoryType === 'chapter' && this.chapterEntityView
+        && this.viewModel.chapterEntityGroups.length > 0) {
+        // v46: 实体分组视图(按人物/地点/时间归组,涉及章节数降序)
+        ForEach(this.viewModel.chapterEntityGroups, (entityGroup: EntityGroupView) => {
+          Column() {
+            Row() {
+              Text(entityGroup.kindLabel + ' · ' + entityGroup.name)
+                .fontSize(13)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+              Blank()
+              Text(entityGroup.items.length.toString() + ' 章')
+                .fontSize(11)
+                .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            }
+            .width('100%')
+            .padding({ top: 8, bottom: 4 })
+
+            ForEach(entityGroup.items, (item: MemoryDisplayItem) => {
+              this.memoryItemCard(item)
+            }, (item: MemoryDisplayItem) => item.memory.id)
+          }
+          .width('100%')
+        }, (entityGroup: EntityGroupView) => entityGroup.kindLabel + entityGroup.name)
+      } else {
+        ForEach(group.items, (item: MemoryDisplayItem) => {
+          this.memoryItemCard(item)
+        }, (item: MemoryDisplayItem) => item.memory.id)
+      }
     }
     .width('100%')
   }
@@ -402,6 +465,23 @@ struct MemoryManagementPage {
         .width('100%')
         .margin({ top: 8 })
       }
+
+      // v46: 引用/取消引用到当前对话(章节/会话记忆,手动按需加载)
+      if (this.viewModel.expandedMemoryId === item.memory.id && !item.isInvalidated
+        && (item.memory.memoryType === 'chapter' || item.memory.memoryType === 'session')) {
+        Button(this.viewModel.isReferenced(item.memory.id) ? '取消引用' : '引用到当前对话')
+          .fontSize(12)
+          .backgroundColor(Color.Transparent)
+          .fontColor(this.viewModel.isReferenced(item.memory.id)
+            ? $r('app.color.app_danger') : ThemePalette.accentColor(this.effectiveTheme))
+          .width('100%')
+          .margin({ top: 4 })
+          .enabled(!this.viewModel.isOperating)
+          .border({ width: 1, color: ThemePalette.dividerColor(this.effectiveTheme) })
+          .onClick(() => {
+            this.viewModel.toggleMemoryReference(item.memory.id);
+          })
+      }
     }
     .width('100%')
     .padding(12)
@@ -432,15 +512,28 @@ struct MemoryManagementPage {
       if (item.memory.detail.length > 0 && item.memory.detail !== item.memory.summary) {
         Divider().color(ThemePalette.dividerColor(this.effectiveTheme)).margin({ top: 8, bottom: 8 })
 
-        Text('详细内容')
-          .fontSize(12)
-          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-          .margin({ bottom: 4 })
-        Text(item.memory.detail)
-          .fontSize(13)
-          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-          .width('100%')
-          .lineHeight(20)
+        // v46: 会话记忆 detail 为实体索引 JSON,格式化为"实体(章节数)"清单
+        if (item.memory.memoryType === 'session') {
+          Text('实体索引(按人物/地点/时间 → 章节)')
+            .fontSize(12)
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            .margin({ bottom: 4 })
+          Text(this.formatSessionEntityIndex(item.memory.detail))
+            .fontSize(13)
+            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+            .width('100%')
+            .lineHeight(20)
+        } else {
+          Text('详细内容')
+            .fontSize(12)
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            .margin({ bottom: 4 })
+          Text(item.memory.detail)
+            .fontSize(13)
+            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+            .width('100%')
+            .lineHeight(20)
+        }
       }
     }
     .width('100%')
@@ -448,6 +541,22 @@ struct MemoryManagementPage {
     .onClick(() => {
       // 阻止冒泡到卡片点击
     })
+  }
+
+  /**
+   * v46: 把会话记忆 detail 中的实体索引 JSON 格式化为可读文本。
+   */
+  private formatSessionEntityIndex(detailJson: string): string {
+    const index = parseEntityIndexJson(detailJson);
+    if (index.entries.length === 0) {
+      return '(暂无可解析的实体索引)';
+    }
+    const parts: string[] = [];
+    for (let i = 0; i < index.entries.length; i++) {
+      const entry = index.entries[i];
+      parts.push(entry.name + '(' + entry.chapterIds.length.toString() + '章)');
+    }
+    return parts.join(' · ');
   }
 
   @Builder
@@ -595,6 +704,20 @@ struct MemoryManagementPage {
         .enabled(!this.viewModel.isOperating && this.viewModel.totalMessageCount > 0)
         .onClick(() => {
           this.viewModel.regenerateSummary();
+        })
+
+      // v46: 生成会话记忆(章节+核心压缩为入口摘要 + 实体索引,仅世界分组会话)
+      Button('生成会话记忆')
+        .type(ButtonType.Capsule)
+        .width('100%')
+        .height(44)
+        .margin({ top: 12 })
+        .backgroundColor(Color.Transparent)
+        .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+        .border({ width: 1, color: ThemePalette.accentColor(this.effectiveTheme) })
+        .enabled(!this.viewModel.isOperating && this.viewModel.totalMessageCount > 0)
+        .onClick(() => {
+          this.viewModel.generateSessionMemory();
         })
 
       // 清除当前分支记忆

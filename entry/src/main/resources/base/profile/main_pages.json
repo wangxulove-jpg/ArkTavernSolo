@@ -8,6 +8,8 @@
     "pages/LorebookPage",
     "pages/LorebookSourceEditorPage",
     "pages/WorldMemoryPage",
+    "pages/WorldMemoryDetailPage",
+    "pages/WorldChapterListPage",
     "pages/ModelSettingsPage",
     "pages/ModelConfigEditPage",
     "pages/AppSettingsPage",

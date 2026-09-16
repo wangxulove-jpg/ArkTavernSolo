@@ -32,6 +32,12 @@ import { ChatMemory, MemoryType } from '../models/ChatMemory';
 import { ChatMessage } from '../models/ChatMessage';
 import { WorldGroup } from '../models/WorldGroup';
 import { PersistedChatSession } from '../models/PersistedChatSession';
+import {
+  groupChaptersByEntity,
+  entityKindLabel,
+  EntityChapterGroup
+} from '../services/ChapterMemoryIndexer';
+import { MemoryLoadRef } from '../services/MemoryLoadRefService';
 import { Logger } from '../utils/Logger';
 
 const LOG_TAG: string = 'MemoryMgmtVM';
@@ -39,6 +45,7 @@ const LOG_TAG: string = 'MemoryMgmtVM';
 /** 记忆类型显示名称 */
 const MEMORY_TYPE_LABELS: Record<MemoryType, string> = {
   'core': '核心记忆',
+  'session': '会话记忆',
   'chapter': '章节记忆',
   'rolling': '滚动记忆',
   'legacy': '早期记忆'
@@ -47,9 +54,10 @@ const MEMORY_TYPE_LABELS: Record<MemoryType, string> = {
 /** 记忆类型排序优先级(数字越小越靠前) */
 const MEMORY_TYPE_ORDER: Record<MemoryType, number> = {
   'core': 0,
-  'chapter': 1,
-  'rolling': 2,
-  'legacy': 3
+  'session': 1,
+  'chapter': 2,
+  'rolling': 3,
+  'legacy': 4
 };
 
 /**
@@ -90,6 +98,18 @@ export interface MemoryTypeGroup {
   items: MemoryDisplayItem[];
 }
 
+/**
+ * v46: 章节实体分组视图项(按人物/地点/时间整理,纯展示层重排)。
+ */
+export interface EntityGroupView {
+  /** 实体名 */
+  name: string;
+  /** 实体种类显示名(人物/地点/时间) */
+  kindLabel: string;
+  /** 该实体涉及的章节展示项(时间正序) */
+  items: MemoryDisplayItem[];
+}
+
 @Observed
 export class MemoryManagementViewModel {
   /** 当前 Branch 最新 Memory(兼容旧字段,用于统计) */
@@ -123,6 +143,10 @@ export class MemoryManagementViewModel {
 
   /** v12: 按类型分组的 Memory 列表 */
   memoryGroups: MemoryTypeGroup[] = [];
+  /** v46: 章节实体分组视图(按人物/地点/时间整理,按涉及章节数降序) */
+  chapterEntityGroups: EntityGroupView[] = [];
+  /** v46: 当前会话已引用(按需加载)的记忆 ID 列表 */
+  referencedMemoryIds: string[] = [];
   /** v12: 当前展开查看详情的 Memory ID */
   expandedMemoryId: string = '';
   /** v12: 当前选中的 Memory ID(用于编辑) */
@@ -185,6 +209,8 @@ export class MemoryManagementViewModel {
       if (branchId.length === 0) {
         this.memory = null;
         this.memoryGroups = [];
+        this.chapterEntityGroups = [];
+        this.referencedMemoryIds = [];
         this.summarizedMessageCount = 0;
         this.unsummarizedMessageCount = this.totalMessageCount;
         this.unsummarizedChars = 0;
@@ -194,20 +220,33 @@ export class MemoryManagementViewModel {
 
       // 加载全部 Memory(按类型分组)
       let allMemories: ChatMemory[] = await this.memoryService.listByBranch(branchId);
-      // v45: 世界分组会话合并世界池有效记忆(按 ID 去重)。
-      // 重新生成 fork 新分支后,世界共享记忆仍留在原分支,只查分支会误显示"记忆丢失"。
+      // v45+v46: 世界分组会话补全"本会话"的世界共享记忆(按 ID 去重)。
+      // fork 新分支后世界共享记忆仍留在原分支,只查分支会误显示"记忆丢失";
+      // 但**只补本会话(chatId 匹配)的 chapter/session**,不混入其他会话的记忆,
+      // 避免新会话的对话记忆页出现其他会话内容造成错乱。
+      // 世界共享 core 是跨会话共享单例,不在单个会话页展示(请到文件夹记忆页查看)。
       const worldId: string = await this.memoryService.getWorldIdByChat(this.chatId);
       if (worldId.length > 0) {
         const worldMemories: ChatMemory[] = await this.memoryService.listWorldMemories(worldId);
         const seen: Set<string> = new Set<string>();
         const merged: ChatMemory[] = [];
         for (let i = 0; i < allMemories.length; i++) {
-          seen.add(allMemories[i].id);
-          merged.push(allMemories[i]);
+          const m: ChatMemory = allMemories[i];
+          // 世界共享 core(跨会话单例)不展示于单会话记忆页
+          if (m.worldId.length > 0 && m.memoryType === 'core') {
+            continue;
+          }
+          seen.add(m.id);
+          merged.push(m);
         }
         for (let i = 0; i < worldMemories.length; i++) {
-          if (!seen.has(worldMemories[i].id)) {
-            merged.push(worldMemories[i]);
+          const m: ChatMemory = worldMemories[i];
+          // 只补本会话自己的记忆;世界共享 core 跳过
+          if (m.chatId !== this.chatId || m.memoryType === 'core') {
+            continue;
+          }
+          if (!seen.has(m.id)) {
+            merged.push(m);
           }
         }
         allMemories = merged;
@@ -227,6 +266,9 @@ export class MemoryManagementViewModel {
         }
       }
       this.memoryGroups = this.groupMemoriesByType(allMemories, worldNameMap);
+
+      // v46: 加载当前会话已引用(按需加载)的记忆 ID
+      await this.loadReferencedMemoryIds();
 
       // 兼容旧字段:取最新有效 Memory
       let latestValid: ChatMemory | null = null;
@@ -269,6 +311,7 @@ export class MemoryManagementViewModel {
   ): MemoryTypeGroup[] {
     const groupMap: Map<MemoryType, ChatMemory[]> = new Map<MemoryType, ChatMemory[]>();
     groupMap.set('core', []);
+    groupMap.set('session', []);
     groupMap.set('chapter', []);
     groupMap.set('rolling', []);
     groupMap.set('legacy', []);
@@ -285,7 +328,7 @@ export class MemoryManagementViewModel {
     }
 
     const groups: MemoryTypeGroup[] = [];
-    const types: MemoryType[] = ['core', 'chapter', 'rolling', 'legacy'];
+    const types: MemoryType[] = ['core', 'session', 'chapter', 'rolling', 'legacy'];
     for (let t = 0; t < types.length; t++) {
       const type: MemoryType = types[t];
       const list: ChatMemory[] = groupMap.get(type)!;
@@ -306,12 +349,47 @@ export class MemoryManagementViewModel {
       });
     }
 
+    // v46: 章节实体分组视图(纯展示层重排,不修改章节内容)
+    this.chapterEntityGroups = this.buildEntityGroupViews(
+      groupMap.get('chapter')!, worldNameMap
+    );
+
     // 按类型优先级排序
     groups.sort((a: MemoryTypeGroup, b: MemoryTypeGroup): number =>
       MEMORY_TYPE_ORDER[a.memoryType] - MEMORY_TYPE_ORDER[b.memoryType]
     );
 
     return groups;
+  }
+
+  /**
+   * v46: 构建章节实体分组视图(ChapterMemoryIndexer 程序化解析,按涉及章节数降序)。
+   */
+  private buildEntityGroupViews(
+    chapters: ChatMemory[],
+    worldNameMap: Map<string, string>
+  ): EntityGroupView[] {
+    const validChapters: ChatMemory[] = chapters.filter(
+      (m: ChatMemory): boolean => !m.invalidated && m.enabled
+    );
+    if (validChapters.length === 0) {
+      return [];
+    }
+    const entityGroups: EntityChapterGroup[] = groupChaptersByEntity(validChapters);
+    const views: EntityGroupView[] = [];
+    for (let i = 0; i < entityGroups.length; i++) {
+      const group: EntityChapterGroup = entityGroups[i];
+      const items: MemoryDisplayItem[] = [];
+      for (let j = 0; j < group.chapters.length; j++) {
+        items.push(this.buildDisplayItem(group.chapters[j], worldNameMap));
+      }
+      views.push({
+        name: group.name,
+        kindLabel: entityKindLabel(group.kind),
+        items: items
+      });
+    }
+    return views;
   }
 
   /**
@@ -523,6 +601,109 @@ export class MemoryManagementViewModel {
       Logger.error(LOG_TAG, 'regenerateSummary failed: ' + String(e));
     } finally {
       this.isOperating = false;
+    }
+  }
+
+  /**
+   * v46: 手动生成会话记忆(把当前会话的章节+核心记忆压缩为 1~2k 入口摘要 + 实体索引)。
+   * 仅世界分组会话可用。
+   */
+  async generateSessionMemory(): Promise<void> {
+    if (this.chatId.length === 0) {
+      return;
+    }
+    if (this.isOperating) {
+      return;
+    }
+    this.isOperating = true;
+    this.errorMessage = '';
+    this.statusMessage = '正在生成会话记忆...';
+    try {
+      const worldId: string = await this.memoryService.getWorldIdByChat(this.chatId);
+      if (worldId.length === 0) {
+        this.errorMessage = '仅世界分组(文件夹)会话支持会话记忆';
+        this.statusMessage = '';
+        return;
+      }
+      const result = await this.memoryService.generateSessionMemory(worldId, this.chatId);
+      if (result.success) {
+        this.statusMessage = '已生成会话记忆';
+        this.notifyMemoryChanged();
+      } else {
+        this.errorMessage = '生成失败: ' + (result.error !== undefined ? result.error : '未知错误');
+        this.statusMessage = '';
+      }
+      await this.reload();
+    } catch (e) {
+      this.errorMessage = '生成失败';
+      this.statusMessage = '';
+      Logger.error(LOG_TAG, 'generateSessionMemory failed: ' + String(e));
+    } finally {
+      this.isOperating = false;
+    }
+  }
+
+  /**
+   * v46: 加载当前会话已引用(按需加载)的记忆 ID。
+   */
+  private async loadReferencedMemoryIds(): Promise<void> {
+    const refService = AppServices.getMemoryLoadRefService();
+    if (refService === null) {
+      this.referencedMemoryIds = [];
+      return;
+    }
+    try {
+      const refs: MemoryLoadRef[] = await refService.getRefs(this.chatId);
+      this.referencedMemoryIds = refs.map((r: MemoryLoadRef): string => r.memoryId);
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'loadReferencedMemoryIds failed: ' + String(e));
+      this.referencedMemoryIds = [];
+    }
+  }
+
+  /** v46: 指定记忆是否已引用到当前对话。 */
+  isReferenced(memoryId: string): boolean {
+    return this.referencedMemoryIds.includes(memoryId);
+  }
+
+  /**
+   * v46: 引用/取消引用记忆到当前对话(手动按需加载)。
+   * 引用时以当前最后一条消息为锚点,之后构建请求在锚点后注入记忆块。
+   */
+  async toggleMemoryReference(memoryId: string): Promise<void> {
+    if (this.chatId.length === 0 || memoryId.length === 0) {
+      return;
+    }
+    const refService = AppServices.getMemoryLoadRefService();
+    if (refService === null) {
+      this.errorMessage = '记忆引用服务不可用';
+      return;
+    }
+    this.errorMessage = '';
+    try {
+      if (this.isReferenced(memoryId)) {
+        await refService.removeRef(this.chatId, memoryId);
+        this.statusMessage = '已取消引用';
+      } else {
+        // 锚点 = 当前最后一条消息
+        const messages: ChatMessage[] =
+          await this.branchPersistenceService.loadActiveBranchMessages(this.chatId);
+        if (messages.length === 0) {
+          this.errorMessage = '会话暂无消息,无法锚定引用';
+          return;
+        }
+        const anchorMessageId: string = messages[messages.length - 1].id;
+        const ok: boolean = await refService.addRef(this.chatId, memoryId, anchorMessageId);
+        if (!ok) {
+          this.errorMessage = '引用数量已达上限,请先取消部分引用';
+          return;
+        }
+        this.statusMessage = '已引用到当前对话';
+      }
+      await this.loadReferencedMemoryIds();
+    } catch (e) {
+      this.errorMessage = '操作失败';
+      Logger.error(LOG_TAG, 'toggleMemoryReference failed: ' + String(e));
     }
   }
 

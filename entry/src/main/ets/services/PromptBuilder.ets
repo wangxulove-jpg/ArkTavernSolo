@@ -61,6 +61,8 @@ const EXAMPLE_SEPARATOR: string = '<START>';
 export interface MemoryLayersInjection {
   /** Core 记忆(高优先级,全量注入) */
   core: ChatMemory[];
+  /** v46: Session 会话记忆(跨会话入口级摘要,createdAt 正序) */
+  session: ChatMemory[];
   /** Chapter 记忆(已按时间倒序排列,取最近 N 个) */
   chapter: ChatMemory[];
   /** Rolling 记忆(最近 1 条) */
@@ -494,6 +496,25 @@ export class PromptBuilder {
         '【核心长期记忆】\n' + content,
         100 - i, // Core 之间按顺序优先级递减
         ChatMessageSource.MemoryCore
+      );
+      segments.push(seg);
+    }
+
+    // Session:跨会话入口级摘要(createdAt 正序注入,每会话一条 System 消息)
+    for (let i = 0; i < layers.session.length; i++) {
+      const m: ChatMemory = layers.session[i];
+      const content: string = m.summary.trim();
+      if (content.length === 0) {
+        continue;
+      }
+      const title: string = m.title.length > 0 ? m.title : '会话记忆';
+      const seg: PromptSegment = createPromptSegment(
+        'memory-session-' + m.id,
+        PromptSegmentPosition.MemorySession,
+        ChatRole.System,
+        '【' + title + '】\n' + content,
+        100 - i,
+        ChatMessageSource.MemorySession
       );
       segments.push(seg);
     }
