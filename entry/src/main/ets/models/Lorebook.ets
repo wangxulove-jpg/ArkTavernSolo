@@ -219,7 +219,8 @@ export function validateLorebook(lorebook: Lorebook): string | null {
 export function isValidActivationMode(mode: LorebookActivationMode): boolean {
   return mode === LorebookActivationMode.FollowGlobal ||
     mode === LorebookActivationMode.FullInject ||
-    mode === LorebookActivationMode.OnDemand;
+    mode === LorebookActivationMode.OnDemand ||
+    mode === LorebookActivationMode.OnDemandPinned;
 }
 
 /**
