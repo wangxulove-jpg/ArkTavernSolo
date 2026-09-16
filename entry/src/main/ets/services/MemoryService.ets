@@ -122,15 +122,15 @@ export interface ChapterTriggerConfig {
   chunkMaxMessages: number;
 }
 
-/** 默认章节触发配置:15 条消息或 6000 字符触发;v45 分段:每段约 10000 字符/60 条消息 */
+/** 默认章节触发配置:50 条对话或 20000 字符触发;v45 分段:每段 50 条对话/约 20000 字符 */
 export const DEFAULT_CHAPTER_TRIGGER: ChapterTriggerConfig = {
-  messageCountThreshold: 15,
-  charLengthThreshold: 6000,
+  messageCountThreshold: 50,
+  charLengthThreshold: 20000,
   chapterTargetLength: 2000,
   chapterMaxLength: 3000,
   recentChapterInjectCount: 4,
-  chunkSourceChars: 10000,
-  chunkMaxMessages: 60
+  chunkSourceChars: 20000,
+  chunkMaxMessages: 50
 };
 
 /** v45: 归档边界解析结果(最新 chapter/rolling 的 endPosition 与其摘要)。 */
