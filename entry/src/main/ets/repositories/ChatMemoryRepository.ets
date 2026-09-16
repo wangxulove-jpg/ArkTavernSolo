@@ -253,7 +253,8 @@ export class ChatMemoryRepository {
 
   /**
    * v42: 获取指定世界分组的最新有效 Core 记忆(type='core' 且 invalidated=0)。
-   * 按 created_at DESC 取第一行,无则返回 null。世界单例 Core,跨会话共享。
+   * v45: 排序改为 updated_at DESC + created_at DESC,消除 created_at 并列时的
+   * 不确定性(历史数据可能存在多条有效 core,LIMIT 1 结果不稳定导致核心记忆回退)。
    */
   async latestValidCoreByWorld(worldId: string): Promise<ChatMemory | null> {
     const store: relationalStore.RdbStore = this.dbHelper.getStore();
@@ -266,6 +267,7 @@ export class ChatMemoryRepository {
     predicates.equalTo(COLUMN_MEMORY_ENABLED, 1);
     predicates.and();
     predicates.equalTo(COLUMN_MEMORY_INVALIDATED, 0);
+    predicates.orderByDesc(COLUMN_UPDATED_AT);
     predicates.orderByDesc(COLUMN_CREATED_AT);
     predicates.limitAs(1);
     const rs: relationalStore.ResultSet = await store.query(predicates);
@@ -614,6 +616,11 @@ export class ChatMemoryRepository {
     const now: number = nowMillis();
     for (let i = 0; i < ancestors.length; i++) {
       const ancestor: ChatMemory = ancestors[i];
+      // v45: 世界分组记忆(worldId 非空)跳过复制——世界池本身跨分支共享,
+      // 复制只会在世界池里制造重复副本(注入重复 + latestValidCoreByWorld 排序不稳定)
+      if (ancestor.worldId.length > 0) {
+        continue;
+      }
       // 创建继承副本(新 ID),保留所有字段,invalidated 重置为 false
       const inherited: ChatMemory = {
         id: generateUuid(),

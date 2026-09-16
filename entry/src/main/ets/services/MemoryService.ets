@@ -116,16 +116,28 @@ export interface ChapterTriggerConfig {
   chapterMaxLength: number;
   /** 注入时保留的最近章节数 */
   recentChapterInjectCount: number;
+  /** v45: 分段总结每段源文本目标字符数(达到即切一段,每段独立成章) */
+  chunkSourceChars: number;
+  /** v45: 分段总结每段消息数上限(防止超短消息凑不出字符数时单段过长) */
+  chunkMaxMessages: number;
 }
 
-/** 默认章节触发配置:15 条消息或 6000 字符触发 */
+/** 默认章节触发配置:15 条消息或 6000 字符触发;v45 分段:每段约 10000 字符/60 条消息 */
 export const DEFAULT_CHAPTER_TRIGGER: ChapterTriggerConfig = {
   messageCountThreshold: 15,
   charLengthThreshold: 6000,
-  chapterTargetLength: 1000,
-  chapterMaxLength: 1500,
-  recentChapterInjectCount: 4
+  chapterTargetLength: 2000,
+  chapterMaxLength: 3000,
+  recentChapterInjectCount: 4,
+  chunkSourceChars: 10000,
+  chunkMaxMessages: 60
 };
+
+/** v45: 归档边界解析结果(最新 chapter/rolling 的 endPosition 与其摘要)。 */
+interface ArchivedPosition {
+  readonly position: number;
+  readonly prevSummary: string;
+}
 
 export class MemoryService {
   private readonly memoryPersistence: MemoryPersistenceService;
@@ -175,6 +187,11 @@ export class MemoryService {
       Logger.warn(LOG_TAG, 'resolveWorldIdByChat failed: ' + String(e));
       return '';
     }
+  }
+
+  /** v45: 查询会话所属世界分组 ID(供记忆管理页合并世界池展示等)。 */
+  async getWorldIdByChat(chatId: string): Promise<string> {
+    return await this.resolveWorldIdByChat(chatId);
   }
 
   // ===== 加载 =====
@@ -334,8 +351,12 @@ export class MemoryService {
    * v8.4: 获取"手动记忆总结"章节边界(所有 chapter memory 的最大 endPosition,无章节返回 -1)。
    * 章节只由手动总结(forceGenerateChapterMemory)追加,不被滚动/自动总结扩展,
    * 因此作为"最近原始消息窗口"锚点来源:边界稳定不滑动,直到下一次手动总结。
+   *
+   * v45: 世界分组会话(chatId 非空)补充"同会话"的世界共享章节——
+   * 重新生成 fork 新分支后,分支内查不到旧分支的世界章节,边界丢失会导致
+   * 窗口锚点回退、注入重复原文。跨会话的 position 不可比,只认本会话的章节。
    */
-  async getChapterBoundaryPosition(branchId: string): Promise<number> {
+  async getChapterBoundaryPosition(branchId: string, chatId: string = ''): Promise<number> {
     if (branchId.length === 0) {
       return -1;
     }
@@ -347,6 +368,19 @@ export class MemoryService {
       for (let i = 0; i < chapters.length; i++) {
         if (chapters[i].endPosition > maxEnd) {
           maxEnd = chapters[i].endPosition;
+        }
+      }
+      if (chatId.length > 0) {
+        const worldId: string = await this.resolveWorldIdByChat(chatId);
+        if (worldId.length > 0) {
+          const worldChapters: ChatMemory[] =
+            await this.memoryPersistence.listValidByWorldAndType(worldId, 'chapter');
+          for (let i = 0; i < worldChapters.length; i++) {
+            const m: ChatMemory = worldChapters[i];
+            if (m.chatId === chatId && m.endPosition > maxEnd) {
+              maxEnd = m.endPosition;
+            }
+          }
         }
       }
       return maxEnd;
@@ -404,29 +438,26 @@ export class MemoryService {
    * "未归档"定义:position > 最新 chapter memory 的 endPosition。
    * 若无 chapter memory,则与最新 rolling memory 的 endPosition 比较。
    *
+   * v45: 世界分组会话(chatId 非空)同时计入"同会话"的世界共享章节/滚动记忆,
+   * 避免 fork 新分支后误判"全部未归档"而重复总结整段对话。
+   *
    * @param branchId 当前 Branch ID
    * @param branchMessages 当前 Branch 的全部消息(按 position ASC)
+   * @param chatId 当前 Chat ID(v45 世界感知归档边界,默认 '' 不启用)
    * @returns true 表示需要触发章节生成
    */
   async shouldGenerateChapter(
     branchId: string,
-    branchMessages: ChatMessage[]
+    branchMessages: ChatMessage[],
+    chatId: string = ''
   ): Promise<boolean> {
     if (branchMessages.length === 0) {
       return false;
     }
     try {
-      // 找到最新的 chapter 或 rolling memory 的 endPosition
-      const allValid: ChatMemory[] = await this.memoryPersistence.listValidByBranch(branchId);
-      let archivedPos: number = -1;
-      for (let i = 0; i < allValid.length; i++) {
-        const m: ChatMemory = allValid[i];
-        if (m.memoryType === 'chapter' || m.memoryType === 'rolling') {
-          if (m.endPosition > archivedPos) {
-            archivedPos = m.endPosition;
-          }
-        }
-      }
+      const archived: ArchivedPosition =
+        await this.resolveArchivedPosition(branchId, chatId);
+      const archivedPos: number = archived.position;
 
       let unarchivedCount: number = 0;
       let unarchivedChars: number = 0;
@@ -447,6 +478,54 @@ export class MemoryService {
       Logger.warn(LOG_TAG, 'shouldGenerateChapter failed: ' + String(e));
       return false;
     }
+  }
+
+  /**
+   * v45: 解析归档边界(最新 chapter/rolling 的 endPosition)与其摘要。
+   * - 优先读本 Branch 的有效记忆
+   * - 世界分组会话(chatId 非空)补充"同会话"的世界共享 chapter/rolling
+   *   (跨会话 position 不可比,只认本会话;修复 fork 后归档边界丢失)
+   */
+  private async resolveArchivedPosition(
+    branchId: string,
+    chatId: string
+  ): Promise<ArchivedPosition> {
+    const allValid: ChatMemory[] = await this.memoryPersistence.listValidByBranch(branchId);
+    let archivedPos: number = -1;
+    let prevSummary: string = '';
+    for (let i = 0; i < allValid.length; i++) {
+      const m: ChatMemory = allValid[i];
+      if (m.memoryType === 'chapter' || m.memoryType === 'rolling') {
+        if (m.endPosition > archivedPos) {
+          archivedPos = m.endPosition;
+          prevSummary = m.summary;
+        }
+      }
+    }
+    if (chatId.length > 0) {
+      const worldId: string = await this.resolveWorldIdByChat(chatId);
+      if (worldId.length > 0) {
+        const worldChapters: ChatMemory[] =
+          await this.memoryPersistence.listValidByWorldAndType(worldId, 'chapter');
+        const worldRolling: ChatMemory[] =
+          await this.memoryPersistence.listValidByWorldAndType(worldId, 'rolling');
+        for (let i = 0; i < worldChapters.length; i++) {
+          const m: ChatMemory = worldChapters[i];
+          if (m.chatId === chatId && m.endPosition > archivedPos) {
+            archivedPos = m.endPosition;
+            prevSummary = m.summary;
+          }
+        }
+        for (let i = 0; i < worldRolling.length; i++) {
+          const m: ChatMemory = worldRolling[i];
+          if (m.chatId === chatId && m.endPosition > archivedPos) {
+            archivedPos = m.endPosition;
+            prevSummary = m.summary;
+          }
+        }
+      }
+    }
+    return { position: archivedPos, prevSummary: prevSummary };
   }
 
   // ===== 增量总结(rolling,旧 API 兼容) =====
@@ -601,8 +680,8 @@ export class MemoryService {
       return { success: true, memory: null };
     }
 
-    // 1. 优先尝试章节生成
-    const shouldChapter: boolean = await this.shouldGenerateChapter(branchId, branchMessages);
+    // 1. 优先尝试章节生成(v45: 世界感知归档边界)
+    const shouldChapter: boolean = await this.shouldGenerateChapter(branchId, branchMessages, chatId);
     if (shouldChapter) {
       const chapterResult: MemorySummaryResult = await this.generateChapterMemory(
         chatId, branchId, branchMessages
@@ -686,9 +765,14 @@ export class MemoryService {
   /**
    * v12: 章节生成主体(无阈值判断)。
    * - 范围 = [最新 chapter/rolling 的 endPosition + 1, 当前最后消息 position]
-   * - 调用模型生成 800-1500 字的结构化章节摘要
+   * - 调用模型生成结构化章节摘要(目标/最大长度见 chapterConfig)
    * - 包含:时间范围、地点、参与者、关键事件、决策、情绪变化、关系变化、未解决事项
-   * - 失败返回 success=false,不写入数据库
+   *
+   * v45: 分段总结。未归档消息超过单段预算(chunkSourceChars 字符或 chunkMaxMessages 条)时,
+   * 按顺序切为多段,每段独立请求模型、独立成章(标题带 N/M 后缀),前一段摘要作为
+   * 下一段的 prevSummary 保持剧情连贯;每段成功即落库,中途失败保留已成功段(部分成功)。
+   *
+   * v45: 世界分组会话的归档边界计入"同会话"的世界共享章节(修复 fork 后重复全量总结)。
    *
    * @param chatId 当前 Chat ID
    * @param branchId 当前 Branch ID
@@ -701,19 +785,11 @@ export class MemoryService {
     branchMessages: ChatMessage[]
   ): Promise<MemorySummaryResult> {
     try {
-      // 找到最新 chapter/rolling 的 endPosition 作为章节起点
-      const allValid: ChatMemory[] = await this.memoryPersistence.listValidByBranch(branchId);
-      let archivedPos: number = -1;
-      let prevSummary: string = '';
-      for (let i = 0; i < allValid.length; i++) {
-        const m: ChatMemory = allValid[i];
-        if (m.memoryType === 'chapter' || m.memoryType === 'rolling') {
-          if (m.endPosition > archivedPos) {
-            archivedPos = m.endPosition;
-            prevSummary = m.summary;
-          }
-        }
-      }
+      // 找到最新 chapter/rolling 的 endPosition 作为章节起点(世界感知)
+      const archived: ArchivedPosition =
+        await this.resolveArchivedPosition(branchId, chatId);
+      const archivedPos: number = archived.position;
+      let prevSummary: string = archived.prevSummary;
 
       // 收集未归档消息
       const newMessages: ChatMessage[] = [];
@@ -725,8 +801,9 @@ export class MemoryService {
         return { success: true, memory: null };
       }
 
-      // 构建章节生成提示词
-      const chapterPrompt: ChatMessage[] = this.buildChapterPrompt(prevSummary, newMessages);
+      // v45: 分段(每段 ~chunkSourceChars 字符或 chunkMaxMessages 条消息)
+      const chunks: ChatMessage[][] = this.splitMessagesIntoChunks(newMessages);
+      const chunkCount: number = chunks.length;
 
       // 解析当前 Provider 配置
       const config = await this.modelService.getCurrentConfig();
@@ -738,68 +815,120 @@ export class MemoryService {
         return { success: false, memory: null, error: 'current model name is empty' };
       }
 
-      // 调用模型生成章节(maxTokens 留足空间)
-      const request: ChatRequest = {
-        model: modelName,
-        messages: chapterPrompt,
-        temperature: 0.4,
-        topP: 0.9,
-        maxTokens: 2048,
-        stream: false
-      };
-      const response = await this.modelService.sendChat(request);
-      if (response.content.length === 0) {
-        return { success: false, memory: null, error: 'empty response' };
+      // v42: 章节记忆带世界分组标记(世界内跨会话共享)
+      const worldId: string = await this.resolveWorldIdByChat(chatId);
+
+      let lastInserted: ChatMemory | null = null;
+      let insertedCount: number = 0;
+      let chunkOffset: number = 0;
+      for (let c = 0; c < chunkCount; c++) {
+        const chunk: ChatMessage[] = chunks[c];
+        const chunkStartPosition: number = startIdx + chunkOffset;
+        const chunkEndPosition: number = chunkStartPosition + chunk.length - 1;
+        chunkOffset += chunk.length;
+
+        // 构建章节生成提示词(前一段摘要作为 prevSummary,保持剧情连贯)
+        const chapterPrompt: ChatMessage[] = this.buildChapterPrompt(prevSummary, chunk);
+
+        // 调用模型生成章节(v45: maxTokens 留足分段后的输出空间)
+        const request: ChatRequest = {
+          model: modelName,
+          messages: chapterPrompt,
+          temperature: 0.4,
+          topP: 0.9,
+          maxTokens: 4096,
+          stream: false
+        };
+        const response = await this.modelService.sendChat(request);
+        if (response.content.length === 0) {
+          if (insertedCount === 0) {
+            return { success: false, memory: null, error: 'empty response' };
+          }
+          // 已有成功段落:保留部分成功,停止后续段
+          Logger.warn(LOG_TAG, 'doGenerateChapter | chunk ' + (c + 1) + '/'
+            + chunkCount + ' empty response, keep partial');
+          break;
+        }
+
+        // 提取关键词
+        const keywords: string[] = extractKeywordsFromMessages(chunk);
+        const keywordsJson: string = JSON.stringify(keywords);
+
+        // 创建该段的 chapter memory(独立追加,不覆盖)
+        const now: number = nowMillis();
+        const chunkTitle: string = buildChapterTitle(chunk, chunkStartPosition, chunkEndPosition)
+          + (chunkCount > 1 ? '(' + (c + 1) + '/' + chunkCount + ')' : '');
+        const newChapter: ChatMemory = createChatMemory(
+          generateUuid(),
+          chatId,
+          branchId,
+          chunk[0].id,
+          chunk[chunk.length - 1].id,
+          chunkStartPosition,
+          chunkEndPosition,
+          response.content,
+          now,
+          undefined,
+          worldId
+        );
+        const typed: ChatMemory = withMemoryMetadata(
+          newChapter,
+          {
+            memoryType: 'chapter',
+            title: chunkTitle,
+            detail: response.content,
+            importance: 50,
+            keywordsJson,
+            sourceHash: ''
+          },
+          now
+        );
+        await this.memoryPersistence.insert(typed);
+        insertedCount++;
+        lastInserted = typed;
+        prevSummary = response.content;
       }
 
-      // 提取关键词(简化:从响应中提取,实际可单独调用模型)
-      const keywords: string[] = extractKeywordsFromMessages(newMessages);
-      const keywordsJson: string = JSON.stringify(keywords);
-
-      // 创建新的 chapter memory(独立追加,不覆盖)
-      const lastMessage: ChatMessage = branchMessages[branchMessages.length - 1];
-      const lastPosition: number = branchMessages.length - 1;
-      const now: number = nowMillis();
-      // v42: 章节记忆带世界分组标记(世界内跨会话共享;章节边界仍按分支查询,作用域不变)
-      const worldId: string = await this.resolveWorldIdByChat(chatId);
-      const newChapter: ChatMemory = createChatMemory(
-        generateUuid(),
-        chatId,
-        branchId,
-        newMessages[0].id,
-        lastMessage.id,
-        startIdx,
-        lastPosition,
-        response.content,
-        now,
-        undefined,
-        worldId
-      );
-      // 设置为 chapter 类型 + 元数据
-      const typed: ChatMemory = withMemoryMetadata(
-        newChapter,
-        {
-          memoryType: 'chapter',
-          title: buildChapterTitle(newMessages, startIdx, lastPosition),
-          detail: response.content,
-          importance: 50, // 章节默认重要度 50
-          keywordsJson,
-          sourceHash: ''
-        },
-        now
-      );
-      await this.memoryPersistence.insert(typed);
+      if (insertedCount === 0 || lastInserted === null) {
+        return { success: true, memory: null };
+      }
 
       // 章节生成成功后:软失效覆盖范围内的旧 rolling memory(避免重复)
-      // rolling 的 endPosition <= 新 chapter 的 endPosition 且 >= startIdx 的标记失效
-      // 简化:仅失效与本章范围重叠的 rolling
-      await this.invalidateOverlappingRolling(branchId, startIdx, lastPosition);
+      await this.invalidateOverlappingRolling(branchId, startIdx, branchMessages.length - 1);
 
-      return { success: true, memory: typed };
+      return { success: true, memory: lastInserted };
     } catch (e) {
       Logger.warn(LOG_TAG, 'doGenerateChapter failed: ' + String(e));
       return { success: false, memory: null, error: String(e) };
     }
+  }
+
+  /**
+   * v45: 把未归档消息按顺序切为多段。
+   * 每段目标 chunkSourceChars 字符(includeInMemory=false 的消息不计字符但占位),
+   * 或 chunkMaxMessages 条消息上限;最后一段不足也成段;总量不超预算时返回单段。
+   */
+  private splitMessagesIntoChunks(messages: ChatMessage[]): ChatMessage[][] {
+    const chunks: ChatMessage[][] = [];
+    let current: ChatMessage[] = [];
+    let currentChars: number = 0;
+    for (let i = 0; i < messages.length; i++) {
+      const msg: ChatMessage = messages[i];
+      const len: number = msg.includeInMemory === false ? 0 : msg.content.length;
+      if (current.length > 0
+        && (currentChars + len > this.chapterConfig.chunkSourceChars
+          || current.length >= this.chapterConfig.chunkMaxMessages)) {
+        chunks.push(current);
+        current = [];
+        currentChars = 0;
+      }
+      current.push(msg);
+      currentChars += len;
+    }
+    if (current.length > 0) {
+      chunks.push(current);
+    }
+    return chunks;
   }
 
   /**
@@ -858,7 +987,18 @@ export class MemoryService {
       const existingCoreText: string = existingCore !== null ? existingCore.summary : '';
 
       // 读取最近的章节(最近 2 个)
-      const recentChapters: ChatMemory[] = chapterList.slice(0, 2);
+      // v45 修复:先按时间取最新 2 章。旧逻辑直接 slice(0,2),而仓库查询按
+      // importance DESC + endPosition ASC 排序,章节 importance 相同时取到的是
+      // 最旧 2 章,导致核心记忆长期由旧章节演进。
+      const sortedChapters: ChatMemory[] = chapterList.slice().sort(
+        (a: ChatMemory, b: ChatMemory): number => {
+          if (b.createdAt !== a.createdAt) {
+            return b.createdAt - a.createdAt;
+          }
+          return b.endPosition - a.endPosition;
+        }
+      );
+      const recentChapters: ChatMemory[] = sortedChapters.slice(0, 2);
       if (recentChapters.length === 0) {
         // 无章节:不更新 core
         return { success: true, memory: existingCore };
