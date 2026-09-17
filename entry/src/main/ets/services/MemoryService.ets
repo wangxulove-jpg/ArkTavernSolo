@@ -263,7 +263,8 @@ export class MemoryService {
    *        (世界章节跨分支,position 不可比,按 createdAt 降序取最近 N 条);
    *        rolling/legacy 与窗口锚点仍只由本分支 allValid 计算。默认 ''(现状逻辑)。
    * @param currentChatId v46: 当前会话 ID。世界分组会话章节隔离:
-   *        跨会话只注入 核心记忆 + 会话记忆(入口摘要),章节只注入本会话的最近 N 章;
+   *        v47: 跨会话只注入 会话记忆(入口摘要),不再注入世界共享核心记忆;
+   *        章节只注入本会话的最近 N 章;
    *        其他会话细节通过"会话记忆 + 按需加载"串联。默认 '' 不启用(章节为空)。
    * @returns 多层记忆注入上下文(全空时 enabled=false)
    */
@@ -327,18 +328,16 @@ export class MemoryService {
       // Legacy 保留全部(通常是旧数据迁移的单条摘要)
       // 已按 endPosition ASC 排序
 
-      // v42: 世界分组读路径——worldId 非空时 core/chapter 以世界共享记忆为准。
+      // v42: 世界分组读路径——worldId 非空时 chapter 以世界共享记忆为准。
       // 世界记忆来自不同分支,position 不可跨分支比较,chapter 按 createdAt 降序取最近 N 条。
-      // v46: 会话隔离——跨会话只注入 核心记忆 + 会话记忆(入口摘要),
-      // 章节记忆永不注入其他会话的内容,只取本会话的最近 N 章。
-      // 其他会话的详细内容通过"会话记忆入口 + 按需加载(实体匹配/手动引用)"串联。
+      // v46: 会话隔离——跨会话只注入 会话记忆(入口摘要),章节记忆永不注入其他会话的内容。
+      // v47: 世界分组跨会话不再注入核心记忆——核心记忆由章节递进总结,与其他会话记忆
+      // 内容重复,发送到其他会话只会浪费 token;核心记忆仍照常生成保存,仅不注入。
       let finalCore: ChatMemory[] = core;
       let finalSession: ChatMemory[] = [];
       let finalChapter: ChatMemory[] = recentChapter;
       if (worldId.length > 0) {
-        const worldCore: ChatMemory | null =
-          await this.memoryPersistence.latestValidCoreByWorld(worldId);
-        finalCore = worldCore !== null ? [worldCore] : [];
+        finalCore = [];
         const worldChapters: ChatMemory[] =
           await this.memoryPersistence.listValidByWorldAndType(worldId, 'chapter');
         worldChapters.sort((a: ChatMemory, b: ChatMemory): number => b.createdAt - a.createdAt);
