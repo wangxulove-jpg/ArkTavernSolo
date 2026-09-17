@@ -2985,6 +2985,36 @@ export class ChatService {
   }
 
   /**
+   * v45.1: 手动刷新世界书激活内容(OnDemandPinned 按需锁定模式)。
+   * 用户切换开场白/生成新章节后调用:按当前会话全部消息重新关键词匹配,
+   * 替换 chat_lorebook_pins 钉选记录并落库(刷新后即锁定)。
+   * @return true=已刷新; false=无可刷新(会话未初始化/无角色书/书未启用/服务不可用/异常)
+   */
+  async refreshLorebookPinNow(): Promise<boolean> {
+    if (this.currentChatId === undefined || this.currentChatId.length === 0
+      || this.lorebookPinService === null || this.lorebookService === null) {
+      return false;
+    }
+    if (this.character === null || this.character.characterBookId.length === 0) {
+      return false;
+    }
+    try {
+      const book: Lorebook | null = await this.lorebookService.getById(this.character.characterBookId);
+      if (book === null || !book.enabled) {
+        return false;
+      }
+      await this.lorebookPinService.refreshPinnedEntries(
+        this.currentChatId, book, this.messages.slice());
+      Logger.info(LOG_TAG, 'ManuallyRefreshLorebookPin | refreshed chatId=' + this.currentChatId
+        + ' book=' + book.id);
+      return true;
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'ManuallyRefreshLorebookPin | failed: ' + String(e));
+      return false;
+    }
+  }
+
+  /**
    * Prompt Cache:设置自动记忆总结开关。
    * @param enabled true=每次 AI 回复后自动触发记忆总结(默认行为,不利于缓存)
    *                false=关闭自动总结,用户需手动触发(推荐,有利于缓存)

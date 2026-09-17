@@ -1250,6 +1250,13 @@ struct ChatPage {
             });
           }
         })
+        .gesture(
+          LongPressGesture()
+            .onAction(() => {
+              // 长按世界书按钮:手动刷新激活内容(按需锁定模式)
+              this.manualRefreshLorebookActivated();
+            })
+        )
         .key('chat.worldbook.toggle')
         .bindSheet($$this.statusPanelVisible, this.statusWorldSheetContent(), {
           height: '70%',
@@ -1357,6 +1364,25 @@ struct ChatPage {
         }
       })
       .key('chat.world.ai')
+
+      // 手动刷新激活内容(按需锁定模式):切换开场白/章节后重新匹配并锁定
+      Row() {
+        Text('↻')
+          .fontSize(12)
+          .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+        Text('刷新激活')
+          .fontSize(11)
+          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+          .margin({ left: 4 })
+      }
+      .height(28)
+      .padding({ left: 10, right: 10 })
+      .borderRadius(14)
+      .backgroundColor('rgba(255,255,255,0.07)')
+      .onClick(() => {
+        this.manualRefreshLorebookActivated();
+      })
+      .key('chat.world.refresh')
 
       Text('✕')
         .fontSize(13)
@@ -1828,6 +1854,24 @@ struct ChatPage {
       this.aiLoading = false;
       this.pendingChangeSet = null;
       promptAction.showToast({ message: '应用失败', duration: 2000 });
+    });
+  }
+
+  /**
+   * 手动刷新世界书激活内容(OnDemandPinned 按需锁定模式)。
+   * 用户切换开场白(不同章节)后调用:按当前会话全部消息重新关键词匹配并落库锁定。
+   */
+  private manualRefreshLorebookActivated(): void {
+    if (this.viewModel === null) {
+      return;
+    }
+    this.viewModel!.refreshLorebookPinNow().then((ok: boolean): void => {
+      promptAction.showToast({
+        message: ok ? '世界书激活内容已刷新并锁定' : '无可刷新内容(未启用/无角色世界书)',
+        duration: 2000
+      });
+    }).catch((): void => {
+      promptAction.showToast({ message: '刷新失败，请重试', duration: 2000 });
     });
   }
 

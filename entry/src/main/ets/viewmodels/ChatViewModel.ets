@@ -1364,6 +1364,22 @@ export class ChatViewModel {
     }
   }
 
+  /**
+   * v45.1: 手动刷新世界书激活内容(OnDemandPinned 按需锁定)。
+   * 用户切换开场白后调用:按当前会话全部消息重新关键词匹配并落库锁定。
+   */
+  async refreshLorebookPinNow(): Promise<boolean> {
+    if (this.disposed) {
+      return false;
+    }
+    try {
+      return await this.chatService.refreshLorebookPinNow();
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'refreshLorebookPinNow failed: ' + String(e));
+      return false;
+    }
+  }
+
   private buildPanelBook(book: Lorebook, isCharacterBook: boolean): LorebookPanelBook {
     const sorted: LorebookEntry[] = book.entries.slice();
     sorted.sort((a: LorebookEntry, b: LorebookEntry): number => {
