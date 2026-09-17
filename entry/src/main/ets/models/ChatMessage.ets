@@ -72,6 +72,13 @@ export interface ChatMessage {
    */
   readonly source?: ChatMessageSource;
   /**
+   * 来源显示名(可选,内部辅助标记)。
+   * - PromptBuilder 构建时填入,如世界书条目名 / 会话名称 / 章节标题
+   * - 仅供"上下文顺序"等展示层使用(页面右侧名称展示)
+   * - 不持久化,不会写入网络请求 JSON(Provider 不识别)
+   */
+  readonly sourceName?: string;
+  /**
    * 发送者类型(v10 多人世界引入)。
    * - 'user': 用户消息(默认,旧消息兼容)
    * - 'character': 角色消息,senderCharacterId 必填
@@ -159,6 +166,7 @@ export interface ChatMessageOverrides {
   errorMessage?: string;
   status?: ChatMessageStatus;
   source?: ChatMessageSource;
+  sourceName?: string;
   senderType?: MessageSenderType;
   senderCharacterId?: string;
   sceneId?: string;
@@ -187,6 +195,7 @@ export function cloneChatMessage(msg: ChatMessage): ChatMessage {
     errorMessage: msg.errorMessage,
     status: msg.status,
     source: msg.source,
+    sourceName: msg.sourceName,
     senderType: msg.senderType,
     senderCharacterId: msg.senderCharacterId,
     sceneId: msg.sceneId,
@@ -225,6 +234,7 @@ export function mergeChatMessage(
     errorMessage: overrides.errorMessage !== undefined ? overrides.errorMessage : base.errorMessage,
     status: overrides.status !== undefined ? overrides.status : base.status,
     source: overrides.source !== undefined ? overrides.source : base.source,
+    sourceName: overrides.sourceName !== undefined ? overrides.sourceName : base.sourceName,
     senderType: overrides.senderType !== undefined ? overrides.senderType : base.senderType,
     senderCharacterId: overrides.senderCharacterId !== undefined
       ? overrides.senderCharacterId : base.senderCharacterId,

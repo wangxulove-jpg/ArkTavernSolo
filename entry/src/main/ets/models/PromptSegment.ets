@@ -70,6 +70,8 @@ export interface PromptSegment {
   readonly priority: number;
   /** 消息来源标签(用于 HistoryTrimmer 识别可裁剪与受保护消息) */
   readonly source: ChatMessageSource;
+  /** 来源显示名(可选,仅供"上下文顺序"展示层使用,不进入网络请求) */
+  readonly sourceName?: string;
 }
 
 /**
@@ -81,7 +83,8 @@ export function createPromptSegment(
   role: ChatRole,
   content: string,
   priority: number = 0,
-  source: ChatMessageSource = ChatMessageSource.Conversation
+  source: ChatMessageSource = ChatMessageSource.Conversation,
+  sourceName?: string
 ): PromptSegment {
   return {
     id: id,
@@ -89,7 +92,8 @@ export function createPromptSegment(
     role: role,
     content: content,
     priority: priority,
-    source: source
+    source: source,
+    sourceName: sourceName
   };
 }
 

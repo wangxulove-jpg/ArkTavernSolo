@@ -47,11 +47,16 @@ import { Logger } from '../utils/Logger';
 
 const LOG_TAG: string = 'BudgetVM';
 
+/** 会话记忆 title 前缀(MemoryService.generateSessionMemory 约定:'会话记忆 · <会话名>') */
+const SESSION_TITLE_PREFIX: string = '会话记忆 · ';
+
 /** 发送给模型上下文顺序中的单条展示项。 */
 export interface ContextOrderItem {
   readonly index: number;
   /** 来源中文名(与分段统计一致) */
   readonly sourceLabel: string;
+  /** 右侧辅助名称(世界书条目名 / 会话名称 / 章节标题,无则空) */
+  readonly name: string;
   /** 角色名(user / assistant / system) */
   readonly roleLabel: string;
   /** 该条 Token 估算 */
@@ -60,6 +65,8 @@ export interface ContextOrderItem {
   readonly cumulativeTokens: number;
   /** 内容预览(截断,单行) */
   readonly preview: string;
+  /** 完整内容(未截断,供底部弹窗展示) */
+  readonly fullContent: string;
   /** ForEach key */
   readonly uid: string;
 }
@@ -390,14 +397,33 @@ export class ContextBudgetViewModel {
       items.push({
         index: i + 1,
         sourceLabel: sourceDisplayLabel(m.source !== undefined ? m.source : this.defaultSource()),
+        name: this.displayName(m),
         roleLabel: this.roleLabel(m.role),
         tokenCount: tokens,
         cumulativeTokens: cum,
         preview: this.preview(m.content),
+        fullContent: m.content,
         uid: String(i)
       });
     }
     return items;
+  }
+
+  /**
+   * 派生行右侧辅助名称。
+   * 优先取 PromptBuilder 构建时携带的 sourceName;会话记忆的 title 为
+   * '会话记忆 · <会话名>'(MemoryService.generateSessionMemory 约定),
+   * 此处剥离前缀只显示会话名。
+   */
+  private displayName(m: ChatMessage): string {
+    const raw: string | undefined = m.sourceName;
+    if (raw === undefined || raw.length === 0) {
+      return '';
+    }
+    if (m.source === ChatMessageSource.MemorySession && raw.startsWith(SESSION_TITLE_PREFIX)) {
+      return raw.substring(SESSION_TITLE_PREFIX.length);
+    }
+    return raw;
   }
 
   private estimateMessage(m: ChatMessage): number {
@@ -431,10 +457,10 @@ export class ContextBudgetViewModel {
 
   private preview(content: string): string {
     const text: string = content.replace(/\s+/g, ' ').trim();
-    if (text.length <= 60) {
+    if (text.length <= 100) {
       return text;
     }
-    return text.substring(0, 60) + '…';
+    return text.substring(0, 100) + '…';
   }
 
   /**

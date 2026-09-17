@@ -206,6 +206,10 @@ export function sourceDisplayLabel(src: ChatMessageSource): string {
       return '世界书(角色前)';
     case ChatMessageSource.LorebookAfter:
       return '世界书(角色后)';
+    case ChatMessageSource.LorebookPinned:
+      return '世界书(固定)';
+    case ChatMessageSource.LorebookDepth:
+      return '世界书(深度注入)';
     case ChatMessageSource.MemorySummary:
       return '记忆摘要';
     case ChatMessageSource.MemoryCore:

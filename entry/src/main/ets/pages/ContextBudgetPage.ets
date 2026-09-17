@@ -64,6 +64,10 @@ struct ContextBudgetPage {
   @State showContextOrder: boolean = false;
   /** 上下文顺序展示项(从 VM 派生) */
   @State contextOrder: ContextOrderItem[] = [];
+  /** 内容详情底部弹窗显示开关(bindSheet,入场自带底部滑出动画) */
+  @State sheetVisible: boolean = false;
+  /** 当前查看详情的条目 */
+  @State sheetItem: ContextOrderItem | null = null;
   private pendingRefresh: boolean = false;
   private refreshPollCount: number = 0;
 
@@ -240,6 +244,16 @@ struct ContextBudgetPage {
     .height('100%')
     .backgroundColor(ThemePalette.pageBackgroundColor(this.effectiveTheme))
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+    .bindSheet(this.sheetVisible, this.contextDetailSheet(), {
+      height: SheetSize.MEDIUM,
+      dragBar: true,
+      showClose: false,
+      backgroundColor: ThemePalette.surface1Color(this.effectiveTheme),
+      onDisappear: () => {
+        this.sheetVisible = false;
+        this.sheetItem = null;
+      }
+    })
   }
 
   @Builder
@@ -459,48 +473,165 @@ struct ContextBudgetPage {
 
   @Builder
   contextOrderRow(item: ContextOrderItem) {
-    Row() {
-      // 序号
-      Text(item.index.toString())
-        .fontSize($r('app.float.app_font_caption'))
-        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-        .width(24)
-        .textAlign(TextAlign.End)
-        .margin({ right: 8 })
-      // 来源 + 角色
-      Column() {
+    Column() {
+      // 第一行:序号 + 来源名 + 右侧辅助名称(世界书条目名/会话名/章节标题)
+      Row() {
+        Text(item.index.toString())
+          .fontSize($r('app.float.app_font_caption'))
+          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+          .width(24)
+          .textAlign(TextAlign.End)
+          .margin({ right: 8 })
         Text(item.sourceLabel)
           .fontSize($r('app.float.app_font_body'))
           .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text(item.roleLabel + ' · 前 ' + this.formatTokenNumber(item.cumulativeTokens))
-          .fontSize(11)
-          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
+        if (item.name.length > 0) {
+          Text(item.name)
+            .fontSize($r('app.float.app_font_caption'))
+            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width('40%')
+            .textAlign(TextAlign.End)
+            .margin({ left: 8 })
+        } else {
+          Text(this.formatTokenNumber(item.tokenCount))
+            .fontSize($r('app.float.app_font_body'))
+            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+            .width(72)
+            .textAlign(TextAlign.End)
+        }
       }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
-      // 本条 Token
-      Text(this.formatTokenNumber(item.tokenCount))
-        .fontSize($r('app.float.app_font_body'))
-        .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-        .width(72)
-        .textAlign(TextAlign.End)
-    }
-    .width('100%')
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
 
-    // 内容预览
-    if (item.preview.length > 0) {
-      Text(item.preview)
+      // 第二行:角色 + 累计/本条 Token
+      Text(this.buildMetaLine(item))
         .fontSize(11)
-        .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-        .maxLines(2)
+        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+        .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .width('100%')
-        .margin({ top: 4, left: 32 })
+        .margin({ top: 2 })
+
+      // 内容预览(缩略)
+      if (item.preview.length > 0) {
+        Text(item.preview)
+          .fontSize(11)
+          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+          .margin({ top: 4, left: 32 })
+        Text('点击查看完整内容')
+          .fontSize(11)
+          .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+          .width('100%')
+          .margin({ top: 2, left: 32 })
+      }
     }
+    .width('100%')
+    .padding({ top: 6, bottom: 6 })
+    .stateStyles({
+      pressed: {
+        .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+      }
+    })
+    .onClick(() => {
+      this.sheetItem = item;
+      this.sheetVisible = true;
+    })
+  }
+
+  /**
+   * 组装行第二行元信息:角色 + 累计 Token(+ 本条 Token,有名称时右侧已被名称占用)。
+   */
+  private buildMetaLine(item: ContextOrderItem): string {
+    if (item.name.length > 0) {
+      return item.roleLabel + ' · 前 ' + this.formatTokenNumber(item.cumulativeTokens)
+        + ' · 本条 ' + this.formatTokenNumber(item.tokenCount);
+    }
+    return item.roleLabel + ' · 前 ' + this.formatTokenNumber(item.cumulativeTokens);
+  }
+
+  /** 弹窗标题:来源名 + 右侧辅助名称(如有)。 */
+  private getSheetTitle(): string {
+    if (this.sheetItem === null) {
+      return '';
+    }
+    if (this.sheetItem!.name.length > 0) {
+      return this.sheetItem!.sourceLabel + ' · ' + this.sheetItem!.name;
+    }
+    return this.sheetItem!.sourceLabel;
+  }
+
+  /** 弹窗元信息行:角色 / 序号 / 本条 Token / 累计 Token。 */
+  private getSheetMeta(): string {
+    if (this.sheetItem === null) {
+      return '';
+    }
+    return '角色 ' + this.sheetItem!.roleLabel
+      + ' · 序号 ' + this.sheetItem!.index.toString()
+      + ' · 本条 ' + this.formatTokenNumber(this.sheetItem!.tokenCount)
+      + ' · 累计 ' + this.formatTokenNumber(this.sheetItem!.cumulativeTokens);
+  }
+
+  /**
+   * 内容详情底部弹窗。
+   * bindSheet 入场自带底部向上滑出动画;完整内容可滚动、可选中复制。
+   */
+  @Builder
+  contextDetailSheet() {
+    Column() {
+      if (this.sheetItem !== null) {
+        // 标题行:来源名 + 右侧辅助名称
+        Row() {
+          Text(this.getSheetTitle())
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 14, bottom: 10 })
+
+        // 元信息行
+        Text(this.getSheetMeta())
+          .fontSize($r('app.float.app_font_caption'))
+          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+          .width('100%')
+          .padding({ left: 16, right: 16, bottom: 10 })
+
+        Divider().color(ThemePalette.dividerColor(this.effectiveTheme))
+
+        // 完整内容
+        Scroll() {
+          Column() {
+            Text(this.sheetItem!.fullContent)
+              .fontSize($r('app.float.app_font_body'))
+              .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+              .lineHeight(22)
+              .width('100%')
+              .copyOption(CopyOptions.LocalDevice)
+          }
+          .width('100%')
+          .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+        }
+        .layoutWeight(1)
+        .scrollBar(BarState.Auto)
+        .edgeEffect(EdgeEffect.Spring)
+        .align(Alignment.TopStart)
+
+        Blank().height(this.navigationBarHeight + 12)
+      }
+    }
+    .width('100%')
+    .height('100%')
   }
 
   @Builder

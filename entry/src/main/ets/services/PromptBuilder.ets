@@ -324,7 +324,8 @@ export class PromptBuilder {
           ChatRole.System,
           entry.content,
           entry.priority,
-          ChatMessageSource.LorebookPinned
+          ChatMessageSource.LorebookPinned,
+          entry.name
         );
         segments.push(pinnedSeg);
       }
@@ -458,7 +459,8 @@ export class PromptBuilder {
         role: msg.role,
         content: msg.content,
         createdAt: msg.createdAt,
-        source: seg.source
+        source: seg.source,
+        sourceName: seg.sourceName
       });
     }
 
@@ -514,7 +516,8 @@ export class PromptBuilder {
         ChatRole.System,
         '【' + title + '】\n' + content,
         100 - i,
-        ChatMessageSource.MemorySession
+        ChatMessageSource.MemorySession,
+        m.title
       );
       segments.push(seg);
     }
@@ -536,7 +539,8 @@ export class PromptBuilder {
         ChatRole.System,
         '【' + title + '】\n' + content,
         sortedChapter.length - i, // 早期章节 priority 略高,保持正序展示
-        ChatMessageSource.MemoryChapter
+        ChatMessageSource.MemoryChapter,
+        m.title
       );
       segments.push(seg);
     }
@@ -689,7 +693,8 @@ export class PromptBuilder {
         ChatRole.System,
         entry.content,
         entry.priority,
-        source
+        source,
+        entry.name
       );
       segments.push(seg);
     }
