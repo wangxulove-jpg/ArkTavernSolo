@@ -287,6 +287,92 @@ export function extractErrorDetail(obj: Record<string, Object>): OpenAIErrorDeta
 }
 
 /**
+ * 从 HTTP 错误响应体提取服务端错误详情。
+ *
+ * 兼容多种服务商错误体格式:
+ * - OpenAI 标准: {"error": {"message": "...", "code": "..."}}
+ * - Gemini OpenAI 兼容层: [{"error": {"message": "...", "status": "..."}}] (数组包裹)
+ * - 纯文本错误页
+ *
+ * @param body HTTP 错误响应体
+ * @returns 错误详情;无法提取时返回 null
+ */
+export function extractErrorDetailFromBody(body: string): OpenAIErrorDetail | null {
+  const trimmed: string = body.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  let parsed: Object;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch (e) {
+    return null;
+  }
+  if (parsed === undefined || parsed === null) {
+    return null;
+  }
+  // Gemini OpenAI 兼容层把错误响应包成数组 [{error: {...}}]
+  if (Array.isArray(parsed)) {
+    const arr: Object[] = parsed as Object[];
+    if (arr.length === 0) {
+      return null;
+    }
+    const first: Object = arr[0];
+    if (first !== null && typeof first === 'object') {
+      return extractErrorDetail(first as Record<string, Object>);
+    }
+    return null;
+  }
+  if (typeof parsed === 'object') {
+    return extractErrorDetail(parsed as Record<string, Object>);
+  }
+  return null;
+}
+
+/**
+ * 根据 HTTP 状态码与服务端错误详情生成面向用户的友好错误提示(中文)。
+ *
+ * 直接用于聊天气泡 / Toast 等展示场景,给出可操作的修复建议,
+ * 并附带服务端返回的真实原因(截断)。
+ *
+ * @param statusCode HTTP 状态码(0 表示未知)
+ * @param detail 服务端错误详情(可为 null)
+ * @returns 友好错误提示文本
+ */
+export function buildFriendlyHttpError(statusCode: number, detail: OpenAIErrorDetail | null): string {
+  const serverMsg: string = detail !== null ? detail.message.trim() : '';
+
+  let hint: string;
+  if (statusCode === 401 || statusCode === 403) {
+    hint = '鉴权失败：API Key 无效或未配置，请到模型设置中检查';
+  } else if (statusCode === 429) {
+    hint = '请求过于频繁，触发限流，请稍后重试或降低发送频率';
+  } else if (statusCode === 408) {
+    hint = '请求超时，请稍后重试';
+  } else if (statusCode === 404) {
+    hint = '模型或接口不存在，请到模型设置中更换模型';
+  } else if (statusCode === 400) {
+    hint = '请求参数被服务端拒绝，请检查上下文长度与消息格式';
+  } else if (statusCode >= 500 && statusCode < 600) {
+    hint = '服务端繁忙或负载过高';
+  } else {
+    hint = '请求失败';
+  }
+
+  let result: string = '模型请求失败：' + hint;
+  if (statusCode > 0) {
+    result += '（HTTP ' + statusCode.toString() + '）';
+  }
+  if (serverMsg.length > 0) {
+    result += '；服务端返回：' + truncateErrorMessage(serverMsg, 200);
+  }
+  if (statusCode >= 500 && statusCode < 600) {
+    result += '；请稍后重试，或更换为其他可用模型';
+  }
+  return result;
+}
+
+/**
  * 从单个 choice 对象安全提取 OpenAIChoice。
  * @param choiceObj choices 数组中的一个元素
  * @returns 解析结果,success=false 时 error 描述原因
@@ -422,6 +508,20 @@ export interface ChoiceExtractResult {
 export function extractResponseBody(obj: Object): ResponseExtractResult {
   if (!isObject(obj)) {
     return { success: false, error: 'Response is not an object', body: undefined };
+  }
+  // Gemini OpenAI 兼容层偶发把错误响应包装成数组 [{error: {...}}](2xx/非 2xx 都可能)
+  if (Array.isArray(obj)) {
+    const arr: Object[] = obj as Object[];
+    for (let i = 0; i < arr.length; i++) {
+      const item: Object = arr[i];
+      if (item !== null && typeof item === 'object') {
+        const itemError: OpenAIErrorDetail | null = extractErrorDetail(item as Record<string, Object>);
+        if (itemError !== null) {
+          return { success: false, error: itemError.message, body: undefined, isErrorBody: true };
+        }
+      }
+    }
+    return { success: false, error: 'Response is an array without error object', body: undefined };
   }
   const root: Record<string, Object> = obj as Record<string, Object>;
 

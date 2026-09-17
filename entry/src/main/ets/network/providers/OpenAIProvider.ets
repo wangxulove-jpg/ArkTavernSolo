@@ -43,9 +43,11 @@ import {
   OpenAIRequestMessage,
   OpenAIChatResponseBody,
   OpenAIResponseFormat,
+  OpenAIErrorDetail,
   roleToString,
   extractResponseBody,
-  extractErrorDetail,
+  extractErrorDetailFromBody,
+  buildFriendlyHttpError,
   truncateErrorMessage
 } from './OpenAITypes';
 import { buildChatCompletionsUrl, buildModelsUrl, UrlBuildResult } from '../streaming/OpenAiUrlBuilder';
@@ -633,36 +635,25 @@ function parseSuccessResponse(responseBody: string, providerId: string): ChatRes
 export function mapHttpError(statusCode: number, responseBody: string): NetworkError {
   const errorType: NetworkErrorType = errorTypeFromStatusCode(statusCode);
 
-  // 尝试从响应体提取服务端错误消息
+  // 从响应体提取服务端错误详情(兼容 OpenAI / Gemini 数组包裹 / 纯文本)
   let serverMessage: string | undefined = undefined;
   let providerCode: string | undefined = undefined;
+  let detail: OpenAIErrorDetail | null = null;
   if (responseBody.length > 0) {
-    try {
-      const parsed: Object = JSON.parse(responseBody);
-      // 安全检查:JSON.parse 可能返回非对象(如 number/string/null)
-      if (parsed !== null && typeof parsed === 'object') {
-        const errorDetail = extractErrorDetail(parsed as Record<string, Object>);
-        if (errorDetail !== null) {
-          serverMessage = truncateErrorMessage(errorDetail.message);
-          if (errorDetail.code !== undefined) {
-            providerCode = errorDetail.code;
-          }
-        }
-      } else {
-        // 非 JSON 对象(如纯字符串/数字),截断作为 causeMessage
-        serverMessage = truncateErrorMessage(responseBody);
+    detail = extractErrorDetailFromBody(responseBody);
+    if (detail !== null) {
+      serverMessage = truncateErrorMessage(detail.message);
+      if (detail.code !== undefined) {
+        providerCode = detail.code;
       }
-    } catch (e) {
-      // 非 JSON 响应,使用截断的原始响应体作为 causeMessage
-      if (responseBody.length > 0) {
-        serverMessage = truncateErrorMessage(responseBody);
-      }
+    } else {
+      // 非 JSON 或纯文本错误响应,截断作为 causeMessage
+      serverMessage = truncateErrorMessage(responseBody);
     }
   }
 
-  const message: string = serverMessage !== undefined
-    ? 'HTTP ' + statusCode.toString() + ': ' + serverMessage
-    : 'HTTP ' + statusCode.toString();
+  // 生成面向用户的友好错误提示(含状态码与服务端真实原因)
+  const message: string = buildFriendlyHttpError(statusCode, detail);
 
   return createNetworkError(
     errorType,

@@ -46,6 +46,11 @@ import {
 } from '../streaming/OpenAiSseDeltaParser';
 import { TransportCallbacks } from '../streaming/StreamTransportTypes';
 import { TransportRequestOptions, TransportAbortHandle } from '../streaming/HttpStreamTransport';
+import {
+  extractErrorDetailFromBody,
+  buildFriendlyHttpError,
+  OpenAIErrorDetail
+} from './OpenAITypes';
 import { Logger } from '../../utils/Logger';
 
 
@@ -54,6 +59,9 @@ const LOG_TAG: string = 'OpenAIStreamSession';
 
 /** 错误消息最大长度 */
 const MAX_ERROR_MESSAGE_LENGTH: number = 512;
+
+/** 非 2xx 响应体收集上限(字符),防止超长错误页占用内存 */
+const MAX_ERROR_BODY_LENGTH: number = 4000;
 
 /** usage 字段提取所需的三个键 */
 interface UsageFields {
@@ -199,6 +207,10 @@ export class OpenAIStreamSession implements ChatStreamHandle {
   private errorFired: boolean = false;
   /** headers 收到前缓存的 chunks(等待 handleHeaders 后处理) */
   private pendingChunks: string[] = [];
+  /** 非 2xx 状态码(收到错误响应头时记录,用于收集响应体后构造详细错误) */
+  private errorStatusCode: number = 0;
+  /** 非 2xx 响应体已收集文本(有上限) */
+  private errorBody: string = '';
   /**
    * Phase 4A-3: 按 index 累积的工具调用条目列表。
    *
@@ -328,7 +340,8 @@ export class OpenAIStreamSession implements ChatStreamHandle {
 
   /**
    * 处理响应头。
-   * 非 2xx 状态码直接映射为错误。
+   * 非 2xx 状态码不立即终态:记录状态码并继续收集响应体,
+   * 以便结束时解析服务端返回的真实错误原因(如 Gemini「模型负载过高」)。
    * 成功后处理 headers 收到前缓存的 chunks。
    */
   private handleHeaders(statusCode: number): void {
@@ -337,13 +350,13 @@ export class OpenAIStreamSession implements ChatStreamHandle {
     }
 
     if (statusCode < 200 || statusCode >= 300) {
-      const errorType: NetworkErrorType = errorTypeFromStatusCode(statusCode);
-      const err: NetworkError = createNetworkError(
-        errorType,
-        'Stream HTTP ' + statusCode.toString(),
-        { statusCode: statusCode }
-      );
-      this.handleError(err);
+      this.errorStatusCode = statusCode;
+      // 保持接收状态以收集错误响应体(不解析为 SSE)
+      this.state = ChatStreamState.Streaming;
+      for (let i = 0; i < this.pendingChunks.length; i++) {
+        this.appendErrorBody(this.pendingChunks[i]);
+      }
+      this.pendingChunks = [];
       return;
     }
 
@@ -370,6 +383,11 @@ export class OpenAIStreamSession implements ChatStreamHandle {
       return;
     }
     if (chunk.length === 0) {
+      return;
+    }
+    // 非 2xx 状态下只收集错误响应体,不走 SSE 解析
+    if (this.errorStatusCode !== 0) {
+      this.appendErrorBody(chunk);
       return;
     }
     // 如果 headers 还没收到(state 仍是 Connecting),缓存 chunk
@@ -575,6 +593,12 @@ export class OpenAIStreamSession implements ChatStreamHandle {
       return;
     }
 
+    // 非 2xx:用收集到的响应体构造带服务端真实原因的详细错误
+    if (this.errorStatusCode !== 0) {
+      this.handleError(this.buildHttpStatusError());
+      return;
+    }
+
     // flush SseParser 剩余内容
     const finishResult = this.sseParser.finish();
     const finishEvents: SseEvent[] = finishResult.events;
@@ -639,6 +663,44 @@ export class OpenAIStreamSession implements ChatStreamHandle {
     this.transportHandle = null;
     Logger.error(LOG_TAG, 'error type=' + error.type + ' msg=' + error.message);
     this.safeOnError(error);
+  }
+
+  /**
+   * 追加错误响应体文本(有上限,防止超长错误页占内存)。
+   * @param chunk 新增文本块
+   */
+  private appendErrorBody(chunk: string): void {
+    if (this.errorBody.length >= MAX_ERROR_BODY_LENGTH) {
+      return;
+    }
+    const remaining: number = MAX_ERROR_BODY_LENGTH - this.errorBody.length;
+    this.errorBody += chunk.length <= remaining ? chunk : chunk.substring(0, remaining);
+  }
+
+  /**
+   * 基于非 2xx 状态码与收集到的响应体构造详细错误。
+   * 解析服务端返回的真实原因(如 Gemini「模型负载过高 / 模型已下线」),
+   * 并映射为友好中文提示,便于用户直接看到失败原因与处理建议。
+   *
+   * @returns 网络错误对象
+   */
+  private buildHttpStatusError(): NetworkError {
+    const detail: OpenAIErrorDetail | null = extractErrorDetailFromBody(this.errorBody);
+    const providerCode: string | undefined = detail !== null && detail.code !== undefined && detail.code.length > 0
+      ? detail.code
+      : undefined;
+    const causeMsg: string | undefined = this.errorBody.trim().length > 0
+      ? truncateErrorMessage(this.errorBody)
+      : undefined;
+    return createNetworkError(
+      errorTypeFromStatusCode(this.errorStatusCode),
+      buildFriendlyHttpError(this.errorStatusCode, detail),
+      {
+        statusCode: this.errorStatusCode,
+        providerCode: providerCode,
+        causeMessage: causeMsg
+      }
+    );
   }
 
   /**
