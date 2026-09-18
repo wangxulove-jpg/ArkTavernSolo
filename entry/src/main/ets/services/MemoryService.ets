@@ -1223,7 +1223,7 @@ export class MemoryService {
    * - 仅世界分组会话可用(worldId 非空)
    * - 无章节记忆时返回失败(先"生成章节"再"生成会话记忆")
    * - 重复生成:软失效同 chatId 旧 session 记忆再插入新记录(追加式)
-   * - 增量语义:旧会话记忆存在时,模型在旧版基础上合并全部章节(索引一并重建)
+   * - 增量语义:旧会话记忆仅在总结时提供,仅作背景与连贯性参考,总结主体为当前对话的全部章节记忆,不重复输出旧版内容(索引一并重建)
    */
   async generateSessionMemory(worldId: string, chatId: string): Promise<MemorySummaryResult> {
     if (worldId.length === 0 || chatId.length === 0) {
@@ -1255,7 +1255,7 @@ export class MemoryService {
       const worldCore: ChatMemory | null =
         await this.memoryPersistence.latestValidCoreByWorld(worldId);
 
-      // 旧会话记忆(增量基础,同 chatId 取 createdAt 最新一条)
+      // 旧会话记忆(同 chatId 取 createdAt 最新一条,仅作连贯性参考,不重复输出)
       const worldSessions: ChatMemory[] =
         await this.memoryPersistence.listValidByWorldAndType(worldId, 'session');
       const oldSessions: ChatMemory[] = worldSessions.filter(
@@ -1368,7 +1368,8 @@ export class MemoryService {
       + '- 总长不超过 2000 字\n'
       + '- 保留人名、地名、时间等可检索的具名信息,不要泛化成"某个人/某个地方"\n'
       + '- 不复制章节原文流水账,以信息密度为主\n'
-      + '- 若提供了旧版会话记忆,在其基础上合并全部章节后重新输出(保持结构不变)\n'
+      + '- 总结主体为当前对话的全部章节记忆;若提供了旧版会话记忆,它仅用于了解上一版结构与基调以保持连贯,严禁把旧版内容重复写进新摘要\n'
+      + '- 若旧版会话记忆与当前章节冲突,以当前章节为准\n'
       + '- 只输出会话记忆本身,不要解释'
       + this.buildJailbreakInstruction();
 
@@ -1377,7 +1378,7 @@ export class MemoryService {
       .join('\n\n');
 
     const userContent: string =
-      (oldSessionSummary.length > 0 ? '【旧版会话记忆】\n' + oldSessionSummary + '\n\n' : '') +
+      (oldSessionSummary.length > 0 ? '【旧版会话记忆(仅作背景与连贯性参考,不要重复输出其内容)】\n' + oldSessionSummary + '\n\n' : '') +
       (coreSummary.length > 0 ? '【世界核心记忆】\n' + coreSummary + '\n\n' : '') +
       '【全部章节记忆】\n' + chaptersText + '\n\n' +
       '请输出压缩后的会话记忆:';
