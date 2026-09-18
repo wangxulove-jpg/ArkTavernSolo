@@ -108,13 +108,26 @@ struct WorldMemoryPage {
         Text('更新于 ' + this.formatTime(memory.updatedAt))
           .fontSize(11)
           .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-        Blank()
+          .layoutWeight(1)
+        Text('编辑')
+          .fontSize(12)
+          .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+          .margin({ right: 14 })
+          .padding({ left: 4, right: 4, top: 2, bottom: 2 })
+          .borderRadius(4)
+          .onClick(() => {
+            if (this.viewModel !== null) {
+              this.viewModel.openSessionEdit(memory);
+              this.syncFromViewModel();
+            }
+          })
         Text('查看详情 ›')
           .fontSize(12)
           .fontColor(ThemePalette.accentColor(this.effectiveTheme))
       }
       .width('100%')
       .margin({ top: 6 })
+      .alignItems(VerticalAlign.Center)
     }
     .width('100%')
     .padding(12)
@@ -267,6 +280,125 @@ struct WorldMemoryPage {
       .margin({ bottom: 4 })
   }
 
+  /**
+   * v47: 会话记忆编辑底部弹层。
+   * 用 bindSheet(系统底部半模态),入场自带底部向上滑出动画,
+   * 与 ChatMoreMenuSheet / ChatMessageActionSheet 保持一致的交互与动画。
+   * 仅更新 title/summary,实体索引(detail)保持不变。
+   */
+  @Builder
+  sessionEditDialog() {
+    Column()
+      .width('100%')
+      .height(0)
+      .backgroundColor(Color.Transparent)
+      .bindSheet(this.viewModel!.showSessionEdit, this.sessionEditSheet(), {
+        height: '92%',
+        dragBar: false,
+        showClose: false,
+        backgroundColor: ThemePalette.surface1Color(this.effectiveTheme),
+        onDisappear: () => {
+          if (this.viewModel !== null && this.viewModel.showSessionEdit) {
+            this.viewModel.closeSessionEdit();
+            this.syncFromViewModel();
+          }
+        }
+      })
+  }
+
+  /** bindSheet 弹层内容:标题 + 编辑器 + 操作按钮。 */
+  @Builder
+  sessionEditSheet() {
+    Column() {
+      Text('编辑会话记忆')
+        .fontSize(17)
+        .fontWeight(FontWeight.Medium)
+        .width('100%')
+        .textAlign(TextAlign.Center)
+        .margin({ top: 4, bottom: 10 })
+
+      Text('标题')
+        .fontSize(13)
+        .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+        .width('100%')
+        .margin({ bottom: 4 })
+      TextInput({ text: this.viewModel!.sessionEditTitle, placeholder: '会话标题(如:初见)' })
+        .fontSize(14)
+        .width('100%')
+        .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+        .borderRadius(10)
+        .margin({ bottom: 10 })
+        .onChange((value: string): void => {
+          this.viewModel!.sessionEditTitle = value;
+        })
+
+      Text('摘要内容')
+        .fontSize(13)
+        .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+        .width('100%')
+        .margin({ bottom: 4 })
+      TextArea({ text: this.viewModel!.sessionEditContent, placeholder: '编辑会话记忆摘要' })
+        .fontSize(14)
+        .width('100%')
+        .layoutWeight(1)
+        .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+        .borderRadius(10)
+        .onChange((value: string): void => {
+          this.viewModel!.sessionEditContent = value;
+        })
+
+      if (this.viewModel!.errorMessage.length > 0) {
+        Text(this.viewModel!.errorMessage)
+          .fontSize(12)
+          .fontColor($r('app.color.app_danger'))
+          .width('100%')
+          .margin({ top: 8 })
+      }
+
+      Row({ space: 10 }) {
+        Button('取消')
+          .fontSize(14)
+          .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+          .height(42)
+          .layoutWeight(1)
+          .borderRadius(20)
+          .onClick(() => {
+            this.viewModel!.errorMessage = '';
+            this.viewModel!.closeSessionEdit();
+            this.syncFromViewModel();
+          })
+        Button('保存')
+          .fontSize(14)
+          .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
+          .fontColor($r('app.color.app_on_accent'))
+          .height(42)
+          .layoutWeight(1)
+          .borderRadius(20)
+          .enabled(!this.viewModel!.sessionEditSaving)
+          .onClick(() => {
+            void this.saveSessionEdit();
+          })
+      }
+      .width('100%')
+      .margin({ top: 12 })
+
+      Blank().height(16)
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ left: 16, right: 16 })
+  }
+
+  private saveSessionEdit(): void {
+    if (this.viewModel === null) {
+      return;
+    }
+    void this.viewModel.saveSessionEdit().then((): void => {
+      this.syncFromViewModel();
+    });
+  }
+
   private openNewMemory(): void {
     if (this.viewModel !== null) {
       this.viewModel.openNewDialog(0);
@@ -283,9 +415,23 @@ struct WorldMemoryPage {
     });
   }
 
+  /**
+   * 系统返回拦截:编辑面板打开时先关闭面板,不直接退出页面。
+   */
+  onBackPress(): boolean {
+    if (this.viewModel !== null && this.viewModel.showSessionEdit) {
+      this.viewModel.errorMessage = '';
+      this.viewModel.closeSessionEdit();
+      this.syncFromViewModel();
+      return true;
+    }
+    return false;
+  }
+
   build() {
-    Column() {
-      Row() {
+    Stack() {
+      Column() {
+        Row() {
         Button('<')
           .fontSize(16)
           .backgroundColor(Color.Transparent)
@@ -397,8 +543,17 @@ struct WorldMemoryPage {
       }
 
       // 编辑对话框
-      if (this.viewModel !== null && this.viewModel.showEditDialog) {
-        this.editDialog()
+        if (this.viewModel !== null && this.viewModel.showEditDialog) {
+          this.editDialog()
+        }
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor(ThemePalette.pageBackgroundColor(this.effectiveTheme))
+
+      // v47: 会话记忆编辑底部弹层(bindSheet,系统底部弹出动画)
+      if (this.viewModel !== null) {
+        this.sessionEditDialog()
       }
     }
     .width('100%')

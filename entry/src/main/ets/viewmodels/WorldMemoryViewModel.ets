@@ -9,7 +9,7 @@
  * 不维护网络/模型调用;章节自动生成仍由 MemoryService 现有机制负责。
  */
 
-import { ChatMemory, withMemoryMetadata } from '../models/ChatMemory';
+import { ChatMemory, withMemoryMetadata, withUpdatedSummary, withTitle } from '../models/ChatMemory';
 import { MemoryService } from '../services/MemoryService';
 import { AppServices } from '../services/AppServices';
 import { Logger } from '../utils/Logger';
@@ -37,6 +37,13 @@ export class WorldMemoryViewModel {
   editContent: string = '';
   editKeywords: string = '';
   editImportance: string = '50';
+
+  /** v47: 会话记忆编辑对话框状态(标题 + 摘要,仅更新 title/summary,保留 detail 实体索引) */
+  showSessionEdit: boolean = false;
+  sessionEditMemory: ChatMemory | null = null;
+  sessionEditTitle: string = '';
+  sessionEditContent: string = '';
+  sessionEditSaving: boolean = false;
 
   private readonly memoryService: MemoryService;
 
@@ -99,6 +106,66 @@ export class WorldMemoryViewModel {
   closeDialog(): void {
     this.showEditDialog = false;
     this.editingMemory = null;
+  }
+
+  /**
+   * 打开会话记忆编辑对话框。
+   * 预填标题与摘要(只编辑 title/summary,detail 实体索引不展示、不修改)。
+   */
+  openSessionEdit(memory: ChatMemory): void {
+    this.sessionEditMemory = memory;
+    this.sessionEditTitle = memory.title;
+    this.sessionEditContent = memory.summary;
+    this.sessionEditSaving = false;
+    this.showSessionEdit = true;
+  }
+
+  /** 关闭会话记忆编辑对话框。 */
+  closeSessionEdit(): void {
+    this.showSessionEdit = false;
+    this.sessionEditMemory = null;
+    this.sessionEditTitle = '';
+    this.sessionEditContent = '';
+    this.sessionEditSaving = false;
+  }
+
+  /**
+   * 保存会话记忆编辑。
+   * 仅更新 title 与 summary(注入用 summary 字段),保留 detail(实体索引 JSON)与
+   * memoryType 等其余字段;worldId 不变,仍参与世界池注入。
+   *
+   * @returns 是否保存成功
+   */
+  async saveSessionEdit(): Promise<boolean> {
+    if (this.sessionEditMemory === null || this.sessionEditSaving) {
+      return false;
+    }
+    const title: string = this.sessionEditTitle.trim();
+    const content: string = this.sessionEditContent.trim();
+    if (title.length === 0 || content.length === 0) {
+      this.errorMessage = '标题与内容不能为空';
+      return false;
+    }
+    this.errorMessage = '';
+    this.sessionEditSaving = true;
+    try {
+      const now: number = Date.now();
+      const updated: ChatMemory = withMemoryMetadata(
+        withUpdatedSummary(this.sessionEditMemory, content, now),
+        { title: title },
+        now
+      );
+      await this.memoryService.updateWorldMemory(updated);
+      this.closeSessionEdit();
+      await this.load(this.worldId);
+      return true;
+    } catch (e) {
+      this.errorMessage = '保存失败: ' + String(e);
+      Logger.error(LOG_TAG, 'saveSessionEdit failed: ' + String(e));
+      return false;
+    } finally {
+      this.sessionEditSaving = false;
+    }
   }
 
   async save(): Promise<boolean> {
