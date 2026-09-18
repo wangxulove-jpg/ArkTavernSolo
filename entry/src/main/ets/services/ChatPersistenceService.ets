@@ -622,6 +622,16 @@ export class ChatPersistenceService {
   }
 
   /**
+   * 删除单条消息(物理删除)。
+   * 用于聊天泡"删除"功能;调用方负责内存列表移除与记忆失效。
+   *
+   * @param messageId 消息 ID
+   */
+  async removeMessage(messageId: string): Promise<void> {
+    await this.messageRepository.remove(messageId);
+  }
+
+  /**
    * 删除指定 sequenceNumber 之后的所有消息(不包含边界)。
    * - 使用 sequence_number > sequenceNumber
    * - 返回删除行数

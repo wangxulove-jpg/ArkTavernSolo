@@ -1129,6 +1129,66 @@ export class ChatViewModel {
     }
   }
 
+  /**
+   * 消息是否可删除。
+   * 仅非首条消息可删除(首条为本会话开场白,删除会破坏会话结构)。
+   */
+  canDeleteMessage(messageId: string): boolean {
+    const list: ChatMessage[] = this.chatService.getMessages();
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].id === messageId) {
+        return i > 0;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * 编辑角色回复内容(仅改文本,不重新生成)。
+   * 成功后刷新消息列表并重算 Token 预算。
+   */
+  async editAssistantMessage(messageId: string, editedContent: string): Promise<void> {
+    if (this.disposed || this.busy) {
+      return;
+    }
+    this.errorMessage = '';
+    try {
+      await this.chatService.editAssistantMessage(messageId, editedContent);
+      this.messages = [...this.chatService.getMessages()];
+      if (this.onMessagesUpdate !== undefined) {
+        this.onMessagesUpdate([...this.messages]);
+      }
+      void this.buildEstimateMessages();
+    } catch (e) {
+      this.errorMessage = this.toUserError(String(e));
+      Logger.error(LOG_TAG, 'editAssistantMessage failed: ' + String(e));
+    }
+  }
+
+  /**
+   * 删除单条消息。
+   * 成功后刷新消息列表与会话状态。
+   */
+  async deleteMessage(messageId: string): Promise<void> {
+    if (this.disposed || this.busy) {
+      return;
+    }
+    this.errorMessage = '';
+    try {
+      await this.chatService.deleteMessage(messageId);
+      this.messages = [...this.chatService.getMessages()];
+      if (this.onMessagesUpdate !== undefined) {
+        this.onMessagesUpdate([...this.messages]);
+      }
+      this.canRegenerate = this.chatService.canRegenerate();
+      this.syncBranchState();
+      void this.buildEstimateMessages();
+    } catch (e) {
+      this.errorMessage = this.toUserError(String(e));
+      Logger.error(LOG_TAG, 'deleteMessage failed: ' + String(e));
+    }
+  }
+
   async switchBranch(branchId: string): Promise<void> {
     if (this.disposed || this.busy || this.isBranchOperating) {
       return;

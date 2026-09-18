@@ -6053,6 +6053,56 @@ export class ChatService {
 
 
 
+  /**
+   * 删除单条消息(聊天泡"删除"功能)。
+   *
+   * 规则:
+   * - 首条消息(本会话开场白)不可删除,避免破坏会话结构
+   * - 删除前失效覆盖该消息位置的记忆(章节/核心等,避免记忆引用已删内容)
+   * - 若为 Assistant 消息,同步清理其 Swipe 候选数据
+   * - 物理删除数据库记录并从内存列表移除
+   *
+   * @param messageId 待删除的消息 ID
+   */
+  async deleteMessage(messageId: string): Promise<void> {
+    if (this.disposed) {
+      throw new Error('ChatService disposed');
+    }
+    if (this.isGenerating()) {
+      throw new Error('请先停止当前回复');
+    }
+    if (this.swipeOperationInProgress) {
+      throw new Error('请先完成当前 Swipe 操作');
+    }
+    const idx: number = this.findMessageIndexById(messageId);
+    if (idx <= 0) {
+      throw new Error('首条消息不可删除');
+    }
+    if (idx >= this.messages.length) {
+      return;
+    }
+    // 删除前失效覆盖该位置的记忆(不阻塞删除)
+    this.invalidateMemoryFromMessagePosition(messageId);
+    // Assistant 消息:清理 Swipe 候选数据
+    if (this.swipePersistenceService !== null) {
+      try {
+        await this.swipePersistenceService.removeSwipeState(messageId);
+      } catch (e) {
+        Logger.warn(LOG_TAG, 'deleteMessage | clear swipe failed: '
+          + (e instanceof Error ? e.message : String(e)));
+      }
+    }
+    // 物理删除数据库记录
+    if (this.persistenceService !== null) {
+      await this.persistenceService.removeMessage(messageId);
+    }
+    // 移除内存列表
+    this.messages.splice(idx, 1);
+    if (this.currentAssistantId === messageId) {
+      this.currentAssistantId = null;
+    }
+  }
+
   async editNarratorMessage(messageId: string, editedContent: string): Promise<void> {
     if (this.disposed) {
       throw new Error('ChatService disposed');
@@ -6073,5 +6123,39 @@ export class ChatService {
     if (this.persistenceService !== null && this.currentChatId !== undefined) {
       await this.persistenceService.updateMessage(messageId, updated);
     }
+  }
+
+  /**
+   * 编辑角色回复内容(仅改当前激活的文本,不重新生成)。
+   *
+   * - 仅对 Assistant 消息生效
+   * - 编辑会改变剧情内容,因此失效覆盖该消息位置的记忆(与 re-swipe/删除一致)
+   * - Swipe 候选记录保留不动(只更新激活消息本身)
+   *
+   * @param messageId 目标 Assistant 消息 ID
+   * @param editedContent 编辑后的内容
+   */
+  async editAssistantMessage(messageId: string, editedContent: string): Promise<void> {
+    if (this.disposed) {
+      throw new Error('ChatService disposed');
+    }
+    const idx: number = this.findMessageIndexById(messageId);
+    if (idx < 0) {
+      return;
+    }
+    const msg: ChatMessage = this.messages[idx];
+    if (msg.role !== ChatRole.Assistant) {
+      return;
+    }
+    const updated: ChatMessage = mergeChatMessage(msg, {
+      content: editedContent,
+      updatedAt: Date.now()
+    });
+    this.messages[idx] = updated;
+    if (this.persistenceService !== null && this.currentChatId !== undefined) {
+      await this.persistenceService.updateMessage(messageId, updated);
+    }
+    // 编辑内容会改变剧情,失效覆盖该位置的记忆(章节/核心等)
+    this.invalidateMemoryFromMessagePosition(messageId);
   }
 }

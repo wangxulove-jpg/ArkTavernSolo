@@ -114,6 +114,10 @@ struct ChatPage {
   @State showActionSheet: boolean = false;
   /** 消息操作菜单目标消息 */
   @State actionSheetMsg: ChatMessage | null = null;
+  /** 是否显示删除消息确认 */
+  @State showDeleteMessageConfirm: boolean = false;
+  /** 待删除的消息 ID */
+  @State pendingDeleteMessageId: string = '';
   /** 是否显示清空确认 */
   @State showClearConfirm: boolean = false;
   /** 旁白输入模式是否激活 */
@@ -1126,11 +1130,13 @@ struct ChatPage {
             visible: true,
             msg: this.actionSheetMsg,
             canEdit: this.viewModel!.canEditUserMessage(this.actionSheetMsg!.id),
+            canEditAssistant: !this.viewModel!.busy,
             canGenerateFromUser: this.viewModel!.canGenerateFromUserMessage(this.actionSheetMsg!.id),
             canRegenerate: this.viewModel!.canRegenerateAssistantMessage(this.actionSheetMsg!.id),
             canContinue: this.viewModel!.canContinueFromAssistant(this.actionSheetMsg!.id),
             candidateCount: this.getCandidateCount(this.actionSheetMsg!.id),
             canForkChat: !this.viewModel!.busy && this.viewModel!.isSessionReady,
+            canDelete: this.viewModel!.canDeleteMessage(this.actionSheetMsg!.id),
             onClose: (): void => {
               this.showActionSheet = false;
               this.actionSheetMsg = null;
@@ -1144,6 +1150,11 @@ struct ChatPage {
         // 清空确认弹窗
         if (this.showClearConfirm) {
           this.clearConfirmDialog()
+        }
+
+        // 删除消息确认弹窗
+        if (this.showDeleteMessageConfirm) {
+          this.deleteMessageConfirmDialog()
         }
 
         // v9: 本对话称呼覆盖编辑弹窗
@@ -3268,6 +3279,82 @@ struct ChatPage {
     })
   }
 
+  /** 删除消息确认对话框 */
+  @Builder
+  deleteMessageConfirmDialog() {
+    Stack() {
+      Column() {
+        Column() {
+          Text('删除消息')
+            .fontSize(17)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .margin({ bottom: 8 })
+
+          Text('确定删除这条消息吗?删除后不可恢复。')
+            .fontSize($r('app.float.app_font_caption'))
+            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+            .textAlign(TextAlign.Center)
+            .margin({ bottom: 16 })
+
+          Row() {
+            Button('取消')
+              .fontSize(15)
+              .backgroundColor(Color.Transparent)
+              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+              .height(40)
+              .layoutWeight(1)
+              .onClick(() => {
+                this.showDeleteMessageConfirm = false;
+                this.pendingDeleteMessageId = '';
+              })
+            Button('删除')
+              .fontSize(15)
+              .backgroundColor($r('app.color.app_danger'))
+              .fontColor($r('app.color.app_on_accent'))
+              .borderRadius($r('app.float.app_radius_sm'))
+              .height(40)
+              .layoutWeight(1)
+              .margin({ left: 12 })
+              .onClick(() => {
+                void this.executeDeleteMessage();
+              })
+          }
+          .width('100%')
+        }
+        .width('80%')
+        .padding(20)
+        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+        .borderRadius($r('app.float.app_radius_lg'))
+      }
+      .width('100%')
+      .height('100%')
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('rgba(0,0,0,0.5)')
+    .onClick(() => {
+      this.showDeleteMessageConfirm = false;
+      this.pendingDeleteMessageId = '';
+    })
+  }
+
+  /** 执行删除消息 */
+  private async executeDeleteMessage(): Promise<void> {
+    const messageId: string = this.pendingDeleteMessageId;
+    this.showDeleteMessageConfirm = false;
+    this.pendingDeleteMessageId = '';
+    if (messageId.length === 0 || this.viewModel === null) {
+      return;
+    }
+    await this.viewModel!.deleteMessage(messageId);
+    if (this.viewModel!.errorMessage.length > 0) {
+      promptAction.showToast({ message: this.viewModel!.errorMessage, duration: 1500 });
+    }
+  }
+
   // ===== v9: 本对话称呼覆盖对话框 =====
 
   /**
@@ -4705,6 +4792,8 @@ struct ChatPage {
       case 'edit':
         if (msg.senderType === 'narrator') {
           this.openEditNarratorDialog(msg.id, msg.content);
+        } else if (msg.role === ChatRole.Assistant) {
+          this.openEditAssistantDialog(msg.id, msg.content);
         } else {
           this.openEditUserDialog(msg.id, msg.content);
         }
@@ -4727,6 +4816,10 @@ struct ChatPage {
         break;
       case 'add_to_memory':
         this.addToMemory(msg.id);
+        break;
+      case 'delete':
+        this.pendingDeleteMessageId = msg.id;
+        this.showDeleteMessageConfirm = true;
         break;
       default:
         break;
@@ -5075,5 +5168,38 @@ struct ChatPage {
       return;
     }
     this.viewModel!.editNarratorMessage(messageId, editedContent);
+  }
+
+  /** 打开角色回复编辑对话框(仅改文本,不重新生成) */
+  private openEditAssistantDialog(messageId: string, originalContent: string): void {
+    if (this.viewModel === null) {
+      return;
+    }
+    if (this.viewModel!.busy) {
+      promptAction.showToast({ message: $r('app.string.chat_branch_create_busy'), duration: 1500 });
+      return;
+    }
+    this.editingMessageId = messageId;
+    this.editDialogController = new CustomDialogController({
+      builder: HistoricalMessageEditDialog({
+        originalContent: originalContent,
+        isSubmitting: false,
+        onConfirm: (editedContent: string): void => {
+          this.confirmEditAssistantMessage(messageId, editedContent);
+        },
+        onCancel: (): void => {}
+      }),
+      autoCancel: true,
+      alignment: DialogAlignment.Center,
+      customStyle: false
+    });
+    this.editDialogController.open();
+  }
+
+  private confirmEditAssistantMessage(messageId: string, editedContent: string): void {
+    if (this.viewModel === null) {
+      return;
+    }
+    this.viewModel!.editAssistantMessage(messageId, editedContent);
   }
 }

@@ -29,7 +29,8 @@ export type MessageAction =
   | 'continue_from_here'
   | 'switch_branch'
   | 'fork_chat'
-  | 'add_to_memory';
+  | 'add_to_memory'
+  | 'delete';
 
 /** 操作项 */
 interface ActionItem {
@@ -48,8 +49,10 @@ export struct ChatMessageActionSheet {
   @State isShow: boolean = false;
   /** 目标消息 */
   msg: ChatMessage | null = null;
-  /** 是否可编辑(User) */
+  /** 是否可编辑(User/Narrator) */
   canEdit: boolean = false;
+  /** 是否可编辑角色回复(Assistant) */
+  canEditAssistant: boolean = false;
   /** 是否可从此处生成新回复(User) */
   canGenerateFromUser: boolean = false;
   /** 是否可重新生成(Assistant) */
@@ -60,6 +63,8 @@ export struct ChatMessageActionSheet {
   candidateCount: number = 1;
   /** 是否可从此处创建独立对话 */
   canForkChat: boolean = false;
+  /** 是否可删除(仅非首条消息,由调用方判定) */
+  canDelete: boolean = false;
   /** 关闭回调 */
   onClose: () => void = () => {
   };
@@ -168,6 +173,9 @@ export struct ChatMessageActionSheet {
       }
     } else if (this.msg.role === ChatRole.Assistant) {
       items.push({ action: 'copy', label: '复制', enabled: true, isDestructive: false });
+      if (this.canEditAssistant) {
+        items.push({ action: 'edit', label: '编辑', enabled: true, isDestructive: false });
+      }
       if (this.candidateCount > 1) {
         items.push({ action: 'switch_branch', label: '切换候选', enabled: true, isDestructive: false });
       }
@@ -180,6 +188,10 @@ export struct ChatMessageActionSheet {
       if (this.canForkChat) {
         items.push({ action: 'fork_chat', label: '从此处创建独立对话', enabled: true, isDestructive: false });
       }
+    }
+    // 删除:所有类型均可用(非首条),放在菜单末尾
+    if (this.canDelete) {
+      items.push({ action: 'delete', label: '删除', enabled: true, isDestructive: true });
     }
     return items;
   }
