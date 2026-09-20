@@ -27,7 +27,7 @@ import { EmptyStateView } from '../../components/EmptyStateView';
 import { PressableCard } from '../../components/PressableCard';
 import { AppTopBar } from '../../components/ui/AppTopBar';
 import { CharacterImageView } from '../../components/CharacterImageView';
-import { promptAction, router } from '@kit.ArkUI';
+import { promptAction, router, componentUtils } from '@kit.ArkUI';
 
 import { Character, resolveCharacterDisplayName } from '../../models/Character';
 import { WorldGroup } from '../../models/WorldGroup';
@@ -38,6 +38,9 @@ import { Logger } from '../../utils/Logger';
 import { ThemePalette } from '../../theme/ThemePalette';
 
 const LOG_TAG_SESSION: string = 'ChatSessionRootView';
+
+/** 根 Stack 组件 id(拖拽预览定位用,配合 componentUtils.getRectangleById 换算窗口坐标) */
+const ROOT_STACK_ID: string = 'chat_session_root_stack';
 
 /** v49: 对话记录分组折叠状态持久化 key(逗号分隔的 worldId 列表,与 ChatSessionListPanel 共用) */
 const SESSION_LIST_COLLAPSED_WORLD_IDS_KEY: string = 'session_list_collapsed_world_ids';
@@ -132,8 +135,20 @@ export struct ChatSessionRootView {
   @State dragOffsetY: number = 0;
   /** 拖拽起点(被拖会话在列表内容区的 y) */
   @State dragSourceY: number = 0;
-  /** 拖拽预览标题 */
-  @State dragPreviewTitle: string = '';
+  /** 拖拽起点:手指在窗口坐标系中的 y(预览跟随手指定位) */
+  @State dragFingerStartGlobalY: number = 0;
+  /** 根 Stack 顶部在窗口坐标系中的 y(窗口坐标 → 根 Stack 局部坐标换算) */
+  @State dragStackTopY: number = 0;
+  /** 拖拽预览的完整会话行(整行跟随手指) */
+  @State dragPreviewItem: ChatSessionListItem | null = null;
+  /** 拖拽源行在 buildRows() 中的索引(-1=未拖拽) */
+  @State dragSourceRowIndex: number = -1;
+  /** 拖拽目标插入索引(buildRows() 索引,实时更新,驱动让位动画) */
+  @State dragTargetRowIndex: number = -1;
+  /** 拖拽当前悬停的文件夹(worldId,空=未悬停文件夹,驱动"放入"高亮动画) */
+  @State dragTargetWorldId: string = '';
+  /** v50: 长按触发拖拽后抑制本次点击打开会话(下次触摸 Down 时复位) */
+  @State dragSuppressOpen: boolean = false;
   /** 行位置缓存:key = 's_'+chatId 或 'h_'+worldId → 列表内容区 y */
   private rowPositions: Map<string, number> = new Map<string, number>();
   /** 行高度缓存:key 同上 → 高度 vp */
@@ -434,6 +449,7 @@ export struct ChatSessionRootView {
     .height('100%')
     // 背景层分离:不设 backgroundColor,让 Index 根背景透出。
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
+    .id(ROOT_STACK_ID)
   }
 
   /** 会话列表区:有会话或空文件夹时展示(空文件夹仅文件夹头),否则空状态 */
@@ -466,62 +482,70 @@ export struct ChatSessionRootView {
         .width('100%')
         .padding({ left: 16, right: 16, bottom: 6 })
 
-        List() {
-          ForEach(this.buildRows(), (row: SessionListRowModel) => {
-            ListItem() {
-              if (row.isHeader) {
-                this.groupHeaderRow(row)
-              } else {
-                this.sessionCard(row.item!, row.isInWorld)
-              }
-            }
-            .width('100%')
-            .margin({ bottom: 6 })
-            .onAreaChange((_oldValue: Area, newValue: Area) => {
-              const key: string = row.isHeader
-                ? 'h_' + row.worldId
-                : 's_' + row.item!.chat.id;
-              const py: number = typeof newValue.position.y === 'number'
-                ? (newValue.position.y as number) : 0;
-              this.rowPositions.set(key, py);
-              const h: number = typeof newValue.height === 'number'
-                ? (newValue.height as number) : 0;
-              this.rowHeights.set(key, h);
-            })
-            .swipeAction({
-              end: {
-                builder: (): void => {
-                  if (!row.isHeader && row.item !== null) {
-                    this.swipeActionButtons(row.item!, row.canMoveUp, row.canMoveDown)
-                  }
-                }
-              }
-            })
-          }, (row: SessionListRowModel) => {
-            return row.isHeader
-              ? 'h_' + row.worldId + '|' + row.isCollapsed.toString()
-              : 's_' + row.item!.chat.id + '|' + row.item!.worldId + '|' + row.item!.chat.title
-          })
-
-          ListItem() {
-            Column().width('100%').height(160)
-          }
-        }
-        .width('100%')
-        .layoutWeight(1)
-        .scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.Spring)
-        .align(Alignment.Top)
-        .padding({
-          left: $r('app.float.app_spacing_8'),
-          right: $r('app.float.app_spacing_8'),
-          top: 0,
-          bottom: 0
-        })
+        this.draggableSessionList()
       }
       .width('100%')
       .layoutWeight(1)
     }
+  }
+
+  /** v50: 可拖拽会话列表(拖拽时其它行实时让位动画)。 */
+  @Builder
+  draggableSessionList() {
+    List() {
+      ForEach(this.buildRows(), (row: SessionListRowModel) => {
+        ListItem() {
+          if (row.isHeader) {
+            this.groupHeaderRow(row)
+          } else {
+            this.sessionCard(row.item!, row.isInWorld)
+          }
+        }
+        .width('100%')
+        .margin({ bottom: 6 })
+        // v50: 拖拽让位动画:源行与目标之间的行整体平移一个行高
+        .translate({ y: this.dragShiftForRow(row) })
+        .onAreaChange((_oldValue: Area, newValue: Area) => {
+          const key: string = row.isHeader
+            ? 'h_' + row.worldId
+            : 's_' + row.item!.chat.id;
+          const py: number = typeof newValue.position.y === 'number'
+            ? (newValue.position.y as number) : 0;
+          this.rowPositions.set(key, py);
+          const h: number = typeof newValue.height === 'number'
+            ? (newValue.height as number) : 0;
+          this.rowHeights.set(key, h);
+        })
+        .swipeAction({
+          end: {
+            builder: (): void => {
+              if (!row.isHeader && row.item !== null) {
+                this.swipeActionButtons(row.item!, row.canMoveUp, row.canMoveDown)
+              }
+            }
+          }
+        })
+      }, (row: SessionListRowModel) => {
+        return row.isHeader
+          ? 'h_' + row.worldId + '|' + row.isCollapsed.toString()
+          : 's_' + row.item!.chat.id + '|' + row.item!.worldId + '|' + row.item!.chat.title
+      })
+
+      ListItem() {
+        Column().width('100%').height(160)
+      }
+    }
+    .width('100%')
+    .layoutWeight(1)
+    .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring)
+    .align(Alignment.Top)
+    .padding({
+      left: $r('app.float.app_spacing_8'),
+      right: $r('app.float.app_spacing_8'),
+      top: 0,
+      bottom: 0
+    })
   }
 
   /**
@@ -615,15 +639,30 @@ export struct ChatSessionRootView {
       Text(row.worldName)
         .fontSize(14)
         .fontWeight(FontWeight.Medium)
-        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        .fontColor(this.isFolderDropTarget(row.worldId)
+          ? $r('app.color.app_on_accent')
+          : ThemePalette.textPrimaryColor(this.effectiveTheme))
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .layoutWeight(1)
 
       Text(row.chatCount.toString() + ' 个章节')
         .fontSize(11)
-        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+        .fontColor(this.isFolderDropTarget(row.worldId)
+          ? $r('app.color.app_on_accent')
+          : ThemePalette.textTertiaryColor(this.effectiveTheme))
         .margin({ left: 8 })
+
+      // v50: 拖拽悬停到文件夹时,显示"放入"提示(松手即移入该文件夹)
+      if (this.isFolderDropTarget(row.worldId)) {
+        Text('放入')
+          .fontSize(10)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.app_on_accent'))
+          .borderRadius(8)
+          .padding({ left: 8, right: 8, top: 2, bottom: 2 })
+          .margin({ left: 8 })
+      }
 
       Text(row.isCollapsed ? '▸' : '▾')
         .fontSize(14)
@@ -667,8 +706,14 @@ export struct ChatSessionRootView {
     }
     .width('100%')
     .padding({ left: 12, right: 8, top: 10, bottom: 10 })
-    .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+    .backgroundColor(this.isFolderDropTarget(row.worldId)
+      ? ThemePalette.accentColor(this.effectiveTheme)
+      : ThemePalette.surface2Color(this.effectiveTheme))
     .borderRadius(10)
+    .border({
+      width: this.isFolderDropTarget(row.worldId) ? 1 : 0,
+      color: ThemePalette.accentColor(this.effectiveTheme)
+    })
     .alignItems(VerticalAlign.Center)
     .onClick(() => {
       this.toggleWorldCollapsed(row.worldId);
@@ -917,88 +962,97 @@ export struct ChatSessionRootView {
     })
   }
 
+  /** 会话行正文(会话卡片与拖拽整行预览共用)。 */
+  @Builder
+  sessionRowBody(item: ChatSessionListItem) {
+    Row() {
+      CharacterImageView({
+        imageUri: item.character !== null ? item.character.avatarUri : '',
+        fallbackName: this.getCharacterFallbackName(item),
+        imgWidth: 52,
+        imgHeight: 52,
+        imgBorderRadius: 26,
+        displayMode: 'thumbnail',
+        objectFit: ImageFit.Cover
+      })
+
+      Column() {
+        Row() {
+          if (item.worldId.length > 0) {
+            Text(this.getChapterLabel(item))
+              .fontSize(10)
+              .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+              .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+              .borderRadius(4)
+              .padding({ left: 4, right: 4, top: 1, bottom: 1 })
+              .margin({ right: 6 })
+          }
+          Text(this.getSessionTitle(item))
+            .fontSize(15)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+            .textAlign(TextAlign.Start)
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+        if (item.lastMessagePreview.length > 0) {
+          Text(item.lastMessagePreview)
+            .fontSize(13)
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .margin({ top: 3 })
+            .width('100%')
+            .textAlign(TextAlign.Start)
+        }
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+      .margin({ left: 12 })
+
+      Column() {
+        Text(formatSessionTimestamp(item.displayTimestamp))
+          .fontSize(11)
+          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+        SymbolGlyph($r('sys.symbol.chevron_right'))
+          .fontSize(14)
+          .fontColor([ThemePalette.textTertiaryColor(this.effectiveTheme)])
+          .margin({ top: 6 })
+      }
+      .alignItems(HorizontalAlign.End)
+      .margin({ left: 8 })
+    }
+    .width('100%')
+    .padding({
+      left: $r('app.float.app_spacing_12'),
+      right: $r('app.float.app_spacing_12'),
+      top: 10,
+      bottom: 10
+    })
+    .alignItems(VerticalAlign.Center)
+  }
+
   /** 单个会话卡片。文件夹内的会话缩进显示,支持长按拖拽重排/移入文件夹 */
   @Builder
   sessionCard(item: ChatSessionListItem, isInWorld: boolean) {
     Column() {
       PressableCard({
         onPress: () => {
-          this.openSession(item);
+          // v50: 长按触发拖拽后抑制本次点击打开会话,避免松手误进入会话
+          if (!this.dragSuppressOpen) {
+            this.openSession(item);
+          }
         },
         surfaceColor: ThemePalette.surface1Color(this.effectiveTheme)
       }) {
-        Row() {
-          CharacterImageView({
-            imageUri: item.character !== null ? item.character.avatarUri : '',
-            fallbackName: this.getCharacterFallbackName(item),
-            imgWidth: 52,
-            imgHeight: 52,
-            imgBorderRadius: 26,
-            displayMode: 'thumbnail',
-            objectFit: ImageFit.Cover
-          })
-
-          Column() {
-            Row() {
-              if (item.worldId.length > 0) {
-                Text(this.getChapterLabel(item))
-                  .fontSize(10)
-                  .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-                  .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-                  .borderRadius(4)
-                  .padding({ left: 4, right: 4, top: 1, bottom: 1 })
-                  .margin({ right: 6 })
-              }
-              Text(this.getSessionTitle(item))
-                .fontSize(15)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-                .layoutWeight(1)
-                .textAlign(TextAlign.Start)
-            }
-            .width('100%')
-            .alignItems(VerticalAlign.Center)
-
-            if (item.lastMessagePreview.length > 0) {
-              Text(item.lastMessagePreview)
-                .fontSize(13)
-                .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-                .margin({ top: 3 })
-                .width('100%')
-                .textAlign(TextAlign.Start)
-            }
-          }
-          .layoutWeight(1)
-          .alignItems(HorizontalAlign.Start)
-          .margin({ left: 12 })
-
-          Column() {
-            Text(formatSessionTimestamp(item.displayTimestamp))
-              .fontSize(11)
-              .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-            SymbolGlyph($r('sys.symbol.chevron_right'))
-              .fontSize(14)
-              .fontColor([ThemePalette.textTertiaryColor(this.effectiveTheme)])
-              .margin({ top: 6 })
-          }
-          .alignItems(HorizontalAlign.End)
-          .margin({ left: 8 })
-        }
-        .width('100%')
-        .padding({
-          left: $r('app.float.app_spacing_12'),
-          right: $r('app.float.app_spacing_12'),
-          top: 10,
-          bottom: 10
-        })
-        .alignItems(VerticalAlign.Center)
+        this.sessionRowBody(item)
       }
     }
     .width('100%')
@@ -1009,12 +1063,26 @@ export struct ChatSessionRootView {
       x: item.worldId.length > 0 ? 0.95 : 1.0,
       y: item.worldId.length > 0 ? 0.95 : 1.0
     })
-    .opacity(item.worldId.length > 0 ? 0.9 : 1.0)
+    // v50: 拖拽中的源行隐藏(槽位留空,由整行预览跟随手指),避免与让位行重叠
+    .opacity(this.isDragging && item.chat.id === this.dragChatId
+      ? 0
+      : (item.worldId.length > 0 ? 0.9 : 1.0))
+    .onTouch((event: TouchEvent) => {
+      if (event.type === TouchType.Down) {
+        // 新一次触摸:解除点击抑制
+        this.dragSuppressOpen = false;
+      } else if (event.type === TouchType.Up && this.isDragging) {
+        // 兜底:Pan 未启动(长按未移动)时松手也要结束拖拽,避免拖拽状态残留
+        this.endDrag();
+      } else if (event.type === TouchType.Cancel && this.isDragging) {
+        this.cancelDrag();
+      }
+    })
     .gesture(
       GestureGroup(GestureMode.Sequence,
         LongPressGesture({ repeat: false })
-          .onAction(() => {
-            this.beginDrag(item.chat.id);
+          .onAction((event: GestureEvent) => {
+            this.beginDrag(item.chat.id, event);
           }),
         PanGesture({ direction: PanDirection.Vertical })
           .onActionUpdate((event: GestureEvent) => {
@@ -1032,23 +1100,163 @@ export struct ChatSessionRootView {
 
   // ===== 手动拖拽重排 =====
 
-  /** 开始拖拽:记录被拖会话与起点 */
-  private beginDrag(chatId: string): void {
+  /** 开始拖拽:记录被拖会话、起点与手指窗口坐标(整行预览跟随手指) */
+  private beginDrag(chatId: string, event: GestureEvent): void {
     this.dragChatId = chatId;
     this.dragOffsetY = 0;
     this.dragSourceY = this.rowPositions.get('s_' + chatId) ?? 0;
-    this.dragPreviewTitle = this.getSessionTitleByChatId(chatId);
+    this.dragPreviewItem = this.findSessionItem(chatId);
+    this.dragSourceRowIndex = this.findRowIndex(chatId);
+    this.dragTargetRowIndex = this.dragSourceRowIndex;
+    this.dragSuppressOpen = true;
     this.isDragging = true;
+    // 手指起点窗口 Y(预览定位用);拿不到时回退到行位置
+    const finger = event.fingerList.length > 0 ? event.fingerList[0] : null;
+    this.dragFingerStartGlobalY = finger !== null && finger !== undefined
+      ? finger.globalY
+      : this.dragSourceY;
+    // 根 Stack 顶部窗口 Y(窗口坐标 → 根 Stack 局部坐标换算)
+    let stackTopY: number = 0;
+    try {
+      const rect = componentUtils.getRectangleById(ROOT_STACK_ID);
+      if (rect !== undefined && rect !== null) {
+        stackTopY = rect.windowOffset.y;
+      }
+    } catch (_e) {
+      stackTopY = 0;
+    }
+    this.dragStackTopY = stackTopY;
   }
 
-  /** 拖拽移动:更新预览偏移 */
+  /** 按 chatId 查找会话项(整行预览用)。 */
+  private findSessionItem(chatId: string): ChatSessionListItem | null {
+    if (this.viewModel === null) {
+      return null;
+    }
+    const list: ChatSessionListItem[] = this.viewModel!.sessions;
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].chat.id === chatId) {
+        return list[i];
+      }
+    }
+    return null;
+  }
+
+  /** 被拖会话行在 buildRows() 中的索引。 */
+  private findRowIndex(chatId: string): number {
+    const rows: SessionListRowModel[] = this.buildRows();
+    for (let i = 0; i < rows.length; i++) {
+      if (!rows[i].isHeader && rows[i].item !== null && rows[i].item!.chat.id === chatId) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  /** 拖拽移动:更新预览偏移并实时计算让位目标 */
   private updateDragOffset(offsetY: number): void {
     this.dragOffsetY = offsetY;
+    this.recomputeDragTarget();
+  }
+
+  /** 实时计算目标插入索引(手指经过的行中心数)与悬停文件夹,变化时用动画驱动让位/高亮 */
+  private recomputeDragTarget(): void {
+    if (this.dragChatId.length === 0 || this.dragSourceRowIndex < 0) {
+      return;
+    }
+    const rows: SessionListRowModel[] = this.buildRows();
+    const fingerY: number = this.dragSourceY + this.dragOffsetY;
+    let insertIdx: number = 0;
+    // 距离手指最近的行(与 endDrag 落点判定一致,用于文件夹"放入"高亮)
+    let nearestKey: string = '';
+    let nearestDist: number = Number.MAX_SAFE_INTEGER;
+    for (let i = 0; i < rows.length; i++) {
+      const key: string = this.rowKey(rows[i]);
+      const y: number | undefined = this.rowPositions.get(key);
+      const h: number | undefined = this.rowHeights.get(key);
+      if (y === undefined || h === undefined) {
+        continue;
+      }
+      const center: number = y + h / 2;
+      if (i !== this.dragSourceRowIndex) {
+        if (fingerY > center) {
+          insertIdx++;
+        }
+        const dist: number = Math.abs(fingerY - center);
+        if (dist < nearestDist) {
+          nearestDist = dist;
+          nearestKey = key;
+        }
+      }
+    }
+    const nextWorldId: string = nearestKey.startsWith('h_') ? nearestKey.substring(2) : '';
+    if (insertIdx !== this.dragTargetRowIndex || nextWorldId !== this.dragTargetWorldId) {
+      this.getUIContext().animateTo({ duration: 160, curve: Curve.EaseOut }, () => {
+        this.dragTargetRowIndex = insertIdx;
+        this.dragTargetWorldId = nextWorldId;
+      });
+    }
+  }
+
+  /** 是否正在拖拽并悬停在指定文件夹上(驱动"放入"高亮) */
+  private isFolderDropTarget(worldId: string): boolean {
+    return this.isDragging
+      && this.dragTargetWorldId.length > 0
+      && this.dragTargetWorldId === worldId;
+  }
+
+  /** 单行让位位移:源行与目标之间的行整体平移一个自身行高(向下拖上移,向上拖下移) */
+  private dragShiftForRow(row: SessionListRowModel): number {
+    if (!this.isDragging || this.dragSourceRowIndex < 0 || this.dragTargetRowIndex < 0) {
+      return 0;
+    }
+    const src: number = this.dragSourceRowIndex;
+    const tgt: number = this.dragTargetRowIndex;
+    if (src === tgt) {
+      return 0;
+    }
+    // 当前行在 buildRows() 中的索引(列表规模小,逐行查找可接受)
+    const key: string = this.rowKey(row);
+    const rows: SessionListRowModel[] = this.buildRows();
+    let idx: number = -1;
+    for (let i = 0; i < rows.length; i++) {
+      if (this.rowKey(rows[i]) === key) {
+        idx = i;
+        break;
+      }
+    }
+    if (idx < 0 || idx === src) {
+      return 0;
+    }
+    if (tgt > src) {
+      // 向下拖:源行之后到目标位置(含)之间的行上移让位
+      if (idx > src && idx <= tgt) {
+        const h: number | undefined = this.rowHeights.get(key);
+        return h !== undefined ? -h : 0;
+      }
+    } else {
+      // 向上拖:目标位置(含)到源行之前的行下移让位
+      if (idx >= tgt && idx < src) {
+        const h: number | undefined = this.rowHeights.get(key);
+        return h !== undefined ? h : 0;
+      }
+    }
+    return 0;
+  }
+
+  /** 行 key:'h_'+worldId 或 's_'+chatId */
+  private rowKey(row: SessionListRowModel): string {
+    return row.isHeader ? 'h_' + row.worldId : 's_' + row.item!.chat.id;
   }
 
   /** 结束拖拽:按落点计算目标并执行移动/重排 */
   private endDrag(): void {
     if (this.dragChatId.length === 0 || this.viewModel === null) {
+      this.cancelDrag();
+      return;
+    }
+    // v50: 长按未移动就松手:视为误触,不重排
+    if (Math.abs(this.dragOffsetY) < 2) {
       this.cancelDrag();
       return;
     }
@@ -1131,47 +1339,39 @@ export struct ChatSessionRootView {
     this.dragChatId = '';
     this.dragOffsetY = 0;
     this.dragSourceY = 0;
-    this.dragPreviewTitle = '';
+    this.dragPreviewItem = null;
+    this.dragSourceRowIndex = -1;
+    this.dragTargetRowIndex = -1;
+    this.dragTargetWorldId = '';
   }
 
-  /** 按 chatId 取会话标题(拖拽预览用) */
-  private getSessionTitleByChatId(chatId: string): string {
-    if (this.viewModel !== null) {
-      const sessions: ChatSessionListItem[] = this.viewModel!.sessions;
-      for (let i = 0; i < sessions.length; i++) {
-        if (sessions[i].chat.id === chatId) {
-          return this.getSessionTitle(sessions[i]);
-        }
-      }
-    }
-    return '会话';
-  }
-
-  /** 浮动拖拽预览(根 Stack 覆盖层) */
+  /** 浮动拖拽预览(整行跟随手指,根 Stack 覆盖层) */
   @Builder
   dragFloatingPreview() {
-    Column() {
-      Row() {
-        Text(this.dragPreviewTitle)
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .layoutWeight(1)
-        Text('⇕')
-          .fontSize(16)
-          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-          .margin({ left: 8 })
+    if (this.dragPreviewItem !== null) {
+      Column() {
+        // v50: 整行预览:复用会话行正文,拖拽的是整个对话而非只有文字
+        this.sessionRowBody(this.dragPreviewItem!)
       }
-      .width(220)
-      .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-      .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-      .borderRadius(10)
+      .width('88%')
+      .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+      .borderRadius($r('app.float.app_radius_md'))
       .border({ width: 1, color: ThemePalette.accentColor(this.effectiveTheme) })
+      // 与列表内一致:文件夹内的会话按 0.95 显示,避免预览"放大"
+      .scale({
+        x: this.dragPreviewItem!.worldId.length > 0 ? 0.95 : 1.0,
+        y: this.dragPreviewItem!.worldId.length > 0 ? 0.95 : 1.0
+      })
+      .opacity(0.96)
+      .shadow({ radius: 16, color: '#55000000', offsetX: 0, offsetY: 6 })
+      .position({
+        x: 20,
+        // 跟随手指:窗口坐标起点 + 移动量 - 根 Stack 顶部偏移
+        // 再上移半个源行高度,让整行预览以手指为垂直中心,避免松手前"向下跳"
+        y: this.dragFingerStartGlobalY + this.dragOffsetY - this.dragStackTopY
+          - (this.rowHeights.get('s_' + this.dragChatId) ?? 0) / 2
+      })
     }
-    .position({ x: 20, y: this.dragSourceY + this.dragOffsetY })
-    .shadow({ radius: 12, color: '#40000000', offsetX: 0, offsetY: 4 })
   }
 
   /**
