@@ -27,7 +27,11 @@ import { Chat } from '../models/Chat';
 import { WorldGroup } from '../models/WorldGroup';
 import { ThemePalette } from '../theme/ThemePalette';
 import { AppDialog } from './ui/AppDialog';
+import { AppServices } from '../services/AppServices';
 import { promptAction } from '@kit.ArkUI';
+
+/** v49: 会话列表面板分组折叠状态持久化 key(逗号分隔的 worldId 列表) */
+const SESSION_LIST_COLLAPSED_WORLD_IDS_KEY: string = 'session_list_collapsed_world_ids';
 
 /** 会话列表展示行模型:分组头 或 会话行 */
 class SessionListRowModel {
@@ -68,6 +72,11 @@ export struct ChatSessionListPanel {
   @State moveTarget: Chat | null = null;
   /** 移动弹窗中选中的分组 id(空字符串=不分组) */
   @State moveSelectedWorldId: string = '';
+
+  aboutToAppear(): void {
+    // v49: 恢复上次保存的分组折叠状态(默认全展开)
+    this.loadCollapsedWorldIds();
+  }
 
   build() {
     Stack() {
@@ -368,6 +377,29 @@ export struct ChatSessionListPanel {
       next.push(worldId);
     }
     this.collapsedWorldIds = next;
+    this.persistCollapsedWorldIds(next);
+  }
+
+  /** v49: 加载上次保存的分组折叠状态(无记录时全展开) */
+  private async loadCollapsedWorldIds(): Promise<void> {
+    try {
+      const prefs = AppServices.getAppPreferences();
+      const raw: string = await prefs.getString(SESSION_LIST_COLLAPSED_WORLD_IDS_KEY, '');
+      if (raw.length === 0) {
+        this.collapsedWorldIds = [];
+        return;
+      }
+      this.collapsedWorldIds = raw.split(',').filter((id: string): boolean => id.length > 0);
+    } catch (_e) {
+      this.collapsedWorldIds = [];
+    }
+  }
+
+  /** v49: 持久化分组折叠状态(fire-and-forget) */
+  private persistCollapsedWorldIds(ids: string[]): void {
+    const prefs = AppServices.getAppPreferences();
+    prefs.putString(SESSION_LIST_COLLAPSED_WORLD_IDS_KEY, ids.join(','))
+      .catch((_e: Object): void => {});
   }
 
   /** 分组头行:分组名 + 章节数 + 折叠箭头 + 管理按钮 */

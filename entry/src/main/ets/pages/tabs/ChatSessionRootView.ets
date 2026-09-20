@@ -39,6 +39,9 @@ import { ThemePalette } from '../../theme/ThemePalette';
 
 const LOG_TAG_SESSION: string = 'ChatSessionRootView';
 
+/** v49: 对话记录分组折叠状态持久化 key(逗号分隔的 worldId 列表,与 ChatSessionListPanel 共用) */
+const SESSION_LIST_COLLAPSED_WORLD_IDS_KEY: string = 'session_list_collapsed_world_ids';
+
 /** AppStorage 中待跳转的 chatId(由本视图写入,ChatPage 读取后清除) */
 export const PENDING_CHAT_ID_KEY: string = 'pendingChatId';
 /** AppStorage 中待应用的 characterId(配合 pendingChatId 切换到指定角色会话) */
@@ -166,6 +169,8 @@ export struct ChatSessionRootView {
       await vm.reload();
       this.sessions = vm.sessions;
       this.isInitializing = false;
+      // v49: 恢复上次保存的分组折叠状态(默认全展开)
+      this.loadCollapsedWorldIds();
     } catch (e) {
       this.isInitializing = false;
       this.initError = (e as Error).message ?? '';
@@ -699,6 +704,29 @@ export struct ChatSessionRootView {
       next.push(worldId);
     }
     this.collapsedWorldIds = next;
+    this.persistCollapsedWorldIds(next);
+  }
+
+  /** v49: 加载上次保存的分组折叠状态(无记录时全展开) */
+  private async loadCollapsedWorldIds(): Promise<void> {
+    try {
+      const prefs = AppServices.getAppPreferences();
+      const raw: string = await prefs.getString(SESSION_LIST_COLLAPSED_WORLD_IDS_KEY, '');
+      if (raw.length === 0) {
+        this.collapsedWorldIds = [];
+        return;
+      }
+      this.collapsedWorldIds = raw.split(',').filter((id: string): boolean => id.length > 0);
+    } catch (_e) {
+      this.collapsedWorldIds = [];
+    }
+  }
+
+  /** v49: 持久化分组折叠状态(fire-and-forget) */
+  private persistCollapsedWorldIds(ids: string[]): void {
+    const prefs = AppServices.getAppPreferences();
+    prefs.putString(SESSION_LIST_COLLAPSED_WORLD_IDS_KEY, ids.join(','))
+      .catch((_e: Object): void => {});
   }
 
   /** 打开分组管理弹窗(重命名/删除) */
