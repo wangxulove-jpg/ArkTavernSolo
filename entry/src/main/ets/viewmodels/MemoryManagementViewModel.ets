@@ -605,7 +605,7 @@ export class MemoryManagementViewModel {
   }
 
   /**
-   * v46: 手动生成会话记忆(把当前会话的章节+核心记忆压缩为 1~2k 入口摘要 + 实体索引)。
+   * v46: 手动生成会话记忆(v48: 把当前会话的真实聊天内容压缩为 1~2k 角色视角入口摘要 + 实体索引)。
    * 仅世界分组会话可用。
    */
   async generateSessionMemory(): Promise<void> {

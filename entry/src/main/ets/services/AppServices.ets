@@ -310,13 +310,16 @@ export class AppServices {
       new ChatParticipantRepository(this.dbHelper)
     );
     // v8: MemoryService(依赖 ModelService + MemoryPersistenceService;v42 注入 ChatRepository 解析世界分组)
+    // v48: 注入 ConversationBranchPersistenceService(会话记忆基于真实聊天内容)与 AppPreferences(自定义总结提示词)
     this.memoryService = new MemoryService(
       this.memoryPersistenceService,
       this.modelService,
       DEFAULT_SUMMARY_POINTS,
       DEFAULT_MEMORY_TRIGGER,
       DEFAULT_CHAPTER_TRIGGER,
-      this.chatRepository
+      this.chatRepository,
+      this.conversationBranchPersistenceService,
+      this.appPreferences
     );
     // v8: ForkChatService(从分支创建独立对话)
     this.forkChatService = new ForkChatService(

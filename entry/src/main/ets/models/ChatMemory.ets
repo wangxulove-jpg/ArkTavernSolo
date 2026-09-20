@@ -29,7 +29,7 @@
  * - chapter:章节记忆(独立追加的结构化摘要)
  * - rolling:滚动记忆(过渡期覆盖式摘要)
  * - legacy:旧数据迁移(只读)
- * - session:会话记忆(一次对话记录的章节+核心压缩成的入口级摘要,v46 引入)
+ * - session:会话记忆(一次对话记录基于真实聊天内容压缩成的角色视角入口级摘要,v46 引入)
  */
 export type MemoryType = 'core' | 'chapter' | 'rolling' | 'legacy' | 'session';
 

@@ -47,6 +47,8 @@ import {
 import { ChatRequest } from '../models/ChatRequest';
 import { ModelService } from './ModelService';
 import { MemoryPersistenceService } from './MemoryPersistenceService';
+import { ConversationBranchPersistenceService } from './ConversationBranchPersistenceService';
+import { AppPreferences } from '../storage/AppPreferences';
 import {
   buildEntityIndex,
   serializeEntityIndex,
@@ -144,6 +146,15 @@ export const DEFAULT_CHAPTER_TRIGGER: ChapterTriggerConfig = {
 /** v46: 注入时保留的会话记忆上限(超出取最近 N 条,更旧的靠 core + 按需加载) */
 export const SESSION_MEMORY_INJECT_LIMIT: number = 8;
 
+/** v48: 会话记忆总结正文源字符预算(超出截取最近部分并注明) */
+export const SESSION_SUMMARY_SOURCE_CHAR_LIMIT: number = 60000;
+
+/** v48: 自定义章节记忆总结方向 Preferences key(留空使用默认提示词) */
+export const MEMORY_CHAPTER_PROMPT_CUSTOM_KEY: string = 'memory_chapter_prompt_custom';
+
+/** v48: 自定义会话记忆总结方向 Preferences key(留空使用默认提示词) */
+export const MEMORY_SESSION_PROMPT_CUSTOM_KEY: string = 'memory_session_prompt_custom';
+
 /** v45: 归档边界解析结果(最新 chapter/rolling 的 endPosition 与其摘要)。 */
 interface ArchivedPosition {
   readonly position: number;
@@ -158,6 +169,10 @@ export class MemoryService {
   private readonly chapterConfig: ChapterTriggerConfig;
   /** v42: 世界分组解析依赖(查 Chat.worldId),null 时不分组 */
   private readonly chatRepository: ChatRepository | null;
+  /** v48: 活动分支消息加载依赖(会话记忆基于真实聊天内容),null 时无法生成会话记忆 */
+  private readonly branchPersistence: ConversationBranchPersistenceService | null;
+  /** v48: 自定义总结提示词读取依赖,null 时使用默认提示词 */
+  private readonly appPreferences: AppPreferences | null;
 
   constructor(
     memoryPersistence: MemoryPersistenceService,
@@ -165,7 +180,9 @@ export class MemoryService {
     summaryPoints: MemorySummaryPoints = DEFAULT_SUMMARY_POINTS,
     triggerConfig: MemoryTriggerConfig = DEFAULT_MEMORY_TRIGGER,
     chapterConfig: ChapterTriggerConfig = DEFAULT_CHAPTER_TRIGGER,
-    chatRepository: ChatRepository | null = null
+    chatRepository: ChatRepository | null = null,
+    branchPersistence: ConversationBranchPersistenceService | null = null,
+    appPreferences: AppPreferences | null = null
   ) {
     this.memoryPersistence = memoryPersistence;
     this.modelService = modelService;
@@ -173,6 +190,8 @@ export class MemoryService {
     this.triggerConfig = triggerConfig;
     this.chapterConfig = chapterConfig;
     this.chatRepository = chatRepository;
+    this.branchPersistence = branchPersistence;
+    this.appPreferences = appPreferences;
   }
 
   /** 获取 MemoryPersistenceService(供 ChatService 事务内调用) */
@@ -203,6 +222,21 @@ export class MemoryService {
   /** v45: 查询会话所属世界分组 ID(供记忆管理页合并世界池展示等)。 */
   async getWorldIdByChat(chatId: string): Promise<string> {
     return await this.resolveWorldIdByChat(chatId);
+  }
+
+  /**
+   * v48: 读取自定义总结提示词(留空或读取失败返回 '' 使用默认提示词)。
+   */
+  private async readCustomSummaryPrompt(key: string): Promise<string> {
+    if (this.appPreferences === null) {
+      return '';
+    }
+    try {
+      const val: string = await this.appPreferences.getString(key, '');
+      return val.trim();
+    } catch (_e) {
+      return '';
+    }
   }
 
   // ===== 加载 =====
@@ -865,6 +899,9 @@ export class MemoryService {
       // v42: 章节记忆带世界分组标记(世界内跨会话共享)
       const worldId: string = await this.resolveWorldIdByChat(chatId);
 
+      // v48: 自定义章节总结方向(留空使用默认提示词)
+      const customChapterPrompt: string = await this.readCustomSummaryPrompt(MEMORY_CHAPTER_PROMPT_CUSTOM_KEY);
+
       let lastInserted: ChatMemory | null = null;
       let insertedCount: number = 0;
       let chunkOffset: number = 0;
@@ -874,8 +911,8 @@ export class MemoryService {
         const chunkEndPosition: number = chunkStartPosition + chunk.length - 1;
         chunkOffset += chunk.length;
 
-        // 构建章节生成提示词(前一段摘要作为 prevSummary,保持剧情连贯)
-        const chapterPrompt: ChatMessage[] = this.buildChapterPrompt(prevSummary, chunk);
+        // 构建章节生成提示词(前一段摘要作为 prevSummary,保持剧情连贯;v48: 支持自定义总结方向)
+        const chapterPrompt: ChatMessage[] = this.buildChapterPrompt(prevSummary, chunk, customChapterPrompt);
 
         // 调用模型生成章节(v45: maxTokens 留足分段后的输出空间)
         const request: ChatRequest = {
@@ -1215,15 +1252,15 @@ export class MemoryService {
   /**
    * v46: 生成会话记忆(仅手动触发,记忆管理页按钮)。
    *
-   * 将一次对话记录(chat)的全部章节记忆 + 世界核心记忆压缩为 1~2k 的入口级摘要,
+   * 将一次对话记录(chat)的真实聊天内容(+ 世界核心记忆)压缩为 1~2k 的入口级摘要,
    * 同时程序化构建实体索引(人名/地点/时间 → 章节映射)存入 detail,
    * 实体名列表存入 keywordsJson(供按需加载匹配)。
    *
    * 规则:
    * - 仅世界分组会话可用(worldId 非空)
-   * - 无章节记忆时返回失败(先"生成章节"再"生成会话记忆")
+   * - v48: 总结正文基于真实聊天内容(活动分支),无聊天记录时返回失败;章节仅用于实体索引,非必需
    * - 重复生成:软失效同 chatId 旧 session 记忆再插入新记录(追加式)
-   * - 增量语义:旧会话记忆仅在总结时提供,仅作背景与连贯性参考,总结主体为当前对话的全部章节记忆,不重复输出旧版内容(索引一并重建)
+   * - 增量语义:旧会话记忆仅在总结时提供,仅作背景与连贯性参考,总结主体为当前对话的真实聊天内容,不重复输出旧版内容(索引一并重建)
    */
   async generateSessionMemory(worldId: string, chatId: string): Promise<MemorySummaryResult> {
     if (worldId.length === 0 || chatId.length === 0) {
@@ -1241,14 +1278,27 @@ export class MemoryService {
         return { success: false, memory: null, error: 'chat world mismatch' };
       }
 
-      // 收集该会话的全部有效章节
+      // 收集该会话的全部有效章节(v48: 仅用于程序化实体索引,不再作为总结正文输入)
       const worldChapters: ChatMemory[] =
         await this.memoryPersistence.listValidByWorldAndType(worldId, 'chapter');
       const chatChapters: ChatMemory[] = worldChapters.filter(
         (m: ChatMemory): boolean => m.chatId === chatId
       );
-      if (chatChapters.length === 0) {
-        return { success: false, memory: null, error: '该会话暂无章节记忆,请先生成章节' };
+
+      // v48: 基于真实聊天内容总结(活动分支主线剧情,与手动生成章节同一数据源)
+      if (this.branchPersistence === null) {
+        return { success: false, memory: null, error: 'branch persistence unavailable' };
+      }
+      const realMessages: ChatMessage[] = await this.branchPersistence.loadActiveBranchMessages(chatId);
+      if (realMessages.length === 0) {
+        return { success: false, memory: null, error: '该会话暂无聊天记录' };
+      }
+      let realText: string = this.formatMessages(realMessages);
+      let truncated: boolean = false;
+      if (realText.length > SESSION_SUMMARY_SOURCE_CHAR_LIMIT) {
+        // 内容过长:截取最近部分(最新主线内容优先级更高),并在提示词中注明
+        realText = realText.slice(realText.length - SESSION_SUMMARY_SOURCE_CHAR_LIMIT);
+        truncated = true;
       }
 
       // 世界核心记忆(可无)
@@ -1278,11 +1328,16 @@ export class MemoryService {
         return { success: false, memory: null, error: 'current model name is empty' };
       }
 
-      // 模型压缩正文
+      // v48: 自定义会话记忆总结方向(留空使用默认提示词)
+      const customSessionPrompt: string = await this.readCustomSummaryPrompt(MEMORY_SESSION_PROMPT_CUSTOM_KEY);
+
+      // 模型压缩正文(v48: 基于真实聊天内容,角色第一人称视角)
       const sessionPrompt: ChatMessage[] = this.buildSessionPrompt(
         oldSession !== null ? oldSession.summary : '',
-        chatChapters,
-        worldCore !== null ? worldCore.summary : ''
+        realText,
+        worldCore !== null ? worldCore.summary : '',
+        customSessionPrompt,
+        truncated
       );
       const request: ChatRequest = {
         model: modelName,
@@ -1347,41 +1402,46 @@ export class MemoryService {
 
   /**
    * v46: 构建会话记忆压缩提示词。
-   * 输出 ≤2000 字:剧情概要 + 人物简表 + 事件/地点/时间简表,作为跨会话注入的入口。
+   * v48: 改为基于真实聊天内容、以角色第一人称视角总结(态度/共同经历/转变);
+   * 输出 ≤2000 字,作为跨会话注入的入口记忆。
    */
   private buildSessionPrompt(
     oldSessionSummary: string,
-    chapters: ChatMemory[],
-    coreSummary: string
+    realMessagesText: string,
+    coreSummary: string,
+    customPrompt: string = '',
+    truncated: boolean = false
   ): ChatMessage[] {
     const systemPrompt: string =
-      '你是对话记忆助手。任务:把一次完整对话记录的全部章节记忆压缩为一份"会话记忆",'
-      + '作为新会话了解这段过去的入口摘要。\n\n'
+      '你是对话记忆助手。任务:以【角色本人】的第一人称视角,把一次完整对话的真实聊天内容'
+      + '压缩为一份"会话记忆",作为新会话中角色回忆过往经历的入口记忆。'
+      + '这是角色的记忆,而不是旁观者的流水账——让角色记住自己做过什么、对对方的态度、经历了什么变化。\n\n'
       + '输出结构(严格使用以下小节标题):\n'
-      + '【剧情概要】\n'
-      + '本段对话的主线故事,约 800 字,包含起因-经过-关键转折-结果与结局状态。\n\n'
-      + '【人物】\n'
-      + '每人一行:人名 — 关键经历与最终现状(一句话)。\n\n'
-      + '【事件/地点/时间】\n'
-      + '关键事件、重要地点、时间线各若干行,一行一条。\n\n'
+      + '【我与你】\n'
+      + '角色对用户的态度与关系演变,写清楚变化节点(如初见印象、亲近、戒备、信任、依赖、疏远等)。\n\n'
+      + '【我们一起做过的事】\n'
+      + '按时间顺序的关键事件,保留因果与结果。\n\n'
+      + '【我的转变】\n'
+      + '角色的变化:性格、心态、立场、称呼、亲密度等。\n\n'
+      + '【其他人物与地点】\n'
+      + '其他重要人物、地点、时间线各若干行,一行一条。\n\n'
       + '要求:\n'
+      + '- 以"我"指代角色,内容落在"角色做了什么、对用户的态度、经历了什么转变"\n'
       + '- 总长不超过 2000 字\n'
       + '- 保留人名、地名、时间等可检索的具名信息,不要泛化成"某个人/某个地方"\n'
-      + '- 不复制章节原文流水账,以信息密度为主\n'
-      + '- 总结主体为当前对话的全部章节记忆;若提供了旧版会话记忆,它仅用于了解上一版结构与基调以保持连贯,严禁把旧版内容重复写进新摘要\n'
-      + '- 若旧版会话记忆与当前章节冲突,以当前章节为准\n'
+      + '- 不复制对话原文流水账,以信息密度为主\n'
+      + '- 总结主体为本次对话的真实聊天内容;若提供了旧版会话记忆,它仅用于了解上一版结构与基调以保持连贯,严禁把旧版内容重复写进新摘要\n'
+      + '- 若旧版会话记忆与当前聊天内容冲突,以当前聊天内容为准\n'
       + '- 只输出会话记忆本身,不要解释'
+      + (customPrompt.length > 0 ? '\n\n【用户指定的总结方向(优先遵循)】\n' + customPrompt : '')
       + this.buildJailbreakInstruction();
-
-    const chaptersText: string = chapters
-      .map((c: ChatMemory, idx: number): string => '【章节 ' + (idx + 1) + '】\n' + c.summary)
-      .join('\n\n');
 
     const userContent: string =
       (oldSessionSummary.length > 0 ? '【旧版会话记忆(仅作背景与连贯性参考,不要重复输出其内容)】\n' + oldSessionSummary + '\n\n' : '') +
       (coreSummary.length > 0 ? '【世界核心记忆】\n' + coreSummary + '\n\n' : '') +
-      '【全部章节记忆】\n' + chaptersText + '\n\n' +
-      '请输出压缩后的会话记忆:';
+      '【本次对话真实聊天内容】\n' + realMessagesText + '\n\n' +
+      (truncated ? '(注:对话内容过长,仅展示最近部分,更早内容已省略)\n\n' : '') +
+      '请以角色本人的视角输出压缩后的会话记忆:';
 
     return [
       {
@@ -1551,7 +1611,7 @@ export class MemoryService {
    * v46: 开头增加机器可解析的元数据行(参与者:/地点:/时间:),
    * 供 ChapterMemoryIndexer 程序化构建实体索引,无需大模型重排。
    */
-  private buildChapterPrompt(prevSummary: string, newMessages: ChatMessage[]): ChatMessage[] {
+  private buildChapterPrompt(prevSummary: string, newMessages: ChatMessage[], customPrompt: string = ''): ChatMessage[] {
     const systemPrompt: string =
       '你是对话记忆助手。任务:为当前章节生成详细的结构化摘要。\n\n' +
       '输出的最前面必须是以下三行元数据(格式严格,一行一项,冒号后直接写内容,不要加 Markdown 符号):\n' +
@@ -1580,6 +1640,7 @@ export class MemoryService {
       '- 不复制大量原文\n' +
       '- 保留关键因果和关系变化\n' +
       '- 只输出章节摘要本身,不要额外解释' +
+      (customPrompt.length > 0 ? '\n\n【用户指定的总结方向(优先遵循)】\n' + customPrompt : '') +
       this.buildJailbreakInstruction();
 
     const userContent: string =

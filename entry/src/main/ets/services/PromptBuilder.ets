@@ -107,7 +107,7 @@ export interface PromptBuildContext {
   /**
    * v45: OnDemandPinned(按需锁定)模式的会话钉选条目(可选)。
    * 由调用方通过 LorebookPinService.ensurePinnedEntries 预先解析后传入;
-   * 注入到记忆之后、对话之前(LorebookPinned 位置),随手动记忆总结一起更新。
+   * 注入到核心记忆之后、会话记忆之前(LorebookPinned 位置),随手动记忆总结一起更新。
    */
   pinnedLorebookEntries?: LorebookEntry[];
   /** v44: 记忆关键词检索命中的历史章节(可选开关,位置固定于对话前)。 */
@@ -309,7 +309,7 @@ export class PromptBuilder {
     }
 
     // 4.7 OnDemandPinned 固定世界书(v45)
-    // 位置:记忆之后、对话之前;内容由会话钉选决定,仅随手动记忆总结刷新
+    // 位置:核心记忆之后、会话记忆之前(排序见 PromptSegmentPosition);内容由会话钉选决定,仅随手动记忆总结刷新
     // (constant 条目已由步骤 2 注入头部,此处只注入非 constant 的钉选条目)
     if (context.pinnedLorebookEntries !== undefined) {
       for (let i = 0; i < context.pinnedLorebookEntries.length; i++) {

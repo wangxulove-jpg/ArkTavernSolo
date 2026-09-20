@@ -519,7 +519,7 @@ struct WorldMemoryPage {
                   .fontSize(15)
                   .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
                   .margin({ top: 32 })
-                Text('完成一段对话后,在对话记忆页先生成章节,再点"生成会话记忆",'
+                Text('完成一段对话后,在对话记忆页点"生成会话记忆",'
                   + '即可在此看到该段对话的入口摘要')
                   .fontSize(12)
                   .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))

@@ -29,6 +29,7 @@ import { parseEntityIndexJson } from '../services/ChapterMemoryIndexer';
 import { Logger } from '../utils/Logger';
 import { ThemePalette } from '../theme/ThemePalette';
 import { MEMORY_AUTO_SUMMARY_PREFS_KEY } from '../services/ChatService';
+import { MEMORY_CHAPTER_PROMPT_CUSTOM_KEY, MEMORY_SESSION_PROMPT_CUSTOM_KEY } from '../services/MemoryService';
 
 const LOG_TAG: string = 'MemoryMgmtPage';
 
@@ -55,10 +56,15 @@ struct MemoryManagementPage {
   @State memoryAutoSummary: boolean = false;
   /** v46: 章节记忆视图模式(false=时间线,true=按人物·事件分组) */
   @State chapterEntityView: boolean = false;
+  /** v48: 自定义章节记忆总结方向(留空使用默认提示词) */
+  @State chapterSummaryPrompt: string = '';
+  /** v48: 自定义会话记忆总结方向(留空使用默认提示词) */
+  @State sessionSummaryPrompt: string = '';
 
   aboutToAppear(): void {
     this.handleReady();
     this.loadMemoryAutoSummaryPref();
+    this.loadSummaryPromptPrefs();
   }
 
   private async handleReady(): Promise<void> {
@@ -243,6 +249,9 @@ struct MemoryManagementPage {
     Column() {
       // 统计信息
       this.statsCard()
+
+      // v48: 自定义总结方向(章节 + 会话记忆)
+      this.summaryDirectionCard()
 
       // 按类型分组展示
       ForEach(this.viewModel.memoryGroups, (group: MemoryTypeGroup) => {
@@ -691,6 +700,66 @@ struct MemoryManagementPage {
   }
 
   @Builder
+  summaryDirectionCard() {
+    Column() {
+      Text('总结方向(自定义)')
+        .fontSize(13)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        .width('100%')
+        .padding({ bottom: 4 })
+
+      Column() {
+        Text('章节记忆总结方向')
+          .fontSize(12)
+          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+          .width('100%')
+        TextArea({ text: this.chapterSummaryPrompt, placeholder: '自定义章节总结要点,留空使用默认' })
+          .fontSize(13)
+          .width('100%')
+          .height(72)
+          .margin({ top: 4 })
+          .onChange((value: string) => {
+            this.chapterSummaryPrompt = value;
+            this.persistSummaryPrompt(MEMORY_CHAPTER_PROMPT_CUSTOM_KEY, value);
+          })
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+
+      Column() {
+        Text('会话记忆总结方向')
+          .fontSize(12)
+          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+          .width('100%')
+          .margin({ top: 12 })
+        TextArea({ text: this.sessionSummaryPrompt, placeholder: '自定义会话记忆总结方向,留空使用默认;建议聚焦:角色对你的态度、共同经历、角色转变' })
+          .fontSize(13)
+          .width('100%')
+          .height(96)
+          .margin({ top: 4 })
+          .onChange((value: string) => {
+            this.sessionSummaryPrompt = value;
+            this.persistSummaryPrompt(MEMORY_SESSION_PROMPT_CUSTOM_KEY, value);
+          })
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+
+      Text('留空则使用默认总结方向')
+        .fontSize(11)
+        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+        .width('100%')
+        .margin({ top: 6 })
+    }
+    .width('100%')
+    .padding({ left: 12, right: 12, top: 12, bottom: 12 })
+    .borderRadius(8)
+    .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+    .margin({ top: 8 })
+  }
+
+  @Builder
   actionButtons() {
     Column() {
       // 重新生成
@@ -706,7 +775,7 @@ struct MemoryManagementPage {
           this.viewModel.regenerateSummary();
         })
 
-      // v46: 生成会话记忆(章节+核心压缩为入口摘要 + 实体索引,仅世界分组会话)
+      // v46: 生成会话记忆(v48: 基于真实聊天内容压缩为角色视角入口摘要 + 实体索引,仅世界分组会话)
       Button('生成会话记忆')
         .type(ButtonType.Capsule)
         .width('100%')
@@ -869,5 +938,22 @@ struct MemoryManagementPage {
     const prefs = AppServices.getAppPreferences();
     prefs.putString(MEMORY_AUTO_SUMMARY_PREFS_KEY, enabled ? 'true' : 'false')
       .catch((_e: Object): void => {});
+  }
+
+  /** v48: 加载自定义总结方向(章节 + 会话记忆,留空使用默认提示词)。 */
+  private async loadSummaryPromptPrefs(): Promise<void> {
+    try {
+      const prefs = AppServices.getAppPreferences();
+      this.chapterSummaryPrompt = await prefs.getString(MEMORY_CHAPTER_PROMPT_CUSTOM_KEY, '');
+      this.sessionSummaryPrompt = await prefs.getString(MEMORY_SESSION_PROMPT_CUSTOM_KEY, '');
+    } catch (_e) {
+      // 读取失败保持默认空
+    }
+  }
+
+  /** v48: 持久化自定义总结方向(fire-and-forget,沿用自动总结开关模式)。 */
+  private persistSummaryPrompt(key: string, value: string): void {
+    const prefs = AppServices.getAppPreferences();
+    prefs.putString(key, value).catch((_e: Object): void => {});
   }
 }

@@ -6,11 +6,14 @@
  *
  * 固定顺序:
  * PromptPreset → BeforeCharacter → Character → AfterCharacter
- *   → DialogueExamples → MemoryCore → MemoryChapter → MemoryRolling → MemoryLegacy
+ *   → DialogueExamples → MemoryCore → LorebookPinned(OnDemandPinned世界书)
+ *   → MemorySession → MemoryChapter → MemoryRolling → MemoryLegacy
  *   → Conversation → PostHistory
  *
  * v12 多层记忆:
  * - MemoryCore:核心长期事实(最高优先级)
+ * - LorebookPinned:OnDemandPinned 固定世界书(核心记忆之后、会话记忆之前)
+ * - MemorySession:会话记忆(跨会话入口级摘要)
  * - MemoryChapter:章节摘要(按时间顺序)
  * - MemoryRolling:近期滚动摘要
  * - MemoryLegacy:旧数据迁移摘要
@@ -37,7 +40,9 @@ export enum PromptSegmentPosition {
   DialogueExamples = 'DialogueExamples',
   /** v12: 核心长期事实(最高优先级记忆) */
   MemoryCore = 'MemoryCore',
-  /** v46: 会话记忆(跨会话入口级摘要,核心记忆之后) */
+  /** OnDemandPinned 固定世界书(核心记忆之后、会话记忆之前,随手动记忆总结一起更新) */
+  LorebookPinned = 'LorebookPinned',
+  /** v46: 会话记忆(跨会话入口级摘要,世界书钉选段之后) */
   MemorySession = 'MemorySession',
   /** v12: 章节摘要(按时间顺序) */
   MemoryChapter = 'MemoryChapter',
@@ -49,8 +54,6 @@ export enum PromptSegmentPosition {
   MemoryKeyword = 'MemoryKeyword',
   /** 旧版单段长期记忆摘要(兼容,新代码应使用 MemoryCore/Chapter/Rolling) */
   MemorySummary = 'MemorySummary',
-  /** OnDemandPinned 固定世界书(记忆之后、对话之前,随手动记忆总结一起更新) */
-  LorebookPinned = 'LorebookPinned',
   /** 聊天历史(Conversation) */
   Conversation = 'Conversation',
   /** Post-History Instructions,位于聊天历史之后 */
@@ -109,13 +112,13 @@ const POSITION_ORDER: Record<string, number> = {
   'AfterCharacter': 5,
   'DialogueExamples': 6,
   'MemoryCore': 7,
-  'MemorySession': 8,
-  'MemoryChapter': 9,
-  'MemoryRolling': 10,
-  'MemoryLegacy': 11,
-  'MemoryKeyword': 12,
-  'MemorySummary': 13,
-  'LorebookPinned': 14,
+  'LorebookPinned': 8,
+  'MemorySession': 9,
+  'MemoryChapter': 10,
+  'MemoryRolling': 11,
+  'MemoryLegacy': 12,
+  'MemoryKeyword': 13,
+  'MemorySummary': 14,
   'Conversation': 15,
   'PostHistory': 16
 };
