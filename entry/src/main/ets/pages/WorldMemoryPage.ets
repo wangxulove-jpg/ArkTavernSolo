@@ -8,11 +8,15 @@
 
 import { router } from '@kit.ArkUI';
 import { ChatMemory } from '../models/ChatMemory';
-import { WorldMemoryViewModel } from '../viewmodels/WorldMemoryViewModel';
+import { WorldMemoryViewModel, WorldSessionSortMode } from '../viewmodels/WorldMemoryViewModel';
+import { AppServices } from '../services/AppServices';
 import { ThemePalette } from '../theme/ThemePalette';
 import { Logger } from '../utils/Logger';
 
 const LOG_TAG: string = 'WorldMemoryPage';
+
+/** v49: 文件夹会话记忆排序模式持久化 key */
+const WORLD_SESSION_SORT_MODE_KEY: string = 'world_session_memory_sort_mode';
 
 @Entry
 @Component
@@ -21,6 +25,8 @@ struct WorldMemoryPage {
   @State worldName: string = '';
   @State vmErrorMessage: string = '';
   @State editDialogDummy: number = 0;
+  /** v49: 会话记忆排序模式(默认按会话创建时间,持久化) */
+  @State sessionSortMode: string = 'created';
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   @StorageProp('navigationBarHeight') navigationBarHeight: number = 0;
   @StorageProp('effectiveTheme') effectiveTheme: string = 'dark';
@@ -38,8 +44,10 @@ struct WorldMemoryPage {
     this.worldName = name;
     const vm: WorldMemoryViewModel = new WorldMemoryViewModel();
     this.viewModel = vm;
-    void vm.load(worldId).then((): void => {
-      this.syncFromViewModel();
+    void this.loadSessionSortModePref().then((): void => {
+      void vm.load(worldId).then((): void => {
+        this.syncFromViewModel();
+      });
     });
   }
 
@@ -137,6 +145,57 @@ struct WorldMemoryPage {
     .onClick(() => {
       this.openSessionDetail(memory.id);
     })
+  }
+
+  /** v49: 会话记忆排序选项(点击切换并持久化)。 */
+  @Builder
+  sortChip(mode: string, label: string) {
+    Text(label)
+      .fontSize(11)
+      .fontColor(this.sessionSortMode === mode
+        ? ThemePalette.accentColor(this.effectiveTheme)
+        : ThemePalette.textTertiaryColor(this.effectiveTheme))
+      .backgroundColor(this.sessionSortMode === mode
+        ? ThemePalette.surface2Color(this.effectiveTheme)
+        : Color.Transparent)
+      .borderRadius(10)
+      .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+      .margin({ left: 6 })
+      .onClick(() => {
+        if (this.isValidSortMode(mode) && this.viewModel !== null) {
+          this.sessionSortMode = mode;
+          this.viewModel!.setSessionSortMode(mode as WorldSessionSortMode);
+          this.persistSessionSortMode(mode);
+          // 强制 ForEach 以新顺序重渲染
+          this.editDialogDummy = this.editDialogDummy + 1;
+        }
+      })
+  }
+
+  /** v49: 校验排序模式合法性。 */
+  private isValidSortMode(mode: string): boolean {
+    return mode === 'created' || mode === 'folder' || mode === 'recent';
+  }
+
+  /** v49: 加载上次保存的会话记忆排序模式(默认按会话创建时间)。 */
+  private async loadSessionSortModePref(): Promise<void> {
+    try {
+      const prefs = AppServices.getAppPreferences();
+      const mode: string = await prefs.getString(WORLD_SESSION_SORT_MODE_KEY, 'created');
+      const valid: string = this.isValidSortMode(mode) ? mode : 'created';
+      this.sessionSortMode = valid;
+      if (this.viewModel !== null) {
+        this.viewModel!.setSessionSortMode(valid as WorldSessionSortMode);
+      }
+    } catch (_e) {
+      this.sessionSortMode = 'created';
+    }
+  }
+
+  /** v49: 持久化会话记忆排序模式(fire-and-forget)。 */
+  private persistSessionSortMode(mode: string): void {
+    const prefs = AppServices.getAppPreferences();
+    prefs.putString(WORLD_SESSION_SORT_MODE_KEY, mode).catch((_e: Object): void => {});
   }
 
   @Builder
@@ -502,6 +561,18 @@ struct WorldMemoryPage {
                 }
                 .width('100%')
                 .padding({ top: 12, bottom: 6 })
+
+                // v49: 会话记忆排序(默认按会话创建时间,可切换文件夹顺序/最近修改)
+                Row() {
+                  Text('排序')
+                    .fontSize(11)
+                    .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+                  this.sortChip('created', '创建时间')
+                  this.sortChip('folder', '文件夹')
+                  this.sortChip('recent', '最近修改')
+                }
+                .width('100%')
+                .padding({ bottom: 8 })
               }
             }
             ForEach(this.viewModel.sessions,

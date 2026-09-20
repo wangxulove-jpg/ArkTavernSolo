@@ -409,9 +409,9 @@ export class MemoryService {
   }
 
   /**
-   * v46: 解析世界池会话记忆(按 chatId 去重取最新,createdAt 正序,上限 SESSION_MEMORY_INJECT_LIMIT)。
+   * v49: 按 chatId 去重取 createdAt 最新一条(注入与展示共用,不排序、不截断)。
    */
-  private async resolveWorldSessionMemories(worldId: string): Promise<ChatMemory[]> {
+  private async dedupeWorldSessionMemories(worldId: string): Promise<ChatMemory[]> {
     const worldSessions: ChatMemory[] =
       await this.memoryPersistence.listValidByWorldAndType(worldId, 'session');
     // 同 chatId 取 createdAt 最新一条
@@ -423,7 +423,12 @@ export class MemoryService {
         latestByChat.set(m.chatId, m);
       }
     }
-    const sessions: ChatMemory[] = Array.from(latestByChat.values());
+    return Array.from(latestByChat.values());
+  }
+
+  /** 注入路径:按记忆创建时间正序,截取最近 SESSION_MEMORY_INJECT_LIMIT 条。 */
+  private async resolveWorldSessionMemories(worldId: string): Promise<ChatMemory[]> {
+    const sessions: ChatMemory[] = await this.dedupeWorldSessionMemories(worldId);
     sessions.sort((a: ChatMemory, b: ChatMemory): number => a.createdAt - b.createdAt);
     return sessions.slice(0, SESSION_MEMORY_INJECT_LIMIT);
   }
@@ -1504,14 +1509,15 @@ export class MemoryService {
   }
 
   /**
-   * v46: 列出文件夹的会话记忆列表(按 chatId 去重取最新,createdAt 正序)。
+   * v46: 列出文件夹的会话记忆列表(按 chatId 去重取最新,不含注入数量上限)。
+   * v49: 展示层排序由 WorldMemoryViewModel 按会话创建时间/文件夹顺序/最近修改决定。
    * 供文件夹记忆根页树状展示(会话记忆作为第一层入口)。
    */
   async listWorldSessions(worldId: string): Promise<ChatMemory[]> {
     if (worldId.length === 0) {
       return [];
     }
-    return await this.resolveWorldSessionMemories(worldId);
+    return await this.dedupeWorldSessionMemories(worldId);
   }
 
   /**

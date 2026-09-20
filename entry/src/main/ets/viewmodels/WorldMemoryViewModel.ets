@@ -10,6 +10,7 @@
  */
 
 import { ChatMemory, withMemoryMetadata, withUpdatedSummary, withTitle } from '../models/ChatMemory';
+import { Chat } from '../models/Chat';
 import { MemoryService } from '../services/MemoryService';
 import { AppServices } from '../services/AppServices';
 import { Logger } from '../utils/Logger';
@@ -19,15 +20,23 @@ const LOG_TAG: string = 'WorldMemoryViewModel';
 const TYPE_CHAPTER: number = 0;
 const TYPE_CORE: number = 1;
 
+/** v49: 文件夹会话记忆排序模式 */
+export type WorldSessionSortMode = 'created' | 'folder' | 'recent';
+
 @Observed
 export class WorldMemoryViewModel {
   worldId: string = '';
   core: ChatMemory | null = null;
   chapters: ChatMemory[] = [];
-  /** v46: 会话记忆列表(树状第一层,按 chatId 去重取最新,createdAt 正序) */
+  /** v46: 会话记忆列表(树状第一层,按 chatId 去重取最新,顺序由 sessionSortMode 决定) */
   sessions: ChatMemory[] = [];
+  /** v49: 会话记忆排序模式(默认按会话创建时间) */
+  sessionSortMode: WorldSessionSortMode = 'created';
   loading: boolean = false;
   errorMessage: string = '';
+
+  /** v49: chatId → Chat(供按创建时间/文件夹顺序排序) */
+  private chatMap: Map<string, Chat> = new Map<string, Chat>();
 
   /** 编辑对话框状态 */
   showEditDialog: boolean = false;
@@ -74,14 +83,65 @@ export class WorldMemoryViewModel {
       chapters.sort((a: ChatMemory, b: ChatMemory): number => b.updatedAt - a.updatedAt);
       this.core = core;
       this.chapters = chapters;
-      // v46: 会话记忆列表(树状根层)
+      // v46: 会话记忆列表(树状根层);v49: 按会话记录排序(创建时间/文件夹顺序/最近修改)
       this.sessions = await this.memoryService.listWorldSessions(worldId);
+      await this.loadChatMap(this.sessions);
+      this.sortSessions();
     } catch (e) {
       this.errorMessage = '加载记忆失败: ' + String(e);
       Logger.error(LOG_TAG, 'load failed: ' + String(e));
     } finally {
       this.loading = false;
     }
+  }
+
+  /** v49: 构建 chatId → Chat 映射(供按会话创建时间/文件夹顺序排序)。 */
+  private async loadChatMap(sessions: ChatMemory[]): Promise<void> {
+    this.chatMap = new Map<string, Chat>();
+    try {
+      const repo = AppServices.getChatRepository();
+      for (let i = 0; i < sessions.length; i++) {
+        const chat: Chat | null = await repo.getById(sessions[i].chatId);
+        if (chat !== null) {
+          this.chatMap.set(sessions[i].chatId, chat);
+        }
+      }
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'loadChatMap failed: ' + String(e));
+    }
+  }
+
+  /** v49: 设置会话记忆排序模式并重排(无需重新加载)。 */
+  setSessionSortMode(mode: WorldSessionSortMode): void {
+    this.sessionSortMode = mode;
+    this.sortSessions();
+  }
+
+  /** v49: 按当前排序模式重排会话记忆(新引用触发 ForEach 重渲染)。 */
+  private sortSessions(): void {
+    const mode: WorldSessionSortMode = this.sessionSortMode;
+    const sorted: ChatMemory[] = this.sessions.slice();
+    sorted.sort((a: ChatMemory, b: ChatMemory): number => {
+      if (mode === 'recent') {
+        // 最近修改:会话记忆 updatedAt 倒序
+        return b.updatedAt - a.updatedAt;
+      }
+      const ca: Chat | undefined = this.chatMap.get(a.chatId);
+      const cb: Chat | undefined = this.chatMap.get(b.chatId);
+      if (mode === 'folder') {
+        // 文件夹顺序:与文件夹内会话记录保存顺序一致(sortOrder 升序,平局按创建时间)
+        const sa: number = ca !== undefined ? ca.sortOrder : 0;
+        const sb: number = cb !== undefined ? cb.sortOrder : 0;
+        if (sa !== sb) {
+          return sa - sb;
+        }
+      }
+      // 默认:会话创建时间升序(查不到会话时回退记忆创建时间)
+      const ta: number = ca !== undefined ? ca.createdAt : a.createdAt;
+      const tb: number = cb !== undefined ? cb.createdAt : b.createdAt;
+      return ta - tb;
+    });
+    this.sessions = sorted;
   }
 
   openNewDialog(type: number): void {
