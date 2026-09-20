@@ -179,6 +179,18 @@ export class CharacterListViewModel {
     }
   }
 
+  /** v50: 交换两个角色卡片顺序(宫格拖拽重排用)。 */
+  async swapCharacters(idA: string, idB: string): Promise<void> {
+    this.errorMessage = '';
+    try {
+      await this.service.swapCharacters(idA, idB);
+      await this.load();
+    } catch (e) {
+      this.errorMessage = '重排失败: ' + String(e);
+      Logger.error(LOG_TAG, 'swapCharacters failed: ' + String(e));
+    }
+  }
+
   /** 是否为当前角色 */
   isCurrent(character: Character): boolean {
     return this.currentCharacterId === character.id;

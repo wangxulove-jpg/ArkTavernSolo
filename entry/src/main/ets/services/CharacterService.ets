@@ -961,6 +961,18 @@ export class CharacterService {
     }
     await this.repository.swapSortOrder(id, characters[index + 1].id);
   }
+
+  /**
+   * v50: 交换两个角色卡的 sort_order(宫格拖拽重排用)。
+   * id 相同或任一为空时无操作返回。
+   */
+  async swapCharacters(idA: string, idB: string): Promise<void> {
+    this.requireInit();
+    if (idA.length === 0 || idB.length === 0 || idA === idB) {
+      return;
+    }
+    await this.repository.swapSortOrder(idA, idB);
+  }
 }
 
 /** PNG 签名校验已迁移到 utils/ImageConverter.ets 的 isPngBytes */

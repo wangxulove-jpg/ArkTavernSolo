@@ -25,13 +25,36 @@ import { AppServices } from '../../services/AppServices';
 import { EmptyStateView } from '../../components/EmptyStateView';
 import { PressableCard } from '../../components/PressableCard';
 import { CharacterImageView } from '../../components/CharacterImageView';
-import { router, promptAction } from '@kit.ArkUI';
+import { router, promptAction, componentUtils } from '@kit.ArkUI';
 import { picker } from '@kit.CoreFileKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { ThemePalette } from '../../theme/ThemePalette';
 import { Logger } from '../../utils/Logger';
 
 const LOG_TAG: string = 'CharacterRootView';
+
+/** 根 Stack 组件 id(宫格拖拽预览定位用) */
+const CHAR_ROOT_STACK_ID: string = 'character_root_stack';
+
+/** v50: 角色卡 Tab 布局模式持久化 key(list=列表,grid=宫格) */
+const CHARACTER_LAYOUT_MODE_KEY: string = 'character_tab_layout_mode';
+
+/** v50: 布局方式选项(后续扩展新的排列方式时在此追加) */
+class LayoutOptionItem {
+  mode: string = '';
+  label: string = '';
+}
+
+const LAYOUT_OPTIONS: LayoutOptionItem[] = [
+  { mode: 'list', label: '列表' },
+  { mode: 'grid', label: '宫格' }
+];
+
+/** v50: 宫格卡片位置(y 为 Grid 内容坐标, h 为高度) */
+interface CharCardPos {
+  y: number;
+  h: number;
+}
 
 /** 角色编辑页路由参数,携带 characterId */
 interface CharacterEditNavParam {
@@ -74,6 +97,29 @@ export struct CharacterRootView {
   @State expandedCharId: string | null = null;
   /** 搜索关键词(本地过滤,不修改 domain 数据) */
   @State searchText: string = '';
+  /** v50: 布局模式:list=列表,grid=宫格(N×2) */
+  @State layoutMode: string = 'list';
+  /** v50: 是否显示布局方式选择弹层 */
+  @State showLayoutMenu: boolean = false;
+  // ===== v50: 宫格拖拽重排状态 =====
+  /** 正在拖拽的角色 id(空=未拖拽) */
+  @State dragCharId: string = '';
+  /** 拖拽悬停目标角色 id(空=无目标,用于高亮) */
+  @State dragCharTargetId: string = '';
+  /** 是否正在拖拽 */
+  @State isCharDragging: boolean = false;
+  /** 拖拽预览跟随手指的偏移 */
+  @State charDragOffsetY: number = 0;
+  /** 拖拽起点:手指窗口 Y */
+  @State charDragFingerStartGlobalY: number = 0;
+  /** 根 Stack 顶部窗口 Y */
+  @State charDragStackTopY: number = 0;
+  /** 拖拽中的角色卡位置缓存:charId → 位置(Grid 内容坐标) */
+  private charPosMap: Map<string, CharCardPos> = new Map<string, CharCardPos>();
+  /** v50: 长按触发拖拽后抑制本次点击打开编辑页(下次触摸 Down 复位) */
+  @State charDragSuppressOpen: boolean = false;
+  /** v50: 拖拽预览角色(整卡预览) */
+  @State charDragPreviewItem: Character | null = null;
   /** List 滚动控制器,用于点击操作后收起 swipeAction */
   private listScroller: ListScroller = new ListScroller();
   /**
@@ -93,6 +139,7 @@ export struct CharacterRootView {
   async aboutToAppear(): Promise<void> {
     try {
       await AppServices.whenReady();
+      await this.loadLayoutModePref();
       const charService = AppServices.getCharacterService();
       const vm: CharacterListViewModel = new CharacterListViewModel(charService);
       this.viewModel = vm;
@@ -131,6 +178,24 @@ export struct CharacterRootView {
       this.characters = this.viewModel!.characters;
       this.refreshKey++;
     }
+  }
+
+  /** v50: 加载上次保存的布局模式(默认列表)。 */
+  private async loadLayoutModePref(): Promise<void> {
+    try {
+      const prefs = AppServices.getAppPreferences();
+      const mode: string = await prefs.getString(CHARACTER_LAYOUT_MODE_KEY, 'list');
+      this.layoutMode = mode === 'grid' ? 'grid' : 'list';
+    } catch (_e) {
+      this.layoutMode = 'list';
+    }
+  }
+
+  /** v50: 切换布局模式并持久化。 */
+  private setLayoutMode(mode: string): void {
+    this.layoutMode = mode;
+    const prefs = AppServices.getAppPreferences();
+    prefs.putString(CHARACTER_LAYOUT_MODE_KEY, mode).catch((_e: Object): void => {});
   }
 
   /** 本地搜索过滤(匹配 name/description/personality/tags,大小写不敏感) */
@@ -391,6 +456,28 @@ export struct CharacterRootView {
           .layoutWeight(1)
           .margin({ left: 12, right: 12 })
 
+          // v50: 布局方式选择按钮(点击弹出选项,便于后续扩展更多排列方式)
+          Button() {
+            Row() {
+              SymbolGlyph($r('sys.symbol.square_grid_2x2'))
+                .fontSize(14)
+                .fontColor([ThemePalette.accentColor(this.effectiveTheme)])
+              Text(this.layoutMode === 'grid' ? '宫格' : '列表')
+                .fontSize(12)
+                .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+                .margin({ left: 4 })
+            }
+            .alignItems(VerticalAlign.Center)
+          }
+          .type(ButtonType.Normal)
+          .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+          .borderRadius(16)
+          .height(32)
+          .padding({ left: 12, right: 12 })
+          .onClick(() => {
+            this.showLayoutMenu = true;
+          })
+
           // 导入按钮(新建角色 / 文件导入二选一)
           Button($r('app.string.character_import'))
             .fontSize($r('app.float.app_font_body'))
@@ -427,6 +514,8 @@ export struct CharacterRootView {
           this.errorView()
         } else if (this.viewModel === null || this.characters.length === 0) {
           this.emptyStateView()
+        } else if (this.layoutMode === 'grid') {
+          this.characterGrid()
         } else {
           this.characterList()
         }
@@ -441,14 +530,371 @@ export struct CharacterRootView {
 
       // ===== 导出格式选择弹窗(浮层)=====
       this.exportFormatDialog()
+
+      // v50: 布局方式选择弹层(浮层)
+      this.layoutMenuDialog()
+
+      // v50: 宫格拖拽浮动预览(浮层)
+      if (this.isCharDragging) {
+        this.characterDragPreview()
+      }
     }
     .width('100%')
     .height('100%')
     // 背景层分离:不设 backgroundColor,让 Index 根背景透出。
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
+    .id(CHAR_ROOT_STACK_ID)
   }
 
   // ===== 角色列表(支持左滑) =====
+
+  /** v50: 布局方式选择弹层(点击按钮弹出,选项驱动,便于扩展)。 */
+  @Builder
+  layoutMenuDialog() {
+    if (this.showLayoutMenu) {
+      Stack() {
+        Column() {
+          Text('排列方式')
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .width('100%')
+            .textAlign(TextAlign.Start)
+            .margin({ bottom: 12 })
+
+          ForEach(LAYOUT_OPTIONS, (opt: LayoutOptionItem) => {
+            Row() {
+              Text(opt.label)
+                .fontSize(15)
+                .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+                .layoutWeight(1)
+              if (this.layoutMode === opt.mode) {
+                SymbolGlyph($r('sys.symbol.checkmark'))
+                  .fontSize(15)
+                  .fontColor([ThemePalette.accentColor(this.effectiveTheme)])
+              }
+            }
+            .width('100%')
+            .height(44)
+            .padding({ left: 4, right: 4 })
+            .alignItems(VerticalAlign.Center)
+            .borderRadius(8)
+            .backgroundColor(this.layoutMode === opt.mode
+              ? ThemePalette.surface2Color(this.effectiveTheme)
+              : Color.Transparent)
+            .onClick(() => {
+              this.setLayoutMode(opt.mode);
+              this.showLayoutMenu = false;
+            })
+          }, (opt: LayoutOptionItem) => opt.mode)
+        }
+        .width('70%')
+        .padding(20)
+        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+        .borderRadius($r('app.float.app_radius_lg'))
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor('rgba(0,0,0,0.5)')
+      .onClick(() => {
+        this.showLayoutMenu = false;
+      })
+    }
+  }
+
+  // ===== v50: 角色宫格(2 列) =====
+
+  /** 角色宫格:N×2 排列,长按卡片拖动重排。 */
+  @Builder
+  characterGrid() {
+    Grid() {
+      ForEach(this.filteredCharacters(), (char: Character) => {
+        GridItem() {
+          this.characterGridCard(char)
+        }
+        .onAreaChange((_oldValue: Area, newValue: Area) => {
+          const py: number = typeof newValue.position.y === 'number'
+            ? (newValue.position.y as number) : 0;
+          const ph: number = typeof newValue.height === 'number'
+            ? (newValue.height as number) : 0;
+          this.charPosMap.set(char.id, { y: py, h: ph });
+        })
+      }, (char: Character) => char.id + '_' + this.refreshKey.toString())
+
+      GridItem() {
+        Column().width('100%').height(120)
+      }
+    }
+    .columnsTemplate('1fr 1fr')
+    .columnsGap($r('app.float.app_spacing_8'))
+    .rowsGap($r('app.float.app_spacing_8'))
+    .layoutWeight(1)
+    .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring)
+    .padding({
+      left: $r('app.float.app_spacing_16'),
+      right: $r('app.float.app_spacing_16'),
+      top: 4,
+      bottom: 0
+    })
+  }
+
+  /** 宫格角色卡:统一高度,长按拖动重排,右上角长按弹出操作菜单。 */
+  @Builder
+  characterGridCard(char: Character) {
+    Column() {
+      PressableCard({
+        onPress: () => {
+          // v50: 长按触发拖拽后抑制本次点击,避免松手误进编辑页
+          if (!this.charDragSuppressOpen) {
+            this.openCharacterDetail(char.id);
+          }
+        },
+        surfaceColor: ThemePalette.surface1Color(this.effectiveTheme)
+      }) {
+        Column() {
+          // 图片区:撑满剩余空间,保证所有卡片图片高度一致
+          Column() {
+            CharacterImageView({
+              imageUri: char.avatarUri,
+              fallbackName: char.name,
+              imgWidth: '100%',
+              imgHeight: '100%',
+              imgBorderRadius: 10,
+              displayMode: 'portrait',
+              objectFit: ImageFit.Cover
+            })
+          }
+          .width('100%')
+          .layoutWeight(1)
+          .clip(true)
+          .borderRadius(10)
+
+          Row() {
+            Text(char.name)
+              .fontSize(15)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .layoutWeight(1)
+              .textAlign(TextAlign.Start)
+
+            // 操作菜单入口(长按此按钮弹出:新建对话/编辑/导出/删除)
+            Button() {
+              Text('⋯')
+                .fontSize(16)
+                .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            }
+            .type(ButtonType.Circle)
+            .width(26)
+            .height(26)
+            .backgroundColor(Color.Transparent)
+            .padding(0)
+            .bindMenu([
+              {
+                value: $r('app.string.character_action_new_chat'),
+                action: (): void => { this.startNewChatWithCharacter(char.id); }
+              },
+              {
+                value: $r('app.string.character_action_edit'),
+                action: (): void => { this.editCharacter(char.id); }
+              },
+              {
+                value: $r('app.string.character_action_export'),
+                action: (): void => { this.promptExport(char); }
+              },
+              {
+                value: $r('app.string.character_action_delete'),
+                action: (): void => { this.promptDelete(char); }
+              }
+            ])
+          }
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
+          .margin({ top: 6 })
+
+          Text(this.getCharacterSummary(char))
+            .fontSize(11)
+            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width('100%')
+            .textAlign(TextAlign.Start)
+            .margin({ top: 2 })
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Start)
+        .padding(10)
+      }
+    }
+    // 统一高度,略微加长,使布局和谐
+    .height(240)
+    .width('100%')
+    .borderRadius(12)
+    .border({
+      width: this.isCharDragging && this.dragCharTargetId === char.id ? 2 : 0,
+      color: ThemePalette.accentColor(this.effectiveTheme)
+    })
+    .opacity(this.isCharDragging && this.dragCharId === char.id ? 0.4 : 1.0)
+    .onTouch((event: TouchEvent) => {
+      if (event.type === TouchType.Down) {
+        this.charDragSuppressOpen = false;
+      } else if (event.type === TouchType.Up && this.isCharDragging) {
+        this.endCharDrag();
+      } else if (event.type === TouchType.Cancel && this.isCharDragging) {
+        this.cancelCharDrag();
+      }
+    })
+    .gesture(
+      GestureGroup(GestureMode.Sequence,
+        LongPressGesture({ repeat: false })
+          .onAction((event: GestureEvent) => {
+            this.beginCharDrag(char.id, event);
+          }),
+        PanGesture({ direction: PanDirection.Vertical })
+          .onActionUpdate((event: GestureEvent) => {
+            this.charDragOffsetY = event.offsetY;
+            this.recomputeCharDragTarget();
+          })
+          .onActionEnd(() => {
+            this.endCharDrag();
+          })
+          .onActionCancel(() => {
+            this.cancelCharDrag();
+          })
+      )
+    )
+  }
+
+  // ===== v50: 宫格拖拽重排 =====
+
+  /** 开始拖拽:记录被拖角色与手指窗口坐标。 */
+  private beginCharDrag(charId: string, event: GestureEvent): void {
+    this.dragCharId = charId;
+    this.dragCharTargetId = '';
+    this.charDragOffsetY = 0;
+    this.charDragSuppressOpen = true;
+    this.charDragPreviewItem = this.findCharById(charId);
+    this.isCharDragging = true;
+    const finger = event.fingerList.length > 0 ? event.fingerList[0] : null;
+    this.charDragFingerStartGlobalY = finger !== null && finger !== undefined
+      ? finger.globalY : 0;
+    let stackTopY: number = 0;
+    try {
+      const rect = componentUtils.getRectangleById(CHAR_ROOT_STACK_ID);
+      if (rect !== undefined && rect !== null) {
+        stackTopY = rect.windowOffset.y;
+      }
+    } catch (_e) {
+      stackTopY = 0;
+    }
+    this.charDragStackTopY = stackTopY;
+  }
+
+  /** 实时计算悬停目标(距离手指最近的其它卡片)。 */
+  private recomputeCharDragTarget(): void {
+    if (this.dragCharId.length === 0) {
+      return;
+    }
+    const srcPos: CharCardPos | undefined = this.charPosMap.get(this.dragCharId);
+    if (srcPos === undefined) {
+      return;
+    }
+    const fingerY: number = srcPos.y + this.charDragOffsetY;
+    let targetId: string = '';
+    let bestDist: number = Number.MAX_SAFE_INTEGER;
+    this.charPosMap.forEach((pos: CharCardPos, charId: string): void => {
+      if (charId === this.dragCharId) {
+        return;
+      }
+      const center: number = pos.y + pos.h / 2;
+      const dist: number = Math.abs(fingerY - center);
+      if (dist < bestDist) {
+        bestDist = dist;
+        targetId = charId;
+      }
+    });
+    this.dragCharTargetId = targetId;
+  }
+
+  /** 结束拖拽:与悬停目标交换排序;未移动视为误触。 */
+  private endCharDrag(): void {
+    if (this.dragCharId.length === 0) {
+      this.cancelCharDrag();
+      return;
+    }
+    if (Math.abs(this.charDragOffsetY) < 2) {
+      this.cancelCharDrag();
+      return;
+    }
+    const sourceId: string = this.dragCharId;
+    const targetId: string = this.dragCharTargetId;
+    this.cancelCharDrag();
+    if (targetId.length === 0 || targetId === sourceId || this.viewModel === null) {
+      return;
+    }
+    void this.viewModel!.swapCharacters(sourceId, targetId).then((): void => {
+      this.syncCharacters();
+    });
+  }
+
+  /** 取消/清理拖拽状态。 */
+  private cancelCharDrag(): void {
+    this.isCharDragging = false;
+    this.dragCharId = '';
+    this.dragCharTargetId = '';
+    this.charDragOffsetY = 0;
+    this.charDragPreviewItem = null;
+  }
+
+  /** 按 id 查找角色(拖拽预览用)。 */
+  private findCharById(id: string): Character | null {
+    for (let i = 0; i < this.characters.length; i++) {
+      if (this.characters[i].id === id) {
+        return this.characters[i];
+      }
+    }
+    return null;
+  }
+
+  /** 浮动拖拽预览(跟随手指)。 */
+  @Builder
+  characterDragPreview() {
+    if (this.charDragPreviewItem !== null) {
+      Column() {
+        CharacterImageView({
+          imageUri: this.charDragPreviewItem!.avatarUri,
+          fallbackName: this.charDragPreviewItem!.name,
+          imgWidth: '100%',
+          imgHeight: 100,
+          imgBorderRadius: 8,
+          displayMode: 'portrait',
+          objectFit: ImageFit.Cover
+        })
+        Text(this.charDragPreviewItem!.name)
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+          .textAlign(TextAlign.Start)
+          .margin({ top: 4 })
+      }
+      .width('40%')
+      .padding(8)
+      .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+      .borderRadius(10)
+      .border({ width: 1, color: ThemePalette.accentColor(this.effectiveTheme) })
+      .opacity(0.96)
+      .shadow({ radius: 14, color: '#55000000', offsetX: 0, offsetY: 6 })
+      .position({
+        x: 20,
+        y: this.charDragFingerStartGlobalY + this.charDragOffsetY - this.charDragStackTopY - 60
+      })
+    }
+  }
 
   @Builder
   characterList() {
