@@ -5115,7 +5115,7 @@ struct ChatPage {
       }),
       autoCancel: true,
       alignment: DialogAlignment.Center,
-      customStyle: false
+      customStyle: true
     });
     this.editDialogController.open();
   }
@@ -5158,7 +5158,7 @@ struct ChatPage {
       }),
       autoCancel: true,
       alignment: DialogAlignment.Center,
-      customStyle: false
+      customStyle: true
     });
     this.editDialogController.open();
   }
@@ -5191,7 +5191,7 @@ struct ChatPage {
       }),
       autoCancel: true,
       alignment: DialogAlignment.Center,
-      customStyle: false
+      customStyle: true
     });
     this.editDialogController.open();
   }

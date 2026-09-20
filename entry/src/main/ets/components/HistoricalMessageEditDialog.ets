@@ -57,23 +57,22 @@ export struct HistoricalMessageEditDialog {
     Column() {
       // 标题
       Text($r('app.string.' + RES_TITLE))
-        .fontSize(17)
+        .fontSize(18)
         .fontWeight(FontWeight.Medium)
         .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
         .width('100%')
         .textAlign(TextAlign.Center)
         .padding({ top: 20, bottom: 16 })
 
-      // 输入框
+      // 输入框(撑满剩余空间,便于编辑长内容)
       TextArea({ text: this.editingContent, placeholder: $r('app.string.' + RES_PLACEHOLDER) })
-        .fontSize(14)
+        .fontSize(16)
         .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
         .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-        .borderRadius(8)
-        .border({ width: 1, color: ThemePalette.dividerColor(this.effectiveTheme) })
-        .padding(10)
+        .borderRadius(12)
+        .padding(14)
         .width('100%')
-        .height(180)
+        .height(320)
         .margin({ left: 16, right: 16 })
         .onChange((value: string) => {
           this.editingContent = value;
@@ -88,7 +87,7 @@ export struct HistoricalMessageEditDialog {
           .backgroundColor(Color.Transparent)
           .fontColor(ThemePalette.accentColor(this.effectiveTheme))
           .layoutWeight(1)
-          .height(44)
+          .height(48)
           .enabled(!this.localSubmitting)
           .onClick(() => {
             this.handleCancel();
@@ -103,22 +102,24 @@ export struct HistoricalMessageEditDialog {
           ? $r('app.string.' + RES_SUBMITTING)
           : $r('app.string.' + RES_CONFIRM))
           .fontSize(15)
+          .fontWeight(FontWeight.Medium)
           .backgroundColor(this.canConfirm() ? ThemePalette.accentColor(this.effectiveTheme) : ThemePalette.textTertiaryColor(this.effectiveTheme))
           .fontColor(COLOR_BUTTON_TEXT)
           .layoutWeight(1)
-          .height(44)
+          .height(48)
+          .borderRadius(8)
           .enabled(this.canConfirm())
           .onClick(() => {
             this.handleConfirm();
           })
       }
       .width('100%')
-      .margin({ top: 20 })
+      .margin({ top: 20, bottom: 12 })
       .border({ width: { top: 1 }, color: ThemePalette.dividerColor(this.effectiveTheme) })
     }
-    .width('88%')
+    .width('92%')
     .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
-    .borderRadius(12)
+    .borderRadius(16)
   }
 
   /**
