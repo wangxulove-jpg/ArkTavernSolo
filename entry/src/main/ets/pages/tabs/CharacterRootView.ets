@@ -25,16 +25,13 @@ import { AppServices } from '../../services/AppServices';
 import { EmptyStateView } from '../../components/EmptyStateView';
 import { PressableCard } from '../../components/PressableCard';
 import { CharacterImageView } from '../../components/CharacterImageView';
-import { router, promptAction, componentUtils } from '@kit.ArkUI';
+import { router, promptAction } from '@kit.ArkUI';
 import { picker } from '@kit.CoreFileKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { ThemePalette } from '../../theme/ThemePalette';
 import { Logger } from '../../utils/Logger';
 
 const LOG_TAG: string = 'CharacterRootView';
-
-/** 根 Stack 组件 id(宫格拖拽预览定位用) */
-const CHAR_ROOT_STACK_ID: string = 'character_root_stack';
 
 /** v50: 角色卡 Tab 布局模式持久化 key(list=列表,grid=宫格) */
 const CHARACTER_LAYOUT_MODE_KEY: string = 'character_tab_layout_mode';
@@ -50,9 +47,11 @@ const LAYOUT_OPTIONS: LayoutOptionItem[] = [
   { mode: 'grid', label: '宫格' }
 ];
 
-/** v50: 宫格卡片位置(y 为 Grid 内容坐标, h 为高度) */
+/** v50: 宫格卡片位置(x/y 为 Grid 内容坐标, w/h 为宽高) */
 interface CharCardPos {
+  x: number;
   y: number;
+  w: number;
   h: number;
 }
 
@@ -106,14 +105,22 @@ export struct CharacterRootView {
   @State dragCharId: string = '';
   /** 拖拽悬停目标角色 id(空=无目标,用于高亮) */
   @State dragCharTargetId: string = '';
+  /** 拖拽悬停目标下标(-1=无目标,用于实时让位动画) */
+  @State dragCharTargetIndex: number = -1;
   /** 是否正在拖拽 */
   @State isCharDragging: boolean = false;
-  /** 拖拽预览跟随手指的偏移 */
+  /** 拖拽预览跟随手指的垂直偏移 */
   @State charDragOffsetY: number = 0;
+  /** 拖拽预览跟随手指的水平偏移 */
+  @State charDragOffsetX: number = 0;
   /** 拖拽起点:手指窗口 Y */
   @State charDragFingerStartGlobalY: number = 0;
-  /** 根 Stack 顶部窗口 Y */
-  @State charDragStackTopY: number = 0;
+  /** 拖拽起点:手指窗口 X */
+  @State charDragFingerStartGlobalX: number = 0;
+  /** 页面宽度(vp,根 Stack onAreaChange 实测,用于预览宽度/越界钳制) */
+  @State charGridPageWidth: number = 0;
+  /** v50: 当前打开操作菜单的角色 id(空=关闭) */
+  @State charActionMenuId: string = '';
   /** 拖拽中的角色卡位置缓存:charId → 位置(Grid 内容坐标) */
   private charPosMap: Map<string, CharCardPos> = new Map<string, CharCardPos>();
   /** v50: 长按触发拖拽后抑制本次点击打开编辑页(下次触摸 Down 复位) */
@@ -534,6 +541,9 @@ export struct CharacterRootView {
       // v50: 布局方式选择弹层(浮层)
       this.layoutMenuDialog()
 
+      // v50: 角色操作菜单弹层(浮层)
+      this.charActionMenuDialog()
+
       // v50: 宫格拖拽浮动预览(浮层)
       if (this.isCharDragging) {
         this.characterDragPreview()
@@ -543,7 +553,12 @@ export struct CharacterRootView {
     .height('100%')
     // 背景层分离:不设 backgroundColor,让 Index 根背景透出。
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
-    .id(CHAR_ROOT_STACK_ID)
+    // v50: 记录页面实际宽度(vp),供宫格拖拽预览 1:1 尺寸与横向钳制
+    .onAreaChange((_oldValue: Area, newValue: Area) => {
+      if (typeof newValue.width === 'number') {
+        this.charGridPageWidth = newValue.width as number;
+      }
+    })
   }
 
   // ===== 角色列表(支持左滑) =====
@@ -602,6 +617,73 @@ export struct CharacterRootView {
     }
   }
 
+  /** v50: 角色操作菜单弹层(新建对话/编辑/导出/删除),点击 ⋯ 按钮弹出。 */
+  @Builder
+  charActionMenuDialog() {
+    if (this.charActionMenuId.length > 0 && this.findCharById(this.charActionMenuId) !== null) {
+      Stack() {
+        Column() {
+          Text(this.findCharById(this.charActionMenuId)!.name)
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .width('100%')
+            .textAlign(TextAlign.Start)
+            .margin({ bottom: 12 })
+
+          this.actionMenuItem($r('app.string.character_action_new_chat'), () => {
+            const id: string = this.charActionMenuId;
+            this.charActionMenuId = '';
+            this.startNewChatWithCharacter(id);
+          })
+          this.actionMenuItem($r('app.string.character_action_edit'), () => {
+            const id: string = this.charActionMenuId;
+            this.charActionMenuId = '';
+            this.editCharacter(id);
+          })
+          this.actionMenuItem($r('app.string.character_action_export'), () => {
+            const id: string = this.charActionMenuId;
+            this.charActionMenuId = '';
+            this.promptExport(this.findCharById(id)!);
+          })
+          this.actionMenuItem($r('app.string.character_action_delete'), () => {
+            const id: string = this.charActionMenuId;
+            this.charActionMenuId = '';
+            this.promptDelete(this.findCharById(id)!);
+          })
+        }
+        .width('70%')
+        .padding(20)
+        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+        .borderRadius($r('app.float.app_radius_lg'))
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor('rgba(0,0,0,0.5)')
+      .onClick(() => {
+        this.charActionMenuId = '';
+      })
+    }
+  }
+
+  /** v50: 操作菜单项行。 */
+  @Builder
+  actionMenuItem(label: ResourceStr, onSelect: () => void) {
+    Row() {
+      Text(label)
+        .fontSize(15)
+        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+    }
+    .width('100%')
+    .height(44)
+    .padding({ left: 4, right: 4 })
+    .alignItems(VerticalAlign.Center)
+    .borderRadius(8)
+    .onClick(() => {
+      onSelect();
+    })
+  }
+
   // ===== v50: 角色宫格(2 列) =====
 
   /** 角色宫格:N×2 排列,长按卡片拖动重排。 */
@@ -613,14 +695,21 @@ export struct CharacterRootView {
           this.characterGridCard(char)
         }
         .onAreaChange((_oldValue: Area, newValue: Area) => {
+          const px: number = typeof newValue.position.x === 'number'
+            ? (newValue.position.x as number) : 0;
           const py: number = typeof newValue.position.y === 'number'
             ? (newValue.position.y as number) : 0;
+          const pw: number = typeof newValue.width === 'number'
+            ? (newValue.width as number) : 0;
           const ph: number = typeof newValue.height === 'number'
             ? (newValue.height as number) : 0;
-          this.charPosMap.set(char.id, { y: py, h: ph });
+          // 'g_' 前缀与列表模式位置缓存隔离
+          this.charPosMap.set('g_' + char.id, { x: px, y: py, w: pw, h: ph });
         })
       }, (char: Character) => char.id + '_' + this.refreshKey.toString())
 
+      // 末尾留白:让最后一行卡片能完全滚出悬浮 TabBar 上方,确保底部卡片的
+      // ⋯ 操作按钮始终可点(与列表模式末尾 spacer 同一思路)。
       GridItem() {
         Column().width('100%').height(120)
       }
@@ -635,11 +724,78 @@ export struct CharacterRootView {
       left: $r('app.float.app_spacing_16'),
       right: $r('app.float.app_spacing_16'),
       top: 4,
-      bottom: 0
+      // v50: 底部留出悬浮 TabBar 高度:Grid 的 padding 会缩小内容视口,
+      // 内容区在 TabBar 上方结束,最后一行卡片不会再被 TabBar 遮挡
+      bottom: 96
     })
   }
 
-  /** 宫格角色卡:统一高度,长按拖动重排,右上角长按弹出操作菜单。 */
+  /** 宫格卡片内容(真实卡片与拖拽预览共用,保证预览与真实卡片大小一致)。 */
+  @Builder
+  characterGridCardBody(char: Character) {
+    Column() {
+      // 图片区:撑满剩余空间,保证所有卡片图片高度一致
+      Column() {
+        CharacterImageView({
+          imageUri: char.avatarUri,
+          fallbackName: char.name,
+          imgWidth: '100%',
+          imgHeight: '100%',
+          imgBorderRadius: 10,
+          displayMode: 'portrait',
+          objectFit: ImageFit.Cover
+        })
+      }
+      .width('100%')
+      .layoutWeight(1)
+      .clip(true)
+      .borderRadius(10)
+
+      Row() {
+        Text(char.name)
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
+          .textAlign(TextAlign.Start)
+
+        // 操作菜单入口(点击弹出:新建对话/编辑/导出/删除)
+        Button() {
+          Text('⋯')
+            .fontSize(16)
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+        }
+        .type(ButtonType.Circle)
+        .width(26)
+        .height(26)
+        .backgroundColor(Color.Transparent)
+        .padding(0)
+        .onClick(() => {
+          // v50: 用弹层菜单替代 bindMenu,避免长按手势与卡片拖拽冲突
+          this.charActionMenuId = char.id;
+        })
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+      .margin({ top: 6 })
+
+      Text(this.getCharacterSummary(char))
+        .fontSize(11)
+        .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%')
+        .textAlign(TextAlign.Start)
+        .margin({ top: 2 })
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+    .padding(10)
+  }
+
+  /** 宫格角色卡:统一高度,长按拖动重排,拖拽时其它卡片实时让位。 */
   @Builder
   characterGridCard(char: Character) {
     Column() {
@@ -652,80 +808,7 @@ export struct CharacterRootView {
         },
         surfaceColor: ThemePalette.surface1Color(this.effectiveTheme)
       }) {
-        Column() {
-          // 图片区:撑满剩余空间,保证所有卡片图片高度一致
-          Column() {
-            CharacterImageView({
-              imageUri: char.avatarUri,
-              fallbackName: char.name,
-              imgWidth: '100%',
-              imgHeight: '100%',
-              imgBorderRadius: 10,
-              displayMode: 'portrait',
-              objectFit: ImageFit.Cover
-            })
-          }
-          .width('100%')
-          .layoutWeight(1)
-          .clip(true)
-          .borderRadius(10)
-
-          Row() {
-            Text(char.name)
-              .fontSize(15)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .layoutWeight(1)
-              .textAlign(TextAlign.Start)
-
-            // 操作菜单入口(长按此按钮弹出:新建对话/编辑/导出/删除)
-            Button() {
-              Text('⋯')
-                .fontSize(16)
-                .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-            }
-            .type(ButtonType.Circle)
-            .width(26)
-            .height(26)
-            .backgroundColor(Color.Transparent)
-            .padding(0)
-            .bindMenu([
-              {
-                value: $r('app.string.character_action_new_chat'),
-                action: (): void => { this.startNewChatWithCharacter(char.id); }
-              },
-              {
-                value: $r('app.string.character_action_edit'),
-                action: (): void => { this.editCharacter(char.id); }
-              },
-              {
-                value: $r('app.string.character_action_export'),
-                action: (): void => { this.promptExport(char); }
-              },
-              {
-                value: $r('app.string.character_action_delete'),
-                action: (): void => { this.promptDelete(char); }
-              }
-            ])
-          }
-          .width('100%')
-          .alignItems(VerticalAlign.Center)
-          .margin({ top: 6 })
-
-          Text(this.getCharacterSummary(char))
-            .fontSize(11)
-            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
-            .textAlign(TextAlign.Start)
-            .margin({ top: 2 })
-        }
-        .width('100%')
-        .alignItems(HorizontalAlign.Start)
-        .padding(10)
+        this.characterGridCardBody(char)
       }
     }
     // 统一高度,略微加长,使布局和谐
@@ -737,6 +820,11 @@ export struct CharacterRootView {
       color: ThemePalette.accentColor(this.effectiveTheme)
     })
     .opacity(this.isCharDragging && this.dragCharId === char.id ? 0.4 : 1.0)
+    // v50: 拖拽时源卡与目标之间的卡片实时让位(translate 视觉移动)
+    .translate({
+      x: this.charGridShiftX(char.id),
+      y: this.charGridShiftY(char.id)
+    })
     .onTouch((event: TouchEvent) => {
       if (event.type === TouchType.Down) {
         this.charDragSuppressOpen = false;
@@ -752,10 +840,14 @@ export struct CharacterRootView {
           .onAction((event: GestureEvent) => {
             this.beginCharDrag(char.id, event);
           }),
-        PanGesture({ direction: PanDirection.Vertical })
+        PanGesture({ direction: PanDirection.All })
           .onActionUpdate((event: GestureEvent) => {
             this.charDragOffsetY = event.offsetY;
-            this.recomputeCharDragTarget();
+            this.charDragOffsetX = event.offsetX;
+            // v50: 让位动画跟随手指实时更新
+            this.getUIContext().animateTo({ duration: 150, curve: Curve.EaseOut }, () => {
+              this.recomputeCharDragTarget();
+            });
           })
           .onActionEnd(() => {
             this.endCharDrag();
@@ -774,37 +866,70 @@ export struct CharacterRootView {
     this.dragCharId = charId;
     this.dragCharTargetId = '';
     this.charDragOffsetY = 0;
+    this.charDragOffsetX = 0;
     this.charDragSuppressOpen = true;
     this.charDragPreviewItem = this.findCharById(charId);
     this.isCharDragging = true;
     const finger = event.fingerList.length > 0 ? event.fingerList[0] : null;
     this.charDragFingerStartGlobalY = finger !== null && finger !== undefined
       ? finger.globalY : 0;
-    let stackTopY: number = 0;
-    try {
-      const rect = componentUtils.getRectangleById(CHAR_ROOT_STACK_ID);
-      if (rect !== undefined && rect !== null) {
-        stackTopY = rect.windowOffset.y;
-      }
-    } catch (_e) {
-      stackTopY = 0;
-    }
-    this.charDragStackTopY = stackTopY;
+    this.charDragFingerStartGlobalX = finger !== null && finger !== undefined
+      ? finger.globalX : 0;
   }
 
-  /** 实时计算悬停目标(距离手指最近的其它卡片)。 */
+  /** 宫格模式:实时计算悬停目标(距离手指最近的其它卡片,含横向)。 */
   private recomputeCharDragTarget(): void {
     if (this.dragCharId.length === 0) {
       return;
     }
-    const srcPos: CharCardPos | undefined = this.charPosMap.get(this.dragCharId);
+    const srcPos: CharCardPos | undefined = this.charPosMap.get('g_' + this.dragCharId);
+    if (srcPos === undefined) {
+      return;
+    }
+    const fingerX: number = srcPos.x + this.charDragOffsetX;
+    const fingerY: number = srcPos.y + this.charDragOffsetY;
+    let targetId: string = '';
+    let targetIndex: number = -1;
+    let bestDist: number = Number.MAX_SAFE_INTEGER;
+    this.charPosMap.forEach((pos: CharCardPos, key: string): void => {
+      if (!key.startsWith('g_')) {
+        return;
+      }
+      const charId: string = key.substring(2);
+      if (charId === this.dragCharId) {
+        return;
+      }
+      const dx: number = fingerX - (pos.x + pos.w / 2);
+      const dy: number = fingerY - (pos.y + pos.h / 2);
+      const dist: number = dx * dx + dy * dy;
+      if (dist < bestDist) {
+        bestDist = dist;
+        targetId = charId;
+        targetIndex = this.charIndex(charId);
+      }
+    });
+    this.dragCharTargetId = targetId;
+    this.dragCharTargetIndex = targetIndex;
+  }
+
+  /** 列表模式:实时计算悬停目标(距离手指最近的其它行,仅纵向)。 */
+  private recomputeCharListTarget(): void {
+    if (this.dragCharId.length === 0) {
+      return;
+    }
+    const srcPos: CharCardPos | undefined = this.charPosMap.get('l_' + this.dragCharId);
     if (srcPos === undefined) {
       return;
     }
     const fingerY: number = srcPos.y + this.charDragOffsetY;
     let targetId: string = '';
+    let targetIndex: number = -1;
     let bestDist: number = Number.MAX_SAFE_INTEGER;
-    this.charPosMap.forEach((pos: CharCardPos, charId: string): void => {
+    this.charPosMap.forEach((pos: CharCardPos, key: string): void => {
+      if (!key.startsWith('l_')) {
+        return;
+      }
+      const charId: string = key.substring(2);
       if (charId === this.dragCharId) {
         return;
       }
@@ -813,28 +938,31 @@ export struct CharacterRootView {
       if (dist < bestDist) {
         bestDist = dist;
         targetId = charId;
+        targetIndex = this.charIndex(charId);
       }
     });
     this.dragCharTargetId = targetId;
+    this.dragCharTargetIndex = targetIndex;
   }
 
-  /** 结束拖拽:与悬停目标交换排序;未移动视为误触。 */
+  /** 结束拖拽:把源卡片移动到目标下标;未移动视为误触。 */
   private endCharDrag(): void {
     if (this.dragCharId.length === 0) {
       this.cancelCharDrag();
       return;
     }
-    if (Math.abs(this.charDragOffsetY) < 2) {
+    if (Math.abs(this.charDragOffsetY) < 2 && Math.abs(this.charDragOffsetX) < 2) {
       this.cancelCharDrag();
       return;
     }
     const sourceId: string = this.dragCharId;
-    const targetId: string = this.dragCharTargetId;
+    const targetIndex: number = this.dragCharTargetIndex;
+    const sourceIndex: number = this.charIndex(sourceId);
     this.cancelCharDrag();
-    if (targetId.length === 0 || targetId === sourceId || this.viewModel === null) {
+    if (targetIndex < 0 || targetIndex === sourceIndex || this.viewModel === null) {
       return;
     }
-    void this.viewModel!.swapCharacters(sourceId, targetId).then((): void => {
+    void this.viewModel!.moveCharacterTo(sourceId, targetIndex).then((): void => {
       this.syncCharacters();
     });
   }
@@ -844,7 +972,9 @@ export struct CharacterRootView {
     this.isCharDragging = false;
     this.dragCharId = '';
     this.dragCharTargetId = '';
+    this.dragCharTargetIndex = -1;
     this.charDragOffsetY = 0;
+    this.charDragOffsetX = 0;
     this.charDragPreviewItem = null;
   }
 
@@ -858,42 +988,188 @@ export struct CharacterRootView {
     return null;
   }
 
-  /** 浮动拖拽预览(跟随手指)。 */
+  /** v50: 角色 id → 在完整列表中的下标(-1=未找到)。 */
+  private charIndex(id: string): number {
+    for (let i = 0; i < this.characters.length; i++) {
+      if (this.characters[i].id === id) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  /** v50: 宫格卡片宽度(与 Grid 两列布局一致,基于实测页面宽度)。 */
+  private charGridCardWidth(): number {
+    const pageWidth: number = this.charGridPageWidth > 0 ? this.charGridPageWidth : 360;
+    return (pageWidth - 40) / 2;
+  }
+
+  /** v50: 拖拽预览宽度:宫格=被拖卡片实测宽度;列表=列表行宽度。保证与真实项 1:1。 */
+  private charDragPreviewWidth(): number {
+    if (this.layoutMode === 'grid') {
+      if (this.dragCharId.length > 0) {
+        const pos: CharCardPos | undefined = this.charPosMap.get('g_' + this.dragCharId);
+        if (pos !== undefined && pos.w > 0) {
+          return pos.w;
+        }
+      }
+      return this.charGridCardWidth();
+    }
+    return this.charDragListWidth();
+  }
+
+  /** v50: 列表模式行宽度 = 页面宽度 - 列表左右 padding。 */
+  private charDragListWidth(): number {
+    const pageWidth: number = this.charGridPageWidth > 0 ? this.charGridPageWidth : 360;
+    return pageWidth - 32;
+  }
+
+  /** v50: 拖拽预览高度:宫格=240;列表=被拖行实测高度。 */
+  private charDragPreviewHeight(): number {
+    if (this.layoutMode === 'grid') {
+      return 240;
+    }
+    if (this.dragCharId.length > 0) {
+      const pos: CharCardPos | undefined = this.charPosMap.get('l_' + this.dragCharId);
+      if (pos !== undefined && pos.h > 0) {
+        return pos.h;
+      }
+    }
+    return 110;
+  }
+
+  /** v50: 列表模式拖拽让位:行间垂直位移(0=不动)。 */
+  private charListShiftY(id: string): number {
+    if (!this.isCharDragging || this.dragCharId.length === 0 || this.dragCharTargetIndex < 0) {
+      return 0;
+    }
+    const src: number = this.charIndex(this.dragCharId);
+    const cur: number = this.charIndex(id);
+    const tgt: number = this.dragCharTargetIndex;
+    if (src < 0 || cur < 0 || cur === src) {
+      return 0;
+    }
+    const srcPos: CharCardPos | undefined = this.charPosMap.get('l_' + this.dragCharId);
+    const rowStride: number = (srcPos !== undefined && srcPos.h > 0 ? srcPos.h : 100) + 8;
+    if (tgt > src) {
+      if (cur > src && cur <= tgt) {
+        return -rowStride;
+      }
+    } else if (tgt < src) {
+      if (cur >= tgt && cur < src) {
+        return rowStride;
+      }
+    }
+    return 0;
+  }
+
+  /** v50: 拖拽时该卡片应让位的水平位移(0=不动)。 */
+  private charGridShiftX(id: string): number {
+    if (!this.isCharDragging || this.dragCharId.length === 0 || this.dragCharTargetIndex < 0) {
+      return 0;
+    }
+    const src: number = this.charIndex(this.dragCharId);
+    const cur: number = this.charIndex(id);
+    const tgt: number = this.dragCharTargetIndex;
+    if (src < 0 || cur < 0 || cur === src) {
+      return 0;
+    }
+    const slot: number = this.charGridCardWidth() + 8;
+    if (tgt > src) {
+      // 向下拖: (src, tgt] 上移一格
+      if (cur > src && cur <= tgt) {
+        return cur % 2 === 1 ? -slot : slot;
+      }
+    } else if (tgt < src) {
+      // 向上拖: [tgt, src) 下移一格
+      if (cur >= tgt && cur < src) {
+        return cur % 2 === 0 ? slot : -slot;
+      }
+    }
+    return 0;
+  }
+
+  /** v50: 拖拽时该卡片应让位的垂直位移(0=不动)。 */
+  private charGridShiftY(id: string): number {
+    if (!this.isCharDragging || this.dragCharId.length === 0 || this.dragCharTargetIndex < 0) {
+      return 0;
+    }
+    const src: number = this.charIndex(this.dragCharId);
+    const cur: number = this.charIndex(id);
+    const tgt: number = this.dragCharTargetIndex;
+    if (src < 0 || cur < 0 || cur === src) {
+      return 0;
+    }
+    const rowStride: number = 240 + 8;
+    if (tgt > src) {
+      // 向下拖: 偶数列(cur 上移一格会跨到上一行)
+      if (cur > src && cur <= tgt && cur % 2 === 0) {
+        return -rowStride;
+      }
+    } else if (tgt < src) {
+      // 向上拖: 奇数列(cur 下移一格会跨到下一行)
+      if (cur >= tgt && cur < src && cur % 2 === 1) {
+        return rowStride;
+      }
+    }
+    return 0;
+  }
+
+  /** 浮动拖拽预览(与真实卡片/行同尺寸,跟随手指移动)。 */
   @Builder
   characterDragPreview() {
     if (this.charDragPreviewItem !== null) {
-      Column() {
-        CharacterImageView({
-          imageUri: this.charDragPreviewItem!.avatarUri,
-          fallbackName: this.charDragPreviewItem!.name,
-          imgWidth: '100%',
-          imgHeight: 100,
-          imgBorderRadius: 8,
-          displayMode: 'portrait',
-          objectFit: ImageFit.Cover
+      if (this.layoutMode === 'grid') {
+        // 宫格:整卡预览
+        Column() {
+          this.characterGridCardBody(this.charDragPreviewItem!)
+        }
+        .width(this.charDragPreviewWidth())
+        .height(240)
+        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+        .borderRadius(12)
+        .border({ width: 1, color: ThemePalette.accentColor(this.effectiveTheme) })
+        .opacity(0.96)
+        .shadow({ radius: 16, color: '#55000000', offsetX: 0, offsetY: 8 })
+        .position({
+          x: this.resolveCharDragPreviewX(),
+          // 根 Stack 顶部即窗口顶部(expandSafeArea TOP),直接用窗口坐标
+          y: this.charDragFingerStartGlobalY + this.charDragOffsetY - 120
         })
-        Text(this.charDragPreviewItem!.name)
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .width('100%')
-          .textAlign(TextAlign.Start)
-          .margin({ top: 4 })
+      } else {
+        // 列表:整行预览(与列表行 1:1)
+        Column() {
+          this.characterCard(this.charDragPreviewItem!)
+        }
+        .width(this.charDragPreviewWidth())
+        .height(this.charDragPreviewHeight())
+        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+        .borderRadius(12)
+        .border({ width: 1, color: ThemePalette.accentColor(this.effectiveTheme) })
+        .opacity(0.96)
+        .shadow({ radius: 12, color: '#55000000', offsetX: 0, offsetY: 6 })
+        .position({
+          x: 16,
+          y: this.charDragFingerStartGlobalY + this.charDragOffsetY - this.charDragPreviewHeight() / 2
+        })
       }
-      .width('40%')
-      .padding(8)
-      .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
-      .borderRadius(10)
-      .border({ width: 1, color: ThemePalette.accentColor(this.effectiveTheme) })
-      .opacity(0.96)
-      .shadow({ radius: 14, color: '#55000000', offsetX: 0, offsetY: 6 })
-      .position({
-        x: 20,
-        y: this.charDragFingerStartGlobalY + this.charDragOffsetY - this.charDragStackTopY - 60
-      })
     }
+  }
+
+  /** v50: 预览横向位置:跟随手指水平移动,并钳制在屏幕内。 */
+  private resolveCharDragPreviewX(): number {
+    const previewW: number = this.charDragPreviewWidth();
+    const minX: number = 8;
+    const maxX: number = this.charGridPageWidth > 0
+      ? this.charGridPageWidth - previewW - 8 : 320 - previewW;
+    const desired: number = this.charDragFingerStartGlobalX + this.charDragOffsetX - previewW / 2;
+    if (desired < minX) {
+      return minX;
+    }
+    if (desired > maxX) {
+      return maxX;
+    }
+    return desired;
   }
 
   @Builder
@@ -917,6 +1193,48 @@ export struct CharacterRootView {
             this.characterCard(char)
           }
           .margin({ bottom: $r('app.float.app_spacing_8') })
+          // v50: 列表拖拽重排:记录行位置(与宫格缓存用 'l_' 前缀隔离)
+          .onAreaChange((_oldValue: Area, newValue: Area) => {
+            const py: number = typeof newValue.position.y === 'number'
+              ? (newValue.position.y as number) : 0;
+            const ph: number = typeof newValue.height === 'number'
+              ? (newValue.height as number) : 0;
+            this.charPosMap.set('l_' + char.id, { x: 0, y: py, w: 0, h: ph });
+          })
+          .onTouch((event: TouchEvent) => {
+            if (event.type === TouchType.Down) {
+              this.charDragSuppressOpen = false;
+            } else if (event.type === TouchType.Up && this.isCharDragging) {
+              this.endCharDrag();
+            } else if (event.type === TouchType.Cancel && this.isCharDragging) {
+              this.cancelCharDrag();
+            }
+          })
+          .gesture(
+            GestureGroup(GestureMode.Sequence,
+              LongPressGesture({ repeat: false })
+                .onAction((event: GestureEvent) => {
+                  this.beginCharDrag(char.id, event);
+                }),
+              PanGesture({ direction: PanDirection.Vertical })
+                .onActionUpdate((event: GestureEvent) => {
+                  this.charDragOffsetY = event.offsetY;
+                  // v50: 让位动画跟随手指实时更新
+                  this.getUIContext().animateTo({ duration: 150, curve: Curve.EaseOut }, () => {
+                    this.recomputeCharListTarget();
+                  });
+                })
+                .onActionEnd(() => {
+                  this.endCharDrag();
+                })
+                .onActionCancel(() => {
+                  this.cancelCharDrag();
+                })
+            )
+          )
+          // v50: 拖拽时源行与目标之间的行实时让位;源行半透明
+          .translate({ y: this.charListShiftY(char.id) })
+          .opacity(this.isCharDragging && this.dragCharId === char.id ? 0.4 : 1.0)
           .swipeAction({
             end: {
               builder: (): void => {

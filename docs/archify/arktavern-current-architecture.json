@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "ArkTavernSolo 分层架构现状与解耦热点",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [1280, 620],
+    "views": [
+      {
+        "id": "main-chain",
+        "label": "主调用链",
+        "focus": ["pages", "viewmodels", "services", "repositories", "database"],
+        "note": "UI → 状态编排 → 业务服务 → 数据访问 → 存储的依赖主线,层次方向可读。"
+      },
+      {
+        "id": "hotspots",
+        "label": "解耦热点",
+        "focus": ["pages", "services", "database", "viewmodels"],
+        "note": "四个超过 1.5k 行的上帝文件:ChatService 5.8k、ChatPage 5.1k、Schema 2.6k、ChatViewModel 1.7k。"
+      },
+      {
+        "id": "shared",
+        "label": "共享支撑层",
+        "focus": ["support", "models", "utils", "components"],
+        "note": "解析/网络/存储/模型/工具等无环依赖的支撑模块,拆分时保持只被业务层引用。"
+      }
+    ]
+  },
+  "components": [
+    { "id": "pages", "type": "frontend", "label": "Pages 页面层", "sublabel": "33 文件 · 28,912 行", "tag": "⚠ ChatPage 5,142 行", "pos": [60, 70], "size": [320, 58] },
+    { "id": "viewmodels", "type": "backend", "label": "ViewModels 状态编排", "sublabel": "21 文件 · 9,878 行", "tag": "⚠ ChatViewModel 1,671 行", "pos": [60, 154], "size": [320, 58] },
+    { "id": "services", "type": "backend", "label": "Services 业务服务", "sublabel": "48 文件 · 27,671 行", "tag": "⚠ ChatService 5,790 行", "pos": [60, 238], "size": [320, 58] },
+    { "id": "repositories", "type": "backend", "label": "Repositories 数据访问", "sublabel": "20 文件 · 7,617 行", "pos": [60, 322], "size": [320, 58] },
+    { "id": "database", "type": "database", "label": "Database 持久化", "sublabel": "4 文件 · 5,213 行", "tag": "⚠ Schema 2,620 行", "pos": [60, 406], "size": [320, 58] },
+    { "id": "components", "type": "frontend", "label": "Components 复用 UI", "sublabel": "26 文件 · 4,775 行", "pos": [560, 70], "size": [300, 58] },
+    { "id": "support", "type": "backend", "label": "Parsers·Network·Storage", "sublabel": "44 文件 · 13,822 行", "tag": "解析 / 模型 API / 偏好缓存", "pos": [560, 322], "size": [300, 58] },
+    { "id": "models", "type": "backend", "label": "Models 共享模型", "sublabel": "55 文件 · 7,044 行", "pos": [560, 406], "size": [300, 58] },
+    { "id": "utils", "type": "backend", "label": "Utils·Theme 工具", "sublabel": "13 文件 · 2,104 行", "pos": [560, 484], "size": [300, 58] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "表现层", "wraps": ["pages", "components"] },
+    { "kind": "region", "label": "业务编排层", "wraps": ["viewmodels", "services"] },
+    { "kind": "region", "label": "数据访问与支撑层", "wraps": ["repositories", "database", "support"] },
+    { "kind": "region", "label": "共享层", "wraps": ["models", "utils"] }
+  ],
+  "connections": [
+    { "id": "pages-to-viewmodels", "from": "pages", "to": "viewmodels", "label": "状态与动作", "variant": "emphasis", "labelAt": [220, 141] },
+    { "id": "viewmodels-to-services", "from": "viewmodels", "to": "services", "label": "业务编排", "variant": "emphasis", "labelAt": [220, 225] },
+    { "id": "services-to-repositories", "from": "services", "to": "repositories", "label": "读写请求", "variant": "emphasis", "labelAt": [220, 309] },
+    { "id": "repositories-to-database", "from": "repositories", "to": "database", "label": "SQL/事务", "labelAt": [220, 393] },
+    { "id": "pages-to-components", "from": "pages", "to": "components", "label": "复用 UI 组件", "labelAt": [470, 92] },
+    { "id": "services-to-support", "from": "services", "to": "support", "label": "解析 / 网络 / 偏好", "variant": "dashed", "labelAt": [470, 320] }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "现状痛点(上帝文件)", "items": ["ChatService 5,790 行:聊天/状态/世界书/分支/预算混在一处", "ChatPage 5,142 行:顶栏/消息/世界书/设置全部内聚", "DatabaseSchema 2,620 行 + Tab 根视图 1,600~2,600 行"] },
+    { "dot": "cyan", "title": "架构判断:方向是对的", "items": ["分层主线 pages→viewModels→services→repositories→database 依赖清晰", "问题不在分层模式,而在文件粒度过粗:上帝文件突破了单一职责"] },
+    { "dot": "emerald", "title": "解耦优先级", "items": ["① ChatService 按领域拆:chat / status / lorebook / branch / context", "② ChatPage:子 @Builder 抽组件文件,纯逻辑外移", "③ DatabaseSchema 按域拆表;④ Tab 根视图面板下沉"] }
+  ]
+}

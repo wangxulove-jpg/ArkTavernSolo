@@ -973,6 +973,40 @@ export class CharacterService {
     }
     await this.repository.swapSortOrder(idA, idB);
   }
+
+  /**
+   * v50: 把角色卡移动到指定下标(通过相邻交换 sort_order,宫格松手落位用)。
+   * 下标越界、目标与当前位置相同时无操作返回。
+   */
+  async moveCharacterTo(id: string, toIndex: number): Promise<void> {
+    this.requireInit();
+    if (id.length === 0 || toIndex < 0) {
+      return;
+    }
+    const characters: Character[] = await this.repository.list();
+    if (toIndex >= characters.length) {
+      return;
+    }
+    let fromIndex: number = -1;
+    for (let i = 0; i < characters.length; i++) {
+      if (characters[i].id === id) {
+        fromIndex = i;
+        break;
+      }
+    }
+    if (fromIndex < 0 || fromIndex === toIndex) {
+      return;
+    }
+    if (fromIndex < toIndex) {
+      for (let i = fromIndex; i < toIndex; i++) {
+        await this.repository.swapSortOrder(characters[i].id, characters[i + 1].id);
+      }
+    } else {
+      for (let i = fromIndex; i > toIndex; i--) {
+        await this.repository.swapSortOrder(characters[i].id, characters[i - 1].id);
+      }
+    }
+  }
 }
 
 /** PNG 签名校验已迁移到 utils/ImageConverter.ets 的 isPngBytes */

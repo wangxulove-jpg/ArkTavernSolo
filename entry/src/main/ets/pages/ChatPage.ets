@@ -24,6 +24,7 @@
 import { ChatViewModel } from '../viewmodels/ChatViewModel';
 import { ChatMessage, ChatMessageStatus } from '../models/ChatMessage';
 import { ChatRole } from '../models/ChatRole';
+import { ChatStatusState, ChatStatusEntry } from '../models/ChatStatusState';
 import { LorebookEntry } from '../models/Lorebook';
 import { AiLorebookChangeSet, AiLorebookAdd, AiLorebookUpdate, AiLorebookDelete } from '../models/LorebookAiTypes';
 import { AiLorebookMode } from '../services/ai/AiLorebookService';
@@ -237,6 +238,14 @@ struct ChatPage {
   /** 世界书面板可见性 */
   @State statusPanelVisible: boolean = false;
 
+  // ===== 角色状态侧边栏(CHAT-STATUS-1B) =====
+  /** 角色状态条目(由 viewModel.onStatusUpdate 实时同步,AI 依据角色卡生成、流式输出即刷新) */
+  @State statusEntries: ChatStatusEntry[] = [];
+  /** 右侧状态面板是否展开(折叠时仅显示右侧小标签) */
+  @State statusPanelExpanded: boolean = false;
+  /** 状态面板:AI 生成字段进行中 */
+  @State statusGenBusy: boolean = false;
+
   // ===== Prompt Cache 命中率 =====
   @State cacheHitRatio: number = -1;
   @State cacheCachedTokens: number = 0;
@@ -339,6 +348,10 @@ struct ChatPage {
       this.cacheCachedTokens = cachedTokens;
       this.cachePromptTokens = promptTokens;
       this.cacheHitRatio = hitRatio;
+    };
+    // 角色状态胶囊栏:AI 流式输出状态块时实时同步(初始/切会话/字段增删改均会触发)
+    vm.onStatusUpdate = (state: ChatStatusState): void => {
+      this.statusEntries = state.entries.slice();
     };
     this.viewModel = vm;
 
@@ -783,6 +796,9 @@ struct ChatPage {
     this.chatAppearancePanelVisible = false;
     // 关闭世界书面板
     this.statusPanelVisible = false;
+    // 关闭角色状态侧边栏并清空条目
+    this.statusPanelExpanded = false;
+    this.statusEntries = [];
     // 关闭 TTS 引擎
     this.ttsService.shutdown();
     this.edgeTtsService.shutdown();
@@ -1075,6 +1091,11 @@ struct ChatPage {
         .padding({ left: 12, right: 12, bottom: this.keyboardHeight > 0 ? 40 : this.navigationBarHeight + 40 })
         .hitTestBehavior(HitTestMode.Transparent)
 
+        // ===== 角色状态侧边栏(右侧折叠标签,点击展开,不遮挡画面) =====
+        if (this.statusEntries.length > 0) {
+          this.statusFloatingControl()
+        }
+
         // ===== 弹窗层(覆盖在最上层) =====
         // 会话列表面板(覆盖层)
         if (this.viewModel !== null && this.viewModel!.showSessionList) {
@@ -1321,6 +1342,191 @@ struct ChatPage {
     }
     .width('100%')
     .padding({ left: 4, right: 4, top: this.statusBarHeight + 4, bottom: 4 })
+  }
+
+  // ===== 角色状态侧边栏(CHAT-STATUS-1B) =====
+
+  /** 角色状态浮层容器:右上角;折叠为小标签,点击展开面板(带动画) */
+  @Builder
+  statusFloatingControl() {
+    Stack({ alignContent: Alignment.TopEnd }) {
+      // 展开时:全屏透明点击捕获层 —— 点面板以外任意位置即收起
+      if (this.statusPanelExpanded) {
+        Column()
+          .width('100%')
+          .height('100%')
+          .backgroundColor(Color.Transparent)
+          .onClick(() => {
+            this.toggleStatusPanel(false);
+          })
+      }
+
+      // 内容层:右上角标签 / 展开面板(空白区域点击穿透,标签/面板自身可点击)
+      Column() {
+        if (this.statusPanelExpanded) {
+          this.statusFloatingPanel()
+        } else {
+          this.statusFloatingTab()
+        }
+      }
+      .width('100%')
+      .height('100%')
+      .justifyContent(FlexAlign.Start)
+      .alignItems(HorizontalAlign.End)
+      .hitTestBehavior(HitTestMode.Transparent)
+    }
+    .width('100%')
+    .height('100%')
+    // 外层透明:折叠时全屏点击穿透到下层(消息列表/顶栏/输入区),仅标签/面板自身可点
+    .hitTestBehavior(HitTestMode.Transparent)
+  }
+
+  /** 折叠态:右上角小标签(竖排“状态” + 有状态时的小圆点) */
+  @Builder
+  statusFloatingTab() {
+    Column() {
+      Text('状')
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+      Text('态')
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        .margin({ top: 2 })
+      Text('')
+        .width(6)
+        .height(6)
+        .borderRadius(3)
+        .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
+        .margin({ top: 6 })
+    }
+    .width(30)
+    .height(96)
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+    .margin({ top: this.statusBarHeight + 54 })
+    .borderRadius({ topLeft: 14, topRight: 0, bottomLeft: 14, bottomRight: 0 })
+    .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+    .shadow({ radius: 6, color: 'rgba(0,0,0,0.12)' })
+    .transition(
+      TransitionEffect.opacity(0).combine(TransitionEffect.translate({ x: 40 }))
+        .animation({ duration: 200, curve: Curve.EaseOut })
+    )
+    .onClick(() => {
+      this.toggleStatusPanel(true);
+    })
+  }
+
+  /** 展开态:右上角状态面板(只读列表 + 锁定 + AI 重新生成,字段由 AI 依据角色卡自动生成) */
+  @Builder
+  statusFloatingPanel() {
+    Column() {
+      // 标题行
+      Row() {
+        Text('角色状态')
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        Blank()
+
+        // AI 依据角色卡重新生成字段
+        Row() {
+          if (this.statusGenBusy) {
+            Text('生成中…')
+              .fontSize(11)
+              .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+          } else {
+            Text('✦ 重新生成')
+              .fontSize(11)
+              .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+          }
+        }
+        .height(26)
+        .padding({ left: 10, right: 10 })
+        .borderRadius(13)
+        .backgroundColor('rgba(255,255,255,0.08)')
+        .onClick(() => {
+          this.requestStatusGeneration();
+        })
+        .margin({ right: 6 })
+
+        // 收起
+        Text('››')
+          .fontSize(13)
+          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+          .width(26)
+          .height(26)
+          .textAlign(TextAlign.Center)
+          .onClick(() => {
+            this.toggleStatusPanel(false);
+          })
+      }
+      .width('100%')
+      .margin({ bottom: 8 })
+
+      // 字段列表
+      if (this.statusEntries.length === 0) {
+        Text('暂无状态字段,点击“重新生成”让 AI 依据角色卡生成')
+          .fontSize(12)
+          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .margin({ top: 24 })
+      } else {
+        List({ space: 8 }) {
+          ForEach(this.statusEntries,
+            (entry: ChatStatusEntry, index: number) => {
+              ListItem() {
+                this.statusEntryRow(entry)
+              }
+            },
+            (entry: ChatStatusEntry, index: number) => entry.name + '_' + index.toString()
+          )
+        }
+        .layoutWeight(1)
+        .width('100%')
+        .scrollBar(BarState.Off)
+      }
+    }
+    .width(244)
+    .height(340)
+    .margin({ top: this.statusBarHeight + 54 })
+    .padding({ left: 12, right: 12, top: 12, bottom: 12 })
+    .borderRadius({ topLeft: 18, topRight: 0, bottomLeft: 18, bottomRight: 0 })
+    .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+    .shadow({ radius: 10, color: 'rgba(0,0,0,0.18)' })
+    .transition(
+      TransitionEffect.opacity(0).combine(TransitionEffect.translate({ x: 80 }))
+        .animation({ duration: 220, curve: Curve.EaseOut })
+    )
+  }
+
+  /** 单个状态字段行:名称[:值] + 锁定(字段不可手动增删) */
+  @Builder
+  statusEntryRow(entry: ChatStatusEntry) {
+    Row() {
+      Text(this.statusEmoji(entry.name))
+        .fontSize(14)
+      Text(this.statusEntryDisplayText(entry))
+        .fontSize(14)
+        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .margin({ left: 6 })
+        .layoutWeight(1)
+      Toggle({ type: ToggleType.Switch, isOn: entry.locked })
+        .width(34)
+        .height(20)
+        .onChange((on: boolean): void => {
+          this.toggleStatusLock(entry.name, on);
+        })
+    }
+    .width('100%')
+    .height(40)
+    .padding({ left: 10, right: 8 })
+    .borderRadius($r('app.float.app_radius_sm'))
+    .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
   }
 
   // ===== CHAT-STATUS-1A / T-7.x: 状态/世界书滑动面板 =====
@@ -1790,6 +1996,86 @@ struct ChatPage {
   }
 
   // ===== T-7.x: 世界书面板逻辑 =====
+
+  // ===== 角色状态胶囊栏逻辑(CHAT-STATUS-1B) =====
+
+  /** 胶囊文案:字段名[:值],值为空时只显示字段名 */
+  private statusChipText(entry: ChatStatusEntry): string {
+    const v: string = entry.value.trim();
+    if (v.length === 0) {
+      return entry.name;
+    }
+    return entry.name + ':' + v;
+  }
+
+  /** 管理面板行文案:复用胶囊文案 */
+  private statusEntryDisplayText(entry: ChatStatusEntry): string {
+    return this.statusChipText(entry);
+  }
+
+  /** 字段名 → emoji(关键词匹配,兜底 ✨) */
+  private statusEmoji(name: string): string {
+    const n: string = name.trim();
+    if (n.length === 0) {
+      return '✨';
+    }
+    if (n.includes('衣') || n.includes('服')) {
+      return '🧥';
+    }
+    if (n.includes('地点') || n.includes('位置') || n.includes('场所')) {
+      return '📍';
+    }
+    if (n.includes('金币') || n.includes('金钱') || n.includes('钱')) {
+      return '🪙';
+    }
+    if (n.includes('武器')) {
+      return '⚔';
+    }
+    if (n.includes('心情') || n.includes('情绪') || n.includes('心境')) {
+      return '🎭';
+    }
+    if (n.includes('体力') || n.includes('能量') || n.includes('法力') || n.includes('魔力')) {
+      return '⚡';
+    }
+    if (n.includes('生命') || n.includes('健康') || n.includes('血量')) {
+      return '❤';
+    }
+    if (n.includes('时间') || n.includes('时辰')) {
+      return '🕐';
+    }
+    if (n.includes('道具') || n.includes('物品') || n.includes('背包')) {
+      return '🎒';
+    }
+    return '✨';
+  }
+
+  /** 锁定/解锁状态字段 */
+  private toggleStatusLock(name: string, locked: boolean): void {
+    if (this.viewModel === null) {
+      return;
+    }
+    this.viewModel!.setStatusFieldLocked(name, locked);
+  }
+
+  /** 展开/收起状态面板(带动画:透明度 + 从右侧滑入/滑出) */
+  private toggleStatusPanel(expand: boolean): void {
+    this.getUIContext().animateTo({ duration: 220, curve: Curve.EaseOut }, (): void => {
+      this.statusPanelExpanded = expand;
+    });
+  }
+
+  /** AI 一键生成状态字段(非阻塞;完成后同步刷新列表) */
+  private requestStatusGeneration(): void {
+    if (this.viewModel === null || this.statusGenBusy) {
+      return;
+    }
+    this.statusGenBusy = true;
+    this.viewModel!.generateStatusFields().then((_ok: boolean): void => {
+      this.statusGenBusy = false;
+    }).catch(() => {
+      this.statusGenBusy = false;
+    });
+  }
 
   /** 同步世界书面板数据(由 viewModel.lorebookPanelData 镜像到本地 @State)。
    * 每次同步递增版本号,强制 ForEach 按新 key 重建条目(修复 AI 应用变更后面板不刷新)。 */

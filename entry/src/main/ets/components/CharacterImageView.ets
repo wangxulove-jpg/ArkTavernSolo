@@ -62,6 +62,8 @@ export struct CharacterImageView {
             .objectFit(this.objectFit)
             .borderRadius(this.imgBorderRadius)
             .clip(true)
+            // v50: 关闭系统原生图片拖拽,避免长按头像把图片"拖出"
+            .draggable(false)
             .onError(() => {
               this.loadFailed = true;
             })

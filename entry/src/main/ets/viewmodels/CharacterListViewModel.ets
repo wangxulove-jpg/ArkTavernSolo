@@ -191,6 +191,18 @@ export class CharacterListViewModel {
     }
   }
 
+  /** v50: 把角色卡片移动到指定下标(宫格松手落位用)。 */
+  async moveCharacterTo(id: string, toIndex: number): Promise<void> {
+    this.errorMessage = '';
+    try {
+      await this.service.moveCharacterTo(id, toIndex);
+      await this.load();
+    } catch (e) {
+      this.errorMessage = '重排失败: ' + String(e);
+      Logger.error(LOG_TAG, 'moveCharacterTo failed: ' + String(e));
+    }
+  }
+
   /** 是否为当前角色 */
   isCurrent(character: Character): boolean {
     return this.currentCharacterId === character.id;
