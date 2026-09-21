@@ -1489,8 +1489,8 @@ struct ChatPage {
         .scrollBar(BarState.Off)
       }
     }
-    .width(244)
-    .height(340)
+    .width(320)
+    .height(380)
     .margin({ top: this.statusBarHeight + 54 })
     .padding({ left: 12, right: 12, top: 12, bottom: 12 })
     .borderRadius({ topLeft: 18, topRight: 0, bottomLeft: 18, bottomRight: 0 })
@@ -1510,8 +1510,9 @@ struct ChatPage {
         .fontSize(14)
       Text(this.statusEntryDisplayText(entry))
         .fontSize(14)
+        .lineHeight(19)
         .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-        .maxLines(1)
+        .maxLines(2)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .margin({ left: 6 })
         .layoutWeight(1)
@@ -1523,8 +1524,8 @@ struct ChatPage {
         })
     }
     .width('100%')
-    .height(40)
-    .padding({ left: 10, right: 8 })
+    .constraintSize({ minHeight: 40 })
+    .padding({ left: 10, right: 8, top: 8, bottom: 8 })
     .borderRadius($r('app.float.app_radius_sm'))
     .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
   }
