@@ -1,0 +1,63 @@
+{
+  "name": "arktavern-card-studio",
+  "version": "0.1.0",
+  "description": "ArkTavern 角色卡制卡软件:ST 卡适配管线 + 完整编辑器 + 双预览对比",
+  "main": "out/main/main.js",
+  "author": "ArkTavernSolo",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && vue-tsc --noEmit -p tsconfig.web.json",
+    "dist": "electron-vite build && electron-builder --win",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "electron-store": "8.2.0",
+    "png-chunk-text": "1.0.0",
+    "png-chunks-encode": "1.0.0",
+    "png-chunks-extract": "1.0.0"
+  },
+  "devDependencies": {
+    "@codemirror/lang-html": "6.4.9",
+    "@codemirror/lang-json": "6.0.1",
+    "@codemirror/theme-one-dark": "6.1.2",
+    "@types/node": "22.10.2",
+    "@vitejs/plugin-vue": "5.2.1",
+    "codemirror": "6.0.1",
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8",
+    "electron-vite": "2.3.0",
+    "jquery": "3.7.1",
+    "naive-ui": "2.40.1",
+    "pinia": "2.3.0",
+    "typescript": "5.6.3",
+    "vite": "5.4.11",
+    "vue": "3.5.13",
+    "vue-router": "4.5.0",
+    "vue-tsc": "2.1.10"
+  },
+  "build": {
+    "appId": "com.arktavern.cardstudio",
+    "productName": "ArkTavernCardStudio",
+    "directories": {
+      "output": "release"
+    },
+    "files": ["out/**"],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "ArkTavernCardStudio-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "ArkTavernCardStudio-Portable-${version}.${ext}"
+    }
+  }
+}

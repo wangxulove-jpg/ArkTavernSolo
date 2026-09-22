@@ -21,6 +21,9 @@ docs/角色卡/
 docs/*.md
 AGENT.md
 spec/
-tools/
-/docs/log.txt
+tools/*
+!tools/card-studio/
+# 日志统一存放目录:docs/日志(目录占位进 git,内容忽略)
+docs/日志/*
+!docs/日志/.gitkeep
 /APK-reference/
