@@ -75,7 +75,8 @@ import {
 import { ForkChatMode } from '../models/ForkChatOptions';
 import { ChatSessionListPanel } from '../components/ChatSessionListPanel';
 import { Character, resolveCharacterDisplayName } from '../models/Character';
-import { extractFrontendHtml } from '../bridge/CardFrontendBridge';
+import { extractFrontendSpec, FrontendSpec } from '../bridge/CardFrontendBridge';
+import { CardFrontendWeb } from '../components/CardFrontendWeb';
 import { ACTIVE_CHAT_VM_KEY } from './FrontendCardPage';
 import { Persona } from '../models/Persona';
 import { Logger } from '../utils/Logger';
@@ -251,6 +252,18 @@ struct ChatPage {
   // ===== 前端页面入口(角色卡扩展 extensions.arktavern.frontend) =====
   /** 当前会话角色卡是否带可渲染的前端页面 */
   @State hasFrontend: boolean = false;
+  /** 前端页面 mode(fullscreen=跳独立全屏页;panel=聊天页内浮层面板) */
+  @State frontendMode: string = 'fullscreen';
+  /** 前端面板是否可见(仅 mode=panel 使用) */
+  @State frontendPanelVisible: boolean = false;
+  /** 前端面板要渲染的 HTML(打开面板时快照) */
+  @State frontendPanelHtml: string = '';
+  /** 前端面板标题(缺省用角色名) */
+  @State frontendPanelTitle: string = '';
+  /** 前端面板建议宽度(vp,缺省 360) */
+  @State frontendPanelWidth: number = 360;
+  /** 前端面板建议高度(vp 或百分比,缺省 '65%') */
+  @State frontendPanelHeight: string = '65%';
 
   // ===== Prompt Cache 命中率 =====
   @State cacheHitRatio: number = -1;
@@ -1122,6 +1135,11 @@ struct ChatPage {
           this.frontendFloatingControl()
         }
 
+        // ===== 前端界面浮层面板(mode=panel,聊天页内展开,对话仍可继续) =====
+        if (this.frontendPanelVisible && this.viewModel !== null) {
+          this.frontendPanel()
+        }
+
         // ===== 弹窗层(覆盖在最上层) =====
         // 会话列表面板(覆盖层)
         if (this.viewModel !== null && this.viewModel!.showSessionList) {
@@ -1372,7 +1390,7 @@ struct ChatPage {
 
   // ===== 前端页面入口(角色卡扩展 extensions.arktavern.frontend) =====
 
-  /** 刷新"是否带前端页面"标识(会话角色加载完成后调用) */
+  /** 刷新"是否带前端页面"标识,并缓存其 mode/HTML/尺寸(会话角色加载完成后调用) */
   private refreshHasFrontend(): void {
     if (this.viewModel === null) {
       this.hasFrontend = false;
@@ -1383,16 +1401,54 @@ struct ChatPage {
       this.hasFrontend = false;
       return;
     }
-    this.hasFrontend = extractFrontendHtml(character.extensions).trim().length > 0;
+    const spec: FrontendSpec = extractFrontendSpec(character.extensions);
+    this.hasFrontend = spec.html.trim().length > 0;
+    this.frontendMode = spec.mode;
+    this.frontendPanelWidth = spec.sizeWidth > 0 ? spec.sizeWidth : 360;
+    this.frontendPanelHeight = spec.sizeHeight.length > 0 ? spec.sizeHeight : '65%';
+    this.frontendPanelTitle = spec.title;
   }
 
-  /** 打开前端页面(写入当前 viewModel 引用,由 FrontendCardPage 读取并复用同一会话上下文) */
+  /**
+   * 打开前端页面:
+   * - mode=panel → 在聊天页内展开浮层面板(对话仍可继续)
+   * - mode=fullscreen → 推入独立全屏页 FrontendCardPage
+   */
   private openFrontendCard(): void {
     if (this.viewModel === null) {
       return;
     }
+    if (this.frontendMode === 'panel') {
+      const character: Character | null = this.viewModel!.currentCharacter;
+      if (character === null) {
+        return;
+      }
+      const spec: FrontendSpec = extractFrontendSpec(character.extensions);
+      this.frontendPanelHtml = spec.html;
+      this.frontendPanelVisible = true;
+      return;
+    }
     AppStorage.setOrCreate<ChatViewModel>(ACTIVE_CHAT_VM_KEY, this.viewModel!);
     router.pushUrl({ url: 'pages/FrontendCardPage' });
+  }
+
+  /** 关闭前端浮层面板(收起,回到聊天视图) */
+  private closeFrontendPanel(): void {
+    this.frontendPanelVisible = false;
+    this.frontendPanelHtml = '';
+  }
+
+  /** 解析面板高度:百分比原样使用;数字补 vp;非法/空回退 '65%' */
+  private resolvePanelHeight(): string {
+    const h: string = this.frontendPanelHeight;
+    if (h.indexOf('%') >= 0 || h.length === 0) {
+      return h.length === 0 ? '65%' : h;
+    }
+    const n: number = Number(h);
+    if (Number.isNaN(n)) {
+      return '65%';
+    }
+    return n.toString() + 'vp';
   }
 
   /** 前端页面折叠标签(贴屏幕右缘,按顺序排列:有角色状态时排在状态标签下方,无状态时排右上角) */
@@ -1432,6 +1488,71 @@ struct ChatPage {
     .width('100%')
     .height('100%')
     // 外层透明:空白处点击穿透到下层,仅标签自身可点
+    .hitTestBehavior(HitTestMode.Transparent)
+  }
+
+  /** 前端界面浮层面板(仅 mode=panel):右上展开 ArkWeb,对话仍可在下方继续 */
+  @Builder
+  frontendPanel() {
+    Stack({ alignContent: Alignment.TopEnd }) {
+      // 透明捕获层:点面板以外任意位置即收起
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(Color.Transparent)
+        .onClick(() => {
+          this.closeFrontendPanel();
+        })
+
+      // 面板:标题栏 + ArkWeb 内容
+      Column() {
+        Row() {
+          Text(this.frontendPanelTitle.length > 0
+            ? this.frontendPanelTitle
+            : (this.character !== null && this.character!.name.length > 0 ? this.character!.name : '界面'))
+            .fontSize(15)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+
+          Text('收起')
+            .fontSize(13)
+            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+            .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+            .onClick(() => {
+              this.closeFrontendPanel();
+            })
+        }
+        .width('100%')
+        .height(44)
+        .padding({ left: 12, right: 8 })
+
+        CardFrontendWeb({
+          vm: this.viewModel,
+          html: this.frontendPanelHtml,
+          onClose: (): void => {
+            this.closeFrontendPanel();
+          }
+        })
+          .width('100%')
+          .layoutWeight(1)
+      }
+      .width(this.frontendPanelWidth)
+      .height(this.resolvePanelHeight())
+      .margin({ top: this.statusBarHeight + 54 })
+      .borderRadius({ topLeft: 16, topRight: 0, bottomLeft: 16, bottomRight: 0 })
+      .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+      .clip(true)
+      .shadow({ radius: 10, color: 'rgba(0,0,0,0.18)' })
+      .transition(
+        TransitionEffect.opacity(0).combine(TransitionEffect.translate({ x: 80 }))
+          .animation({ duration: 220, curve: Curve.EaseOut })
+      )
+    }
+    .width('100%')
+    .height('100%')
     .hitTestBehavior(HitTestMode.Transparent)
   }
 

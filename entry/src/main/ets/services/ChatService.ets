@@ -100,10 +100,13 @@ import { Chat } from '../models/Chat';
 import {
   ChatStatusState,
   ChatStatusEntry,
+  ChatStatusSchemaEntry,
   createEmptyChatStatusState,
   createChatStatusEntry,
   serializeChatStatusState,
-  parseChatStatusState
+  parseChatStatusState,
+  extractStatusSchema,
+  findStatusSchemaByName
 } from '../models/ChatStatusState';
 import { extractStatusBlock } from '../parser/ChatStatusBlockParser';
 import {
@@ -446,6 +449,11 @@ export class ChatService {
   /** CHAT-STATUS-1A: 是否正在执行一次性的字段生成请求(防止并发) */
   private statusGenerationInProgress: boolean = false;
   /**
+   * 声明式状态 Schema(arktavern-card-extensions v1):角色卡声明的允许状态字段集合。
+   * 由 character.extensions.arktavern.status.fields 解析;为空表示状态功能整体禁用。
+   */
+  private statusSchema: ChatStatusSchemaEntry[] = [];
+  /**
    * 状态输出指令开关。
    * true=向模型注入状态输出指令(AI 回复时附带状态 JSON);
    * false=不注入状态指令,AI 只返回纯正文(不返回状态 JSON)。
@@ -564,6 +572,7 @@ export class ChatService {
    */
   initContext(character: Character | null): boolean {
     this.character = character;
+    this.syncStatusSchemaFromCharacter();
     this.contextInitialized = true;
     if (this.messages.length > 0) {
       return false;
@@ -628,6 +637,7 @@ export class ChatService {
 
   private async doInitializeSession(character?: Character, forceNew: boolean = false): Promise<void> {
     this.character = character !== undefined ? character : null;
+    this.syncStatusSchemaFromCharacter();
 
     // 加载自动记忆总结开关(全局偏好,跨会话)
     this.loadMemoryAutoSummaryPref();
@@ -2457,6 +2467,14 @@ export class ChatService {
   }
 
   /**
+   * 返回当前角色卡的状态 Schema JSON(arktavern-card-extensions v1)。
+   * 空数组 JSON '[]'(无声明/状态功能禁用)。
+   */
+  getStatusSchemaJson(): string {
+    return JSON.stringify(this.statusSchema);
+  }
+
+  /**
    * CHAT-STATUS-1A: 请求下一次回复重新生成/优化角色状态字段。
    * 由"AI 生成"按钮调用,在下一轮 buildStatusInstruction 时生效,回复完成后复位。
    */
@@ -2465,13 +2483,46 @@ export class ChatService {
   }
 
   /**
-   * 整态替换角色状态(字段增删改锁等操作后由 ViewModel 调用)。
+   * 更新角色状态(声明式 v1):以 next 覆盖非 locked 已声明字段的值,其余字段值保留。
+   * - 未声明字段一律丢弃(不能新增);已声明字段不能删除/改名
+   * - locked 字段值不接受变更;清空 = 置空值展示
+   * - 无 schema 声明 → 状态整体为空(禁用)
    * 校验、持久化并通知 UI。
    */
   updateStatusState(next: ChatStatusState): void {
-    this.currentStatusState = next;
+    this.currentStatusState = this.normalizeStatusForSchema(next);
     this.persistStatusConfig();
     this.emitStatusChanged(this.lastCallbacks);
+  }
+
+  /** 声明式归一:把待更新状态重塑为「schema 声明的字段集合」,过滤/锁定规则见 updateStatusState */
+  private normalizeStatusForSchema(next: ChatStatusState): ChatStatusState {
+    const schema: ChatStatusSchemaEntry[] = this.statusSchema;
+    if (schema.length === 0) {
+      return createEmptyChatStatusState();
+    }
+    const cur: ChatStatusEntry[] = this.currentStatusState.entries;
+    const nextEntries: ChatStatusEntry[] = next.entries;
+    const out: ChatStatusEntry[] = [];
+    for (let i = 0; i < schema.length; i++) {
+      const s: ChatStatusSchemaEntry = schema[i];
+      const curE: ChatStatusEntry | null = findStatusEntryByName(cur, s.name);
+      const nextE: ChatStatusEntry | null = findStatusEntryByName(nextEntries, s.name);
+      let val: string = '';
+      let fromUser: boolean = false;
+      if (s.locked) {
+        val = curE !== null ? curE.value : '';
+        fromUser = curE !== null ? curE.fromUser : false;
+      } else if (nextE !== null) {
+        val = nextE.value;
+        fromUser = nextE.fromUser;
+      } else if (curE !== null) {
+        val = curE.value;
+        fromUser = curE.fromUser;
+      }
+      out.push(createChatStatusEntry(s.name, val, fromUser, s.locked));
+    }
+    return { entries: out };
   }
 
   /**
@@ -2484,34 +2535,69 @@ export class ChatService {
     } else {
       this.currentStatusState = createEmptyChatStatusState();
     }
+    // 声明式 v1:有 schema 但状态尚未生成(新会话/首轮)时,用声明字段的空值骨架填充,
+    // 保证状态入口/面板在首次 AI 输出前即可显示全部声明字段(空值待填)。
+    this.seedStatusFromSchema();
+  }
+
+  /** 状态骨架与声明联动:无 schema 清空(禁用);有 schema 且骨架空时用空值字段初始化 */
+  private seedStatusFromSchema(): void {
+    if (this.statusSchema.length === 0) {
+      if (this.currentStatusState.entries.length !== 0) {
+        this.currentStatusState = createEmptyChatStatusState();
+      }
+      return;
+    }
+    if (this.currentStatusState.entries.length > 0) {
+      return;
+    }
+    const entries: ChatStatusEntry[] = [];
+    for (let i = 0; i < this.statusSchema.length; i++) {
+      const s: ChatStatusSchemaEntry = this.statusSchema[i];
+      entries.push(createChatStatusEntry(s.name, '', false, s.locked));
+    }
+    this.currentStatusState = { entries: entries };
   }
 
   /**
-   * 合并 AI 本轮输出的状态字段(纯计算,不修改状态)。
-   * - 已存在字段:更新值,保留 fromUser/locked
-   * - 新字段:追加(fromUser=false, locked=false)
-   * - 未输出且 locked 的旧字段:保留
-   * - 未输出且未锁定的旧字段:删除(允许 AI 优化删减字段)
+   * 从当前角色卡解析声明式状态 Schema(extensions.arktavern.status.fields)。
+   * 空数组 = 状态功能整体禁用(不注入指令、不显示入口、getState 为空)。
+   */
+  private syncStatusSchemaFromCharacter(): void {
+    if (this.character !== null) {
+      this.statusSchema = extractStatusSchema(this.character.extensions);
+    } else {
+      this.statusSchema = [];
+    }
+  }
+
+  /**
+   * 合并 AI 本轮输出的状态字段(纯计算,不修改状态)——声明式 v1。
+   * - 只保留 statusSchema 声明过的字段(未声明字段一律忽略,AI 无权新增/删除)
+   * - locked 字段:禁止 AI 更新值,始终保留现值
+   * - 非 locked 声明字段:用 AI 本轮输出更新;本轮未输出则保留现值(骨架不随轮次消失)
+   * - 结果按 schema 顺序重建,刷新 fromUser 之外的部分
    */
   private computeMergedStatus(parsedEntries: ChatStatusEntry[]): ChatStatusState {
+    const schema: ChatStatusSchemaEntry[] = this.statusSchema;
     const oldEntries: ChatStatusEntry[] = this.currentStatusState.entries;
     const nextEntries: ChatStatusEntry[] = [];
-    const matchedNames: string[] = [];
-    for (let i = 0; i < oldEntries.length; i++) {
-      const old: ChatStatusEntry = oldEntries[i];
-      const match: ChatStatusEntry | null = findStatusEntryByName(parsedEntries, old.name);
-      if (match !== null) {
-        nextEntries.push(createChatStatusEntry(old.name, match.value, old.fromUser, old.locked));
-        matchedNames.push(old.name);
-      } else if (old.locked) {
-        nextEntries.push(createChatStatusEntry(old.name, old.value, old.fromUser, old.locked));
+    for (let i = 0; i < schema.length; i++) {
+      const s: ChatStatusSchemaEntry = schema[i];
+      const cur: ChatStatusEntry | null = findStatusEntryByName(oldEntries, s.name);
+      const existedBefore: boolean = cur !== null;
+      if (s.locked) {
+        // 锁定字段:值恒定,保留现值(无则置空占位展示)
+        nextEntries.push(createChatStatusEntry(s.name, existedBefore ? cur!.value : '', existedBefore ? cur!.fromUser : false, true));
+        continue;
       }
-      // 未锁定且本轮未输出的字段:删除
-    }
-    for (let i = 0; i < parsedEntries.length; i++) {
-      const p: ChatStatusEntry = parsedEntries[i];
-      if (matchedNames.indexOf(p.name) < 0) {
-        nextEntries.push(createChatStatusEntry(p.name, p.value, false, false));
+      const match: ChatStatusEntry | null = findStatusEntryByName(parsedEntries, s.name);
+      if (match !== null) {
+        nextEntries.push(createChatStatusEntry(s.name, match.value, existedBefore ? cur!.fromUser : false, s.locked));
+      } else if (existedBefore) {
+        nextEntries.push(createChatStatusEntry(s.name, cur!.value, cur!.fromUser, s.locked));
+      } else {
+        nextEntries.push(createChatStatusEntry(s.name, '', false, s.locked));
       }
     }
     return { entries: nextEntries };
@@ -3084,48 +3170,46 @@ export class ChatService {
   }
 
   /**
-   * 构建状态输出指令文本。
-   * - 请求重新生成:让 AI 重新生成/优化字段
-   * - 无字段:让 AI 根据角色信息生成字段
-   * - 有字段:保留更新其值,并可优化/新增字段
+   * 构建状态输出指令文本(声明式 v1)。
+   * - 无声明 schema → 返回空字符串(不注入状态指令,状态功能整体禁用)
+   * - 请求刷新字段 → 让 AI 只输出所有已声明字段的最新值(一次性请求)
+   * - 正常路径 → 让 AI 在正文后输出状态块,只更新已声明字段,禁止增删字段
    */
   private buildStatusInstruction(): string {
-    const names: string[] = [];
-    const entries: ChatStatusEntry[] = this.currentStatusState.entries;
-    for (let i = 0; i < entries.length; i++) {
-      if (entries[i].name.length > 0) {
-        names.push(entries[i].name);
+    const schema: ChatStatusSchemaEntry[] = this.statusSchema;
+    if (schema.length === 0) {
+      return '';
+    }
+    const lines: string[] = [];
+    for (let i = 0; i < schema.length; i++) {
+      const e: ChatStatusSchemaEntry = schema[i];
+      if (e.locked) {
+        continue;
       }
+      const line: string = e.desc.length > 0 ? e.name + '(' + e.desc + ')' : e.name;
+      lines.push(line);
+    }
+    const fieldsText: string = lines.join('、');
+    // 全部为 locked(无可由 AI 更新的字段)时不注入状态输出指令
+    if (fieldsText.length === 0) {
+      return '';
     }
     if (this.statusFieldGenerationRequested) {
       return '【角色状态输出规则】\n' +
-        '请仔细阅读角色设定(描述/性格/场景),推断出最能体现该角色当前状态的具体维度。\n' +
+        '根据角色当前处境,为下面这些状态维度生成/刷新当前值。' +
         '只输出一个 JSON 对象,不要输出任何其他文字或解释:\n' +
         '{"字段名":"值"}\n' +
-        '- 字段名必须贴合该角色的身份、处境与剧情,禁止套用 服装/地点/金币/心情 等通用模板,除非与角色真实相关\n' +
-        '- 字段数量 3~6 个\n' +
-        '- 值用简短中文短语,基于角色设定与当前对话合理推断';
+        '- 严格只包含这些字段,数量与字段名完全一致,不要新增或删除:\n' +
+        fieldsText;
     }
-    if (names.length === 0) {
-      return '【角色状态输出规则】\n' +
-        '请仔细阅读角色设定(描述/性格/场景),推断出最能体现该角色当前状态的具体维度。在回复正文之后,单独输出一行 JSON 状态块,格式严格如下(正文中不要提及状态块):\n' +
-        '<|status|>\n' +
-        '{"字段名":"值"}\n' +
-        '<|/status|>\n' +
-        '- 字段名必须贴合该角色的身份、处境与剧情,禁止套用 服装/地点/金币/心情 等通用模板,除非与角色真实相关\n' +
-        '- 字段数量 3~6 个\n' +
-        '- 值用简短中文短语,基于角色设定与当前对话合理推断';
-    }
-    const fieldsText: string = names.join('、');
     return '【角色状态输出规则】\n' +
       '在回复正文之后,单独输出一行 JSON 状态块,格式严格如下(正文中不要提及状态块):\n' +
       '<|status|>\n' +
       '{"字段名":"值"}\n' +
       '<|/status|>\n' +
-      '- 保留并更新这些字段:' + fieldsText + ';若剧情发展需要,可增删字段以贴合角色当前处境(总数 3~6 个)\n' +
-      '- 字段名应贴合角色设定与剧情,不要套用通用模板\n' +
-      '- 值用简短中文短语,基于角色设定与当前对话合理推断\n' +
-      '- 每轮都要重新输出,反映最新进展';
+      '- 状态块只能包含这些字段,字段名与数量必须完全一致,严禁新增或删除字段:\n' +
+      fieldsText + '\n' +
+      '- 每轮都要重新输出全部字段的最新值,反映当前进展;若剧情没有变化,值保持不变';
   }
 
   /**

@@ -1044,6 +1044,11 @@ export class ChatViewModel {
     this.notifyStatusListeners(this.statusState);
   }
 
+  /** 当前角色卡的状态 Schema JSON(Bridge getStatusSchema / schema_update 事件用) */
+  statusSchemaJson(): string {
+    return this.chatService.getStatusSchemaJson();
+  }
+
   async refreshBranchState(): Promise<void> {
     if (this.disposed) {
       return;
