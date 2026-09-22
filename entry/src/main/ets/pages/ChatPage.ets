@@ -75,6 +75,8 @@ import {
 import { ForkChatMode } from '../models/ForkChatOptions';
 import { ChatSessionListPanel } from '../components/ChatSessionListPanel';
 import { Character, resolveCharacterDisplayName } from '../models/Character';
+import { extractFrontendHtml } from '../bridge/CardFrontendBridge';
+import { ACTIVE_CHAT_VM_KEY } from './FrontendCardPage';
 import { Persona } from '../models/Persona';
 import { Logger } from '../utils/Logger';
 import { MacroReplacer } from '../services/MacroReplacer';
@@ -246,6 +248,10 @@ struct ChatPage {
   /** 状态面板:AI 生成字段进行中 */
   @State statusGenBusy: boolean = false;
 
+  // ===== 前端页面入口(角色卡扩展 extensions.arktavern.frontend) =====
+  /** 当前会话角色卡是否带可渲染的前端页面 */
+  @State hasFrontend: boolean = false;
+
   // ===== Prompt Cache 命中率 =====
   @State cacheHitRatio: number = -1;
   @State cacheCachedTokens: number = 0;
@@ -371,11 +377,19 @@ struct ChatPage {
         AppStorage.set<string>('pendingCharacterId', '');
         this.loadCharacterAvatar(pendingCharacterId);
         vm.initialize(pendingCharacterId).then((): Promise<void> => vm.selectSession(pendingChatId))
-          .then((): void => { this.refreshUserNameDisplay(); this.refreshPersonaDisplay(); })
+          .then((): void => {
+            this.refreshUserNameDisplay();
+            this.refreshPersonaDisplay();
+            this.refreshHasFrontend();
+          })
           .catch((): void => {});
       } else {
         vm.initialize().then((): Promise<void> => vm.selectSession(pendingChatId))
-          .then((): void => { this.refreshUserNameDisplay(); this.refreshPersonaDisplay(); })
+          .then((): void => {
+            this.refreshUserNameDisplay();
+            this.refreshPersonaDisplay();
+            this.refreshHasFrontend();
+          })
           .catch((): void => {});
       }
     } else if (pendingCharacterId.length > 0) {
@@ -383,10 +397,17 @@ struct ChatPage {
       this.loadCharacterAvatar(pendingCharacterId);
       // 角色卡"新建对话"入口:forceNew=true 跳过 openLatestSession,直接创建新会话
       vm.initialize(pendingCharacterId, true)
-        .then((): void => { this.refreshUserNameDisplay(); this.refreshPersonaDisplay(); })
+        .then((): void => {
+          this.refreshUserNameDisplay();
+          this.refreshPersonaDisplay();
+          this.refreshHasFrontend();
+        })
         .catch((): void => {});
     } else {
-      vm.initialize();
+      // 打开最近会话:等待会话加载完成后刷新前端页面入口状态
+      vm.initialize().then((): void => {
+        this.refreshHasFrontend();
+      }).catch((): void => {});
       // 从当前角色加载头像
       this.loadCurrentCharacterAvatar();
       this.refreshUserNameDisplay();
@@ -1096,6 +1117,11 @@ struct ChatPage {
           this.statusFloatingControl()
         }
 
+        // ===== 前端页面入口(角色卡带前端界面时显示,位于状态标签下方) =====
+        if (this.hasFrontend) {
+          this.frontendFloatingControl()
+        }
+
         // ===== 弹窗层(覆盖在最上层) =====
         // 会话列表面板(覆盖层)
         if (this.viewModel !== null && this.viewModel!.showSessionList) {
@@ -1342,6 +1368,71 @@ struct ChatPage {
     }
     .width('100%')
     .padding({ left: 4, right: 4, top: this.statusBarHeight + 4, bottom: 4 })
+  }
+
+  // ===== 前端页面入口(角色卡扩展 extensions.arktavern.frontend) =====
+
+  /** 刷新"是否带前端页面"标识(会话角色加载完成后调用) */
+  private refreshHasFrontend(): void {
+    if (this.viewModel === null) {
+      this.hasFrontend = false;
+      return;
+    }
+    const character: Character | null = this.viewModel!.currentCharacter;
+    if (character === null) {
+      this.hasFrontend = false;
+      return;
+    }
+    this.hasFrontend = extractFrontendHtml(character.extensions).trim().length > 0;
+  }
+
+  /** 打开前端页面(写入当前 viewModel 引用,由 FrontendCardPage 读取并复用同一会话上下文) */
+  private openFrontendCard(): void {
+    if (this.viewModel === null) {
+      return;
+    }
+    AppStorage.setOrCreate<ChatViewModel>(ACTIVE_CHAT_VM_KEY, this.viewModel!);
+    router.pushUrl({ url: 'pages/FrontendCardPage' });
+  }
+
+  /** 前端页面折叠标签(贴屏幕右缘,按顺序排列:有角色状态时排在状态标签下方,无状态时排右上角) */
+  @Builder
+  frontendFloatingControl() {
+    Stack({ alignContent: Alignment.TopEnd }) {
+      Column() {
+        Text('界')
+          .fontSize(12)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        Text('面')
+          .fontSize(12)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+          .margin({ top: 2 })
+        Text('')
+          .width(6)
+          .height(6)
+          .borderRadius(3)
+          .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
+          .margin({ top: 6 })
+      }
+      .width(30)
+      .height(96)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+      // 有角色状态 → 排在状态标签(状态栏+54,高96)下方;无状态 → 直接右上角
+      .margin({ top: this.statusEntries.length > 0 ? this.statusBarHeight + 54 + 104 : this.statusBarHeight + 54 })
+      .borderRadius({ topLeft: 14, topRight: 0, bottomLeft: 14, bottomRight: 0 })
+      .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+      .shadow({ radius: 6, color: 'rgba(0,0,0,0.12)' })
+      .onClick(() => {
+        this.openFrontendCard();
+      })
+    }
+    .width('100%')
+    .height('100%')
+    // 外层透明:空白处点击穿透到下层,仅标签自身可点
+    .hitTestBehavior(HitTestMode.Transparent)
   }
 
   // ===== 角色状态侧边栏(CHAT-STATUS-1B) =====

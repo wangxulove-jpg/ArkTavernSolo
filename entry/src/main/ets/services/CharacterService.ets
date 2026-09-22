@@ -57,11 +57,18 @@ const CHARACTER_BOOK_NAME_SUFFIX: string = ' · 角色世界书';
 const EXTENSION_VALUE_SIZE_CAP: number = 200 * 1024;
 
 /**
+ * ArkTavern 前端页面(extensions.arktavern.frontend)允许的序列化长度上限(字节)。
+ * 前端页面 HTML/CSS/JS 远大于普通扩展元数据,单独放宽上限避免被错误清洗掉。
+ */
+const ARKTAVERN_VALUE_SIZE_CAP: number = 512 * 1024;
+
+/**
  * 清洗解析后角色卡的 extensions:
  * 丢弃超大 blob(如 SillyTavern 的 regex_scripts 等本 App 不使用的脚本),
  * 仅保留小字段与应用需要的元数据(如 market 的 arktavern 信息)。
  * 避免超大角色卡的单行数据超过 RDB 共享块 2MB 上限,导致编辑/详情加载失败
  * (表现为"角色不存在或已被删除")。
+ * arktavern 命名空间(含前端页面 frontend)使用更宽松的上限。
  */
 function sanitizeExtensions(extensions: Record<string, Object>): Record<string, Object> {
   if (extensions === null || extensions === undefined) {
@@ -76,7 +83,8 @@ function sanitizeExtensions(extensions: Record<string, Object>): Record<string, 
     const key: string = keys[i];
     const value: Object = extensions[key];
     const serialized: string = JSON.stringify(value);
-    if (serialized.length <= EXTENSION_VALUE_SIZE_CAP) {
+    const cap: number = key === 'arktavern' ? ARKTAVERN_VALUE_SIZE_CAP : EXTENSION_VALUE_SIZE_CAP;
+    if (serialized.length <= cap) {
       result[key] = value;
     }
   }

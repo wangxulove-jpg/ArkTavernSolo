@@ -145,6 +145,48 @@ export class ChatViewModel {
   onStatusUpdate?: (state: ChatStatusState) => void;
   onCacheStatsUpdate?: (cachedTokens: number, promptTokens: number, hitRatio: number) => void;
 
+  // ===== 前端页面 Bridge 多订阅(不覆盖 ChatPage 的单回调) =====
+  private messageListeners: Array<(messages: ChatMessage[]) => void> = [];
+  private statusListeners: Array<(state: ChatStatusState) => void> = [];
+
+  /** 订阅消息更新(前端页面 Bridge 使用,与 onMessagesUpdate 并存) */
+  subscribeMessages(listener: (messages: ChatMessage[]) => void): void {
+    this.messageListeners.push(listener);
+  }
+
+  /** 取消消息更新订阅 */
+  unsubscribeMessages(listener: (messages: ChatMessage[]) => void): void {
+    const idx: number = this.messageListeners.indexOf(listener);
+    if (idx >= 0) {
+      this.messageListeners.splice(idx, 1);
+    }
+  }
+
+  /** 订阅角色状态更新(前端页面 Bridge 使用,与 onStatusUpdate 并存) */
+  subscribeStatus(listener: (state: ChatStatusState) => void): void {
+    this.statusListeners.push(listener);
+  }
+
+  /** 取消角色状态更新订阅 */
+  unsubscribeStatus(listener: (state: ChatStatusState) => void): void {
+    const idx: number = this.statusListeners.indexOf(listener);
+    if (idx >= 0) {
+      this.statusListeners.splice(idx, 1);
+    }
+  }
+
+  private notifyMessageListeners(messages: ChatMessage[]): void {
+    for (let i = 0; i < this.messageListeners.length; i++) {
+      this.messageListeners[i](messages);
+    }
+  }
+
+  private notifyStatusListeners(state: ChatStatusState): void {
+    for (let i = 0; i < this.statusListeners.length; i++) {
+      this.statusListeners[i](state);
+    }
+  }
+
   constructor(
     chatService: ChatService,
     modelService: ModelService,
@@ -259,6 +301,39 @@ export class ChatViewModel {
       this.errorMessage = this.toUserError(String(e));
       this.statusMessage = '';
       Logger.error(LOG_TAG, 'send failed: ' + String(e));
+    }
+  }
+
+  /**
+   * 发送指定文本内容(供前端页面 Bridge 调用,不依赖输入框 inputText)。
+   * 与 send() 走同一发送链路(流式、状态、历史同步进聊天气泡流)。
+   * @param text 要发送的文本
+   * @returns true=已提交发送; false=条件不满足(未就绪/正在生成/空文本/已销毁)
+   */
+  async sendExternalText(text: string): Promise<boolean> {
+    if (this.disposed || this.busy || !this.isSessionReady) {
+      return false;
+    }
+    const content: string = text.trim();
+    if (content.length === 0) {
+      return false;
+    }
+    this.errorMessage = '';
+    this.statusMessage = '';
+    this.isGenerating = true;
+    this.canRegenerate = false;
+    this.userScrolledUp = false;
+
+    const callbacks: ChatServiceCallbacks = this.createCallbacks();
+    try {
+      await this.chatService.sendMessage(content, callbacks);
+      return true;
+    } catch (e) {
+      this.isGenerating = false;
+      this.errorMessage = this.toUserError(String(e));
+      this.statusMessage = '';
+      Logger.error(LOG_TAG, 'sendExternalText failed: ' + String(e));
+      return false;
     }
   }
 
@@ -966,6 +1041,7 @@ export class ChatViewModel {
     if (this.onStatusUpdate !== undefined) {
       this.onStatusUpdate(this.statusState);
     }
+    this.notifyStatusListeners(this.statusState);
   }
 
   async refreshBranchState(): Promise<void> {
@@ -1279,6 +1355,11 @@ export class ChatViewModel {
   /** 获取当前角色的默认 Persona ID */
   getCharacterDefaultPersonaId(): string {
     return this.chatService.getCharacterDefaultPersonaId();
+  }
+
+  /** 当前会话关联角色(可能为 null,角色已删除时) */
+  get currentCharacter(): Character | null {
+    return this.chatService.getCharacter();
   }
 
   /** 更新当前聊天的锁定 Persona ID(null 清除锁定) */
@@ -1692,6 +1773,7 @@ export class ChatViewModel {
         }
         this.messages = messages;
         this.scheduleMessagesFlush();
+        this.notifyMessageListeners(messages);
       },
       onStateChanged: (state: ChatState): void => {
         if (this.disposed) {
@@ -1714,6 +1796,7 @@ export class ChatViewModel {
         if (this.onStatusUpdate !== undefined) {
           this.onStatusUpdate(state);
         }
+        this.notifyStatusListeners(state);
       },
       onCacheStatsUpdate: (cachedTokens: number, promptTokens: number, hitRatio: number): void => {
         if (this.disposed) {

@@ -74,7 +74,16 @@ struct LorebookPage {
   @StorageProp('navigationBarHeight') navigationBarHeight: number = 0;
   @StorageProp('effectiveTheme') effectiveTheme: string = 'dark';
 
-  aboutToAppear(): void {
+  async aboutToAppear(): Promise<void> {
+    // AppServices.initialize() 异步执行:必须先等待初始化完成再取服务,
+    // 否则 initialize 未完成时 getLorebookService()/getCharacterService()
+    // 会抛 "AppServices not initialized" 导致应用崩溃退出。
+    try {
+      await AppServices.whenReady();
+    } catch (e) {
+      this.vmErrorMessage = '服务未就绪:' + (e as Error).message;
+      return;
+    }
     const service: LorebookService = AppServices.getLorebookService();
     const characterService: CharacterService = AppServices.getCharacterService();
     const vm: LorebookViewModel = new LorebookViewModel(

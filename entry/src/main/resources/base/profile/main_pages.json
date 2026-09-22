@@ -2,6 +2,7 @@
   "src": [
     "pages/Index",
     "pages/ChatPage",
+    "pages/FrontendCardPage",
     "pages/CharacterListPage",
     "pages/CharacterEditPage",
     "pages/AddCharacterPage",
