@@ -1111,7 +1111,8 @@ function buildReviseSystemPrompt(): string {
     + '\n- JSON 必须可被 JSON.parse 直接解析'
     + '\n- 必须包含 spec="chara_card_v3"、spec_version="3.0" 和 data 对象'
     + buildOptimizeJsonStructure()
-    + buildRenderCapabilityNote();
+    + buildRenderCapabilityNote()
+    + buildArktavernCapabilityNote();
 }
 
 /**
@@ -1133,14 +1134,46 @@ function buildRenderCapabilityNote(): string {
     + '请把这些展示形式作为该角色**持续遵循的界面规范**:建议在 system_prompt 或 post_history_instructions 中明确要求'
     + '角色在后续**每次回复都持续输出并更新**同样格式的折叠状态栏 / 分支选项,位置与结构保持一致,'
     + '不能只在开场白出现一次就丢失。'
-    + '\n注意:是否使用上述能力以用户的修改建议为准;若建议涉及"状态栏/选项/面板",用上面语法;普通叙事保持自然文字即可。';
+    + '\n注意:是否使用上述能力以用户的修改建议为准;若建议涉及"状态栏/数值/属性面板",优先使用下方的角色状态扩展(extensions.arktavern.status)而非折叠块模拟;'
+    + '仅涉及展示样式时用上面语法;普通叙事保持自然文字即可。';
+}
+
+/**
+ * 本 App 角色卡扩展能力说明(extensions.arktavern)。
+ *
+ * 让 AI 改卡时知道:可以为卡片声明"角色状态"与"前端界面"两类能力,
+ * 以及它们的格式、行为与触发条件(仅在用户建议涉及时才生成/修改)。
+ */
+function buildArktavernCapabilityNote(): string {
+  return '\n\n【本 App 的角色卡扩展能力(存于 data.extensions.arktavern,按需使用)】'
+    + '\n1. 角色状态(status):为角色声明对话中持续跟踪的状态字段。'
+    + '\n   - 格式:{"status":{"fields":[{"name":"金币","desc":"当前持有金币数","type":"number","locked":false}]}}'
+    + '\n   - 字段建议 3-8 个;name 唯一且简短;desc 说明取值含义(会展示给模型);type 为 "number" 或 "string";'
+    + 'locked=true 表示该字段禁止 AI 更新(仅展示/人工维护,如固定属性)'
+    + '\n   - 声明后 App 聊天时会自动注入状态输出规则,模型每轮回复末尾自动输出状态块更新这些字段的值,'
+    + '**无需**在 system_prompt/post_history_instructions/开场白中另行编写状态输出规则'
+    + '\n2. 前端界面(frontend):为角色卡生成手机 App 内展示的交互界面(聊天页浮层面板或全屏页,对话仍在聊天页进行)。'
+    + '\n   - 对象格式:{"html":"完整HTML(含<style>/<script>,全部内联)","mode":"panel|fullscreen","title":"界面标题","size":{"width":360,"height":"65%"}}'
+    + '\n   - 也兼容旧写法:frontend 直接为 HTML 字符串(等同全屏);建议新卡用对象格式'
+    + '\n   - HTML 要求:CSS/JS 全部内联,不引用任何外部网络资源;适配手机屏幕(viewport、触控友好,按钮≥44px);建议 ≤256KB(上限 512KB)'
+    + '\n   - 界面通过内置 Bridge 与 App 交互:'
+    + '\n     · window.arktavern.getState()/setState(name,value) 读写上述角色状态字段'
+    + '\n     · window.arktavern.getCharacter() 取角色信息;window.arktavern.send(text) 以用户身份发送消息;window.arktavern.close() 关闭界面'
+    + '\n     · 页面须先注册 window.arktavernPush.dispatch(jsonString) 接收事件:{kind:"status_update"|"message_update"|"schema_update",data:...},'
+    + '状态/消息变化时据此刷新界面(message_update 含 generating 与 lastAssistant 字段)'
+    + '\n     · 页面脚本加载时 window.arktavern 可能尚未就绪,应等收到首个事件后再调用其方法'
+    + '\n\n使用规则(重要):'
+    + '\n- 仅当用户修改建议涉及"状态/数值/属性/面板/界面/前端/地图"等意图时,才生成或修改对应扩展;'
+    + '无关建议下**原样保留**原卡 extensions.arktavern 内容'
+    + '\n- 原卡已有但内容被省略展示的大字段(如标注"前端界面HTML已省略"),除非建议明确要求重做前端,否则**不要输出该字段**,App 会自动保留原值'
+    + '\n- 若建议要求"角色状态/数值跟踪",优先设计 status 字段声明,而非让模型在正文里维护文本状态栏';
 }
 
 /**
  * Tavern Card V3 角色卡的 JSON 结构要求(生成/修改/优化共用)。
  */
 function buildOptimizeJsonStructure(): string {
-  return '\n\nJSON 结构要求(所有字段必填,数组字段即使为空也必须是空数组,extensions 即使为空也必须是空对象):'
+  return '\n\nJSON 结构要求(所有字段必填,数组字段即使为空也必须是空数组,extensions 必须是对象,无本 App 扩展需求时为空对象 {}):'
     + '\n{'
     + '\n  "spec": "chara_card_v3",'
     + '\n  "spec_version": "3.0",'
@@ -1160,13 +1193,79 @@ function buildOptimizeJsonStructure(): string {
     + '\n    "tags": [],'
     + '\n    "creator": "创作者名(空则空字符串)",'
     + '\n    "character_version": "角色卡版本(空则空字符串)",'
-    + '\n    "extensions": {}'
+    + '\n    "extensions": {'
+    + '\n      "arktavern": {'
+    + '\n        "status": { "fields": [{ "name": "字段名", "desc": "含义", "type": "number|string", "locked": false }] },'
+    + '\n        "frontend": { "html": "完整HTML", "mode": "panel|fullscreen", "title": "标题", "size": { "width": 360, "height": "65%" } }'
+    + '\n      }'
+    + '\n    }'
     + '\n  }'
     + '\n}';
 }
 
 /**
+ * 前端 HTML 在 prompt 中的省略占位前缀。
+ * 超长 frontend 不进 prompt(防撑爆上下文);改卡合并时据此识别 AI 回显的占位并保留原卡值。
+ */
+export const FRONTEND_OMITTED_MARKER: string = '[前端界面HTML已省略,共';
+
+/** prompt 中 frontend HTML 的完整展示上限(字符),超过则替换为省略占位 */
+const FRONTEND_HTML_PROMPT_CAP: number = 4096;
+
+/**
+ * 构造 arktavern 扩展在 prompt 中的展示值:
+ * 超长 frontend(字符串或对象内 html)替换为省略占位,其余子键(status 等)原样保留。
+ */
+function buildArkTavernPromptValue(arktavern: Object): Object {
+  const arkObj: Record<string, Object> = arktavern as Record<string, Object>;
+  const frontend: Object | undefined = arkObj['frontend'];
+  if (frontend === null || frontend === undefined) {
+    return arktavern;
+  }
+  if (typeof frontend === 'string') {
+    const htmlStr: string = frontend as string;
+    if (htmlStr.length <= FRONTEND_HTML_PROMPT_CAP) {
+      return arktavern;
+    }
+    const clone: Record<string, Object> = {};
+    const keys: string[] = Object.keys(arkObj);
+    for (let i = 0; i < keys.length; i++) {
+      if (keys[i] !== 'frontend') {
+        clone[keys[i]] = arkObj[keys[i]];
+      }
+    }
+    clone['frontend'] = FRONTEND_OMITTED_MARKER + htmlStr.length
+      + '字符,此处省略(旧字符串格式,全屏);除非建议明确要求重做前端,不要输出该字段]';
+    return clone;
+  }
+  if (typeof frontend === 'object' && !Array.isArray(frontend)) {
+    const feObj: Record<string, Object> = frontend as Record<string, Object>;
+    const html: Object | undefined = feObj['html'];
+    if (typeof html === 'string' && (html as string).length > FRONTEND_HTML_PROMPT_CAP) {
+      const feClone: Record<string, Object> = {};
+      const feKeys: string[] = Object.keys(feObj);
+      for (let i = 0; i < feKeys.length; i++) {
+        if (feKeys[i] !== 'html') {
+          feClone[feKeys[i]] = feObj[feKeys[i]];
+        }
+      }
+      feClone['html'] = FRONTEND_OMITTED_MARKER + (html as string).length
+        + '字符,此处省略;除非建议明确要求重做前端,不要输出该字段]';
+      const clone: Record<string, Object> = {};
+      const keys: string[] = Object.keys(arkObj);
+      for (let i = 0; i < keys.length; i++) {
+        clone[keys[i]] = keys[i] === 'frontend' ? feClone : arkObj[keys[i]];
+      }
+      return clone;
+    }
+  }
+  return arktavern;
+}
+
+/**
  * 将现有角色卡序列化为紧凑对象,供优化请求读取。
+ * extensions 仅并入本 App 的 arktavern 命名空间(角色状态/前端界面声明,超长 HTML 省略),
+ * 其他扩展(如 SillyTavern 脚本字段)不进 prompt,仅以 other_keys 提示其存在。
  */
 function buildOptimizeCardContent(card: ParsedCharacterCard): Record<string, Object> {
   const cardContent: Record<string, Object> = {};
@@ -1188,6 +1287,25 @@ function buildOptimizeCardContent(card: ParsedCharacterCard): Record<string, Obj
   }
   if (card.creator.length > 0) {
     cardContent['creator'] = card.creator;
+  }
+  const extKeys: string[] = Object.keys(card.extensions);
+  const arktavern: Object | undefined = card.extensions['arktavern'];
+  const hasArk: boolean = arktavern !== null && arktavern !== undefined;
+  if (hasArk || extKeys.length > 0) {
+    const extensionsInfo: Record<string, Object> = {};
+    if (hasArk) {
+      extensionsInfo['arktavern'] = buildArkTavernPromptValue(arktavern!);
+    }
+    const otherKeys: string[] = [];
+    for (let i = 0; i < extKeys.length; i++) {
+      if (extKeys[i] !== 'arktavern') {
+        otherKeys.push(extKeys[i]);
+      }
+    }
+    if (otherKeys.length > 0) {
+      extensionsInfo['other_keys'] = otherKeys;
+    }
+    cardContent['extensions'] = extensionsInfo;
   }
   return cardContent;
 }

@@ -21,7 +21,8 @@ import { Logger } from '../utils/Logger';
 import { CharacterService } from '../services/CharacterService';
 import {
   AiCharacterGenerationService,
-  AiGenerationHandle
+  AiGenerationHandle,
+  FRONTEND_OMITTED_MARKER
 } from '../services/ai/AiCharacterGenerationService';
 import {
   ParsedCharacterCard,
@@ -200,10 +201,73 @@ export class AiCardReviseViewModel {
 }
 
 /**
+ * 判断 frontend 值是否为 AI 回显的省略占位(prompt 中超长 HTML 被省略展示,
+ * AI 不应输出该字段;若回显了占位则视为未修改,保留原卡值)。
+ */
+function isOmittedFrontend(value: Object): boolean {
+  if (typeof value === 'string') {
+    return (value as string).indexOf(FRONTEND_OMITTED_MARKER) >= 0;
+  }
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const html: Object | undefined = (value as Record<string, Object>)['html'];
+    if (typeof html === 'string') {
+      return (html as string).indexOf(FRONTEND_OMITTED_MARKER) >= 0;
+    }
+  }
+  return false;
+}
+
+/**
+ * 合并原卡与 AI 结果的 extensions:
+ * - 以原卡 extensions 为基底:AI 输入未包含这些扩展(如 SillyTavern 的脚本类字段),原样保留避免丢失
+ * - arktavern 命名空间做子键级合并:原卡为基底,AI 显式输出的子键(status/frontend 等)覆盖;
+ *   AI 未输出的子键保留原值(如只改状态时 frontend 不丢);AI 回显省略占位的 frontend 保留原卡;
+ *   AI 输出空 arktavern 对象视为未涉及,整体保留原卡
+ */
+function mergePreservedExtensions(
+  source: Record<string, Object>,
+  generated: Record<string, Object>
+): Record<string, Object> {
+  const result: Record<string, Object> = {};
+  const sourceKeys: string[] = Object.keys(source);
+  for (let i = 0; i < sourceKeys.length; i++) {
+    const key: string = sourceKeys[i];
+    result[key] = source[key];
+  }
+  const generatedArk: Object | undefined = generated['arktavern'];
+  if (typeof generatedArk === 'object' && generatedArk !== null && !Array.isArray(generatedArk)) {
+    const genArkObj: Record<string, Object> = generatedArk as Record<string, Object>;
+    const genArkKeys: string[] = Object.keys(genArkObj);
+    if (genArkKeys.length > 0) {
+      const sourceArkRaw: Object | undefined = source['arktavern'];
+      const sourceArk: Record<string, Object> =
+        (typeof sourceArkRaw === 'object' && sourceArkRaw !== null && !Array.isArray(sourceArkRaw))
+          ? sourceArkRaw as Record<string, Object> : {};
+      const mergedArk: Record<string, Object> = {};
+      const sKeys: string[] = Object.keys(sourceArk);
+      for (let i = 0; i < sKeys.length; i++) {
+        mergedArk[sKeys[i]] = sourceArk[sKeys[i]];
+      }
+      for (let i = 0; i < genArkKeys.length; i++) {
+        const key: string = genArkKeys[i];
+        const value: Object = genArkObj[key];
+        if (key === 'frontend' && isOmittedFrontend(value)) {
+          continue;
+        }
+        mergedArk[key] = value;
+      }
+      result['arktavern'] = mergedArk;
+    }
+  }
+  return result;
+}
+
+/**
  * 把原卡中 AI 再生时可能丢失的数据回填到新卡:
  * - 世界书(character_book):按用户意图决定来源
  *   - includeWorldbook=true(用户要求修改世界书):信任 AI 结果;若 AI 未返回世界书则回退原卡避免丢失
  *   - includeWorldbook=false:完全保留原卡世界书,避免 AI 再生导致丢失/走样
+ * - extensions:原卡为基底回填,arktavern 在 AI 显式输出时取 AI 结果(见 mergePreservedExtensions)
  * - 复用校验后的新卡文本字段
  * 保证“只改建议部分,未提及数据尽量不丢”。
  */
@@ -233,7 +297,7 @@ function mergePreservedFields(
     tags: generated.tags,
     creator: generated.creator,
     characterVersion: generated.characterVersion,
-    extensions: generated.extensions,
+    extensions: mergePreservedExtensions(source.extensions, generated.extensions),
     characterBook: resultBook,
     userName: source.userName,
     groupOnlyGreetings: generated.groupOnlyGreetings,

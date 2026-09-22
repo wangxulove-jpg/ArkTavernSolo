@@ -71,6 +71,18 @@ struct AiCardRevisePage {
     {
       label: '开场白：轻量面板',
       text: '重写 first_mes:把状态/信息做成轻量 HTML 结构(<div>/<p>/<span style="color:...">/<br>/<hr>),App 会渲染成可读排版(标签转成换行与分隔线);不要写依赖背景色的完整网页,避免正文杂乱。'
+    },
+    {
+      label: '启用角色状态',
+      text: '请分析这张角色卡,在 extensions.arktavern.status.fields 中设计 3-8 个贴合设定的角色状态字段(每个含 name/desc/type,需要禁止 AI 更新的固定属性设 locked: true),例如数值/位置/好感/物品等维度;不要改动其他内容。'
+    },
+    {
+      label: '生成前端界面',
+      text: '请为这张角色卡生成一个移动端适配的前端界面(extensions.arktavern.frontend,对象格式,mode 用 panel):界面标题与内容贴合角色设定,HTML/CSS/JS 全部内联,通过 window.arktavern 的 getState/setState/send 与 App 交互,并监听 status_update/message_update 事件刷新;我的具体要求:'
+    },
+    {
+      label: '状态+界面全套',
+      text: '请为这张角色卡同时做两件事:1) 在 extensions.arktavern.status.fields 设计 3-8 个贴合设定的角色状态字段(含 name/desc/type,合理设置 locked);2) 生成一个移动端适配的前端界面(extensions.arktavern.frontend,panel 模式),展示这些状态字段并支持交互(通过 window.arktavern.getState/setState/send,监听 status_update/message_update 事件刷新),HTML/CSS/JS 全部内联。具体界面内容:'
     }
   ];
   /** 顶部状态栏避让高度 */
