@@ -1714,7 +1714,7 @@ struct ChatPage {
     )
   }
 
-  /** 单个状态字段行:名称[:值] + 锁定(字段不可手动增删) */
+  /** 单个状态字段行:名称[:值] */
   @Builder
   statusEntryRow(entry: ChatStatusEntry) {
     Row() {
@@ -1728,12 +1728,6 @@ struct ChatPage {
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .margin({ left: 6 })
         .layoutWeight(1)
-      Toggle({ type: ToggleType.Switch, isOn: entry.locked })
-        .width(34)
-        .height(20)
-        .onChange((on: boolean): void => {
-          this.toggleStatusLock(entry.name, on);
-        })
     }
     .width('100%')
     .constraintSize({ minHeight: 40 })
@@ -2260,14 +2254,6 @@ struct ChatPage {
       return '🎒';
     }
     return '✨';
-  }
-
-  /** 锁定/解锁状态字段 */
-  private toggleStatusLock(name: string, locked: boolean): void {
-    if (this.viewModel === null) {
-      return;
-    }
-    this.viewModel!.setStatusFieldLocked(name, locked);
   }
 
   /** 展开/收起状态面板(带动画:透明度 + 从右侧滑入/滑出) */
