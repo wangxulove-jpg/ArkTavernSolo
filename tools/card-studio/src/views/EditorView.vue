@@ -205,7 +205,10 @@ function backHome(): void {
   min-height: 0;
 }
 
-.editor-tabs :deep(.n-tabs-pane) {
+/* naive-ui tabs 根节点为 flex column:nav 固定,pane wrapper 占满剩余空间并滚动 */
+.editor-tabs :deep(.n-tabs-pane-wrapper) {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
   padding-bottom: 24px;
 }
