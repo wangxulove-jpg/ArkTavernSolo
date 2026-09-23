@@ -770,7 +770,7 @@ export class AiCharacterGenerationService {
     // 2. 校验
     let result = validateV2CharacterCard(cleaned, meta);
     if (result.ok) {
-      return createSuccess(result.card!, rawResponse, 0, meta);
+      return createSuccess(result.card!, rawResponse, 0, meta, extractUpdatedFields(cleaned));
     }
 
     // 3. 受控格式修复(最多 MAX_REPAIR_ATTEMPTS 次)
@@ -803,7 +803,9 @@ export class AiCharacterGenerationService {
       currentRaw = fixCleaned;
       result = validateV2CharacterCard(fixCleaned, meta);
       if (result.ok) {
-        return createSuccess(result.card!, rawResponse, state.autoFixAttempts, meta);
+        return createSuccess(
+          result.card!, rawResponse, state.autoFixAttempts, meta, extractUpdatedFields(fixCleaned)
+        );
       }
       lastErrors = result.errors;
     }
@@ -870,7 +872,8 @@ function createSuccess(
   card: ParsedCharacterCard,
   rawResponse: string,
   autoFixAttempts: number,
-  meta: AiGenerationMeta
+  meta: AiGenerationMeta,
+  updatedFields: string[]
 ): AiGenerationResult {
   return {
     status: AiGenerationStatus.Success,
@@ -880,8 +883,32 @@ function createSuccess(
     autoFixAttempts: autoFixAttempts,
     autoFixExhausted: false,
     meta: meta,
-    errorMessage: ''
+    errorMessage: '',
+    updatedFields: updatedFields
   };
+}
+
+/**
+ * 从(已通过校验的)角色卡 JSON 文本中提取 AI 显式输出的 data 顶层字段名。
+ * 增量修改模式据此合并:未列出的字段保留原卡值。
+ */
+function extractUpdatedFields(cleanedJson: string): string[] {
+  try {
+    const parsed: Object = JSON.parse(cleanedJson);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return [];
+    }
+    const root: Record<string, Object> = parsed as Record<string, Object>;
+    const dataRaw: Object | undefined = root['data'];
+    if (typeof dataRaw !== 'object' || dataRaw === null || Array.isArray(dataRaw)) {
+      return [];
+    }
+    const data: Record<string, Object> = dataRaw as Record<string, Object>;
+    return Object.keys(data);
+  } catch (e) {
+    Logger.warn(LOG_TAG, 'extractUpdatedFields failed: ' + String(e));
+    return [];
+  }
 }
 
 /**
@@ -1004,19 +1031,19 @@ function buildReviseMessages(
   const serializedContent: string = JSON.stringify(cardContent, null, 2);
   const trimmedSuggestions: string = suggestions.trim();
 
-  let userPrompt: string = '以下是原始角色卡内容(作为背景信息):\n\n'
+  let userPrompt: string = '以下是原始角色卡内容(作为背景信息,禁止原样复述):\n\n'
     + serializedContent
     + '\n\n【用户的修改建议】:\n'
     + (trimmedSuggestions.length > 0 ? trimmedSuggestions : '(无)')
-    + '\n\n请以原卡为蓝本,依据以上修改建议重新生成一张新的完整 Tavern Card V3 角色卡。要求:'
-    + '\n- 以修改建议为准进行调整;建议要求补全/丰富/替换时,可充实空缺或薄弱的字段、替换不合适或占位性的开场白'
-    + '\n- 未提及的合理内容尽量保留,不做与建议无关的多余删改'
+    + '\n\n请依据修改建议输出增量 JSON:只包含 spec/spec_version/name 骨架和实际修改的字段。要求:'
+    + '\n- 建议要求补全/丰富/替换时,输出充实或替换后的对应字段'
+    + '\n- **未修改的字段完全不要输出**(不要用空值占位),App 会自动保留原卡值'
     + '\n- 不得改名/换角(除非建议明确要求改角色名)'
     + '\n- 保持角色核心身份与世界观基调一致,不引入与建议无关的冲突设定';
   if (includeWorldbook) {
-    userPrompt += '\n- 若修改建议涉及角色世界书(character_book),请按要求修改对应条目;未在建议中明确提及的条目必须原样保留,不得丢失、删减或篡改其内容/关键词';
+    userPrompt += '\n- 若修改建议涉及角色世界书(character_book),请输出修改后的世界书;建议未明确提及的条目必须原样保留在 entries 中,不得丢失、删减或篡改其内容/关键词';
   }
-  userPrompt += '\n- 只输出完整 JSON,不要输出任何其他文字或 Markdown 代码块。';
+  userPrompt += '\n- 只输出 JSON,不要输出任何其他文字或 Markdown 代码块。';
 
   return [
     createChatMessage('ai-rev-sys-' + generateUuid(), ChatRole.System, systemPrompt, Date.now()),
@@ -1099,9 +1126,9 @@ function serializeCharacterBookObject(book: ParsedCharacterBook): SerializableBo
 function buildReviseSystemPrompt(): string {
   return '你是 Tavern Card V3 角色卡修改助手。'
     + '用户会给你一张已有的角色卡作为背景信息,并提出修改建议。'
-    + '你需要以原卡为蓝本,依据修改建议调整对应内容;'
-    + '建议要求补全缺失字段、生成合适开场白或清理脚本类文本时,可相应充实或调整,'
-    + '未提及的合理内容尽量保留,然后输出一张新的完整 Tavern Card V3 角色卡。'
+    + '你需要依据修改建议调整对应内容,以**增量 JSON** 形式输出修改结果:'
+    + 'data 中只包含你实际修改的字段,未修改的字段完全不要输出,由 App 自动保留原卡值。'
+    + '这样能避免复述大段原文,防止超出输出长度限制。'
     + '\n\n最高优先级(必须遵守):'
     + '\n- 以修改建议为准,不擅自做与建议无关的多余改动'
     + '\n- 除非建议明确要求改名,否则 name / nickname 保持原值'
@@ -1170,29 +1197,30 @@ function buildArktavernCapabilityNote(): string {
 }
 
 /**
- * Tavern Card V3 角色卡的 JSON 结构要求(生成/修改/优化共用)。
+ * Tavern Card V3 角色卡的 JSON 结构要求(改卡为增量输出模式)。
  */
 function buildOptimizeJsonStructure(): string {
-  return '\n\nJSON 结构要求(所有字段必填,数组字段即使为空也必须是空数组,extensions 必须是对象,无本 App 扩展需求时为空对象 {}):'
+  return '\n\nJSON 结构要求(增量输出模式,示例):'
     + '\n{'
     + '\n  "spec": "chara_card_v3",'
     + '\n  "spec_version": "3.0",'
     + '\n  "data": {'
-    + '\n    "name": "角色名称(保持原值)",'
-    + '\n    "nickname": "角色昵称/别名(没有则留空)",'
+    + '\n    "name": "角色名称(保持原值,必填)",'
+    + '\n    ...(仅列出本次修改的字段,字段含义如下)...'
+    + '\n    "nickname": "角色昵称/别名",'
     + '\n    "description": "角色身份、经历、外貌和行为习惯的描述",'
     + '\n    "personality": "性格描述",'
     + '\n    "scenario": "场景设定",'
     + '\n    "first_mes": "开场白",'
-    + '\n    "mes_example": "对话示例(空则空字符串)",'
-    + '\n    "creator_notes": "创作者备注(空则空字符串)",'
-    + '\n    "system_prompt": "System Prompt(空则空字符串)",'
-    + '\n    "post_history_instructions": "Post-History Instructions(空则空字符串)",'
+    + '\n    "mes_example": "对话示例",'
+    + '\n    "creator_notes": "创作者备注",'
+    + '\n    "system_prompt": "System Prompt",'
+    + '\n    "post_history_instructions": "Post-History Instructions",'
     + '\n    "alternate_greetings": [],'
     + '\n    "character_book": {"name": "", "description": "", "scan_depth": 100, "token_budget": 500, "recursive_scanning": false, "extensions": {}, "entries": []},'
     + '\n    "tags": [],'
-    + '\n    "creator": "创作者名(空则空字符串)",'
-    + '\n    "character_version": "角色卡版本(空则空字符串)",'
+    + '\n    "creator": "创作者名",'
+    + '\n    "character_version": "角色卡版本",'
     + '\n    "extensions": {'
     + '\n      "arktavern": {'
     + '\n        "status": { "fields": [{ "name": "字段名", "desc": "含义", "type": "number|string", "locked": false }] },'
@@ -1200,7 +1228,13 @@ function buildOptimizeJsonStructure(): string {
     + '\n      }'
     + '\n    }'
     + '\n  }'
-    + '\n}';
+    + '\n}'
+    + '\n\n增量输出规则(重要):'
+    + '\n- data 中**只输出你按建议实际修改的字段**;未修改的字段完全不要输出(不要用空字符串/空数组/null 占位),App 会自动保留原卡值'
+    + '\n- name 为必填骨架字段,未要求改名时输出原值即可'
+    + '\n- 数组字段(alternate_greetings/tags 等)一旦输出即为完整替换值,请输出修改后的完整数组'
+    + '\n- extensions.arktavern 仅在建议涉及状态/前端时输出,且只输出涉及修改的子键(status/frontend),未涉及的子键不要输出'
+    + '\n- character_book 仅在用户显式要求修改世界书时输出';
 }
 
 /**

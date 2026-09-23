@@ -73,6 +73,12 @@ export interface AiGenerationResult {
   readonly meta: AiGenerationMeta | null;
   /** 错误消息(状态为 Failed 时的用户可见消息,取消时为空) */
   readonly errorMessage: string;
+  /**
+   * AI 本次显式输出的 data 顶层字段名(JSON 键,如 "description"/"first_mes")。
+   * 增量修改模式下用于合并:未列出的字段由调用方保留原卡值。
+   * 缺省(undefined)表示未知(如旧流程/生成新卡),调用方应按全量更新处理。
+   */
+  readonly updatedFields?: string[];
 }
 
 /**

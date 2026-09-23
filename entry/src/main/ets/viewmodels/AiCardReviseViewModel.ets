@@ -169,7 +169,7 @@ export class AiCardReviseViewModel {
           let errorMessage: string = result.errorMessage;
           if (result.status === AiGenerationStatus.Success && result.card !== null) {
             const merged: ParsedCharacterCard = mergePreservedFields(
-              sourceCard, result.card, this.includeWorldbook
+              sourceCard, result.card, this.includeWorldbook, result.updatedFields ?? null
             );
             AppStorage.setOrCreate<ParsedCharacterCard | null>(PENDING_AI_CARD_KEY, merged);
             // 来源为 PNG 时,把卡图传给预览页,保存时用作封面
@@ -263,18 +263,32 @@ function mergePreservedExtensions(
 }
 
 /**
- * 把原卡中 AI 再生时可能丢失的数据回填到新卡:
+ * 判断 JSON 字段是否为 AI 本次显式输出(增量合并用)。
+ * updatedFields 为 null 表示未知(旧流程),按全量更新处理保持旧行为。
+ */
+function isFieldUpdated(jsonKey: string, updatedFields: string[] | null): boolean {
+  if (updatedFields === null) {
+    return true;
+  }
+  return updatedFields.indexOf(jsonKey) >= 0;
+}
+
+/**
+ * 把原卡中 AI 再生时可能丢失的数据回填到新卡(增量合并模式):
+ * - 文本/数组字段:仅当 AI 本次显式输出该字段(updatedFields 含对应 JSON 键)时取 AI 值,
+ *   否则保留原卡值——AI 未提及的内容不再被默认值清空
  * - 世界书(character_book):按用户意图决定来源
  *   - includeWorldbook=true(用户要求修改世界书):信任 AI 结果;若 AI 未返回世界书则回退原卡避免丢失
  *   - includeWorldbook=false:完全保留原卡世界书,避免 AI 再生导致丢失/走样
  * - extensions:原卡为基底回填,arktavern 在 AI 显式输出时取 AI 结果(见 mergePreservedExtensions)
- * - 复用校验后的新卡文本字段
- * 保证“只改建议部分,未提及数据尽量不丢”。
+ * - 头像/用户名/创建日期等运行时字段始终保留原卡
+ * 保证"只改建议部分,未提及数据尽量不丢"。
  */
 function mergePreservedFields(
   source: ParsedCharacterCard,
   generated: ParsedCharacterCard,
-  includeWorldbook: boolean
+  includeWorldbook: boolean,
+  updatedFields: string[] | null
 ): ParsedCharacterCard {
   const sourceBook: ParsedCharacterBook | null = source.characterBook;
   const resultBook: ParsedCharacterBook | null = includeWorldbook
@@ -282,29 +296,40 @@ function mergePreservedFields(
     : (sourceBook !== null ? sourceBook : generated.characterBook);
   return {
     name: generated.name,
-    nickname: generated.nickname,
-    description: generated.description,
-    personality: generated.personality,
-    scenario: generated.scenario,
-    firstMessage: generated.firstMessage,
-    systemPrompt: generated.systemPrompt,
+    nickname: isFieldUpdated('nickname', updatedFields) ? generated.nickname : source.nickname,
+    description: isFieldUpdated('description', updatedFields)
+      ? generated.description : source.description,
+    personality: isFieldUpdated('personality', updatedFields)
+      ? generated.personality : source.personality,
+    scenario: isFieldUpdated('scenario', updatedFields) ? generated.scenario : source.scenario,
+    firstMessage: isFieldUpdated('first_mes', updatedFields)
+      ? generated.firstMessage : source.firstMessage,
+    systemPrompt: isFieldUpdated('system_prompt', updatedFields)
+      ? generated.systemPrompt : source.systemPrompt,
     avatarUri: source.avatarUri,
     sourceFormat: 'chara_card_v3',
-    mesExample: generated.mesExample,
-    creatorNotes: generated.creatorNotes,
-    postHistoryInstructions: generated.postHistoryInstructions,
-    alternateGreetings: generated.alternateGreetings,
-    tags: generated.tags,
-    creator: generated.creator,
-    characterVersion: generated.characterVersion,
+    mesExample: isFieldUpdated('mes_example', updatedFields)
+      ? generated.mesExample : source.mesExample,
+    creatorNotes: isFieldUpdated('creator_notes', updatedFields)
+      ? generated.creatorNotes : source.creatorNotes,
+    postHistoryInstructions: isFieldUpdated('post_history_instructions', updatedFields)
+      ? generated.postHistoryInstructions : source.postHistoryInstructions,
+    alternateGreetings: isFieldUpdated('alternate_greetings', updatedFields)
+      ? generated.alternateGreetings : source.alternateGreetings,
+    tags: isFieldUpdated('tags', updatedFields) ? generated.tags : source.tags,
+    creator: isFieldUpdated('creator', updatedFields) ? generated.creator : source.creator,
+    characterVersion: isFieldUpdated('character_version', updatedFields)
+      ? generated.characterVersion : source.characterVersion,
     extensions: mergePreservedExtensions(source.extensions, generated.extensions),
     characterBook: resultBook,
     userName: source.userName,
-    groupOnlyGreetings: generated.groupOnlyGreetings,
-    creatorNotesMultilingual: generated.creatorNotesMultilingual,
-    source: generated.source,
-    assets: generated.assets,
-    creationDate: generated.creationDate,
-    modificationDate: generated.modificationDate
+    groupOnlyGreetings: isFieldUpdated('group_only_greetings', updatedFields)
+      ? generated.groupOnlyGreetings : source.groupOnlyGreetings,
+    creatorNotesMultilingual: isFieldUpdated('creator_notes_multilingual', updatedFields)
+      ? generated.creatorNotesMultilingual : source.creatorNotesMultilingual,
+    source: isFieldUpdated('source', updatedFields) ? generated.source : source.source,
+    assets: isFieldUpdated('assets', updatedFields) ? generated.assets : source.assets,
+    creationDate: source.creationDate,
+    modificationDate: Date.now()
   };
 }
