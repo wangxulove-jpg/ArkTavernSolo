@@ -6,7 +6,7 @@
  */
 
 export const DATABASE_NAME: string = 'arktavern_solo.db';
-export const DATABASE_VERSION: number = 45;
+export const DATABASE_VERSION: number = 46;
 
 export const TABLE_CHARACTERS: string = 'characters';
 export const TABLE_CHATS: string = 'chats';
@@ -222,6 +222,14 @@ export const TABLE_CHAT_LOREBOOK_PINS: string = 'chat_lorebook_pins';
 export const COLUMN_PIN_CHAT_ID: string = 'chat_id';
 export const COLUMN_PIN_LOREBOOK_ID: string = 'lorebook_id';
 export const COLUMN_PIN_ENTRY_IDS_JSON: string = 'entry_ids_json';
+
+// ===== v46: 粘滞按需世界书会话命中(StickyOnDemand) =====
+/** 会话粘滞命中表:每个 chat 一行,记录该会话累计命中的世界书条目 ID(按首次命中顺序,append-only) */
+export const TABLE_CHAT_LOREBOOK_STICKY: string = 'chat_lorebook_sticky';
+
+export const COLUMN_STICKY_CHAT_ID: string = 'chat_id';
+export const COLUMN_STICKY_LOREBOOK_ID: string = 'lorebook_id';
+export const COLUMN_STICKY_ENTRY_IDS_JSON: string = 'entry_ids_json';
 
 // ===== messages 表扩展字段(原 v10/v11 引入,已内建到 CREATE 语句) =====
 export const COLUMN_SENDER_TYPE: string = 'sender_type';

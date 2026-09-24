@@ -37,6 +37,7 @@ import { Logger } from '../utils/Logger';
 import { MessageSwipeSummary } from '../models/MessageSwipe';
 import { TokenBudget } from '../models/TokenBudget';
 import { AppServices } from '../services/AppServices';
+import { ChatMemoryMode } from '../services/ChatMemoryModeService';
 import { LorebookService } from '../services/LorebookService';
 import { Lorebook, LorebookEntry, LorebookPosition, LorebookEntryUpdates } from '../models/Lorebook';
 import { AiLorebookService, AiLorebookMode, AiLorebookInput } from '../services/ai/AiLorebookService';
@@ -1336,6 +1337,42 @@ export class ChatViewModel {
 
   getCurrentChatId(): string | undefined {
     return this.chatService.getCurrentChatId();
+  }
+
+  /** v50: 读取当前会话记忆模式('manual' 手动 / 'auto' 自动章节归档)。 */
+  async getMemoryMode(): Promise<ChatMemoryMode> {
+    const chatId: string | undefined = this.chatService.getCurrentChatId();
+    if (chatId === undefined || chatId.length === 0) {
+      return 'manual';
+    }
+    return await AppServices.getChatMemoryModeService().getMemoryMode(chatId);
+  }
+
+  /** v50: 设置当前会话记忆模式并持久化。 */
+  async setMemoryMode(mode: ChatMemoryMode): Promise<void> {
+    const chatId: string | undefined = this.chatService.getCurrentChatId();
+    if (chatId === undefined || chatId.length === 0) {
+      return;
+    }
+    await AppServices.getChatMemoryModeService().setMemoryMode(chatId, mode);
+  }
+
+  /** v50: 读取当前会话"注入最近章节数"(1-20,默认 4)。 */
+  async getChapterInjectCount(): Promise<number> {
+    const chatId: string | undefined = this.chatService.getCurrentChatId();
+    if (chatId === undefined || chatId.length === 0) {
+      return 4;
+    }
+    return await AppServices.getChatMemoryModeService().getChapterInjectCount(chatId);
+  }
+
+  /** v50: 设置当前会话"注入最近章节数"(自动 clamp 到 1-20)。 */
+  async setChapterInjectCount(value: number): Promise<void> {
+    const chatId: string | undefined = this.chatService.getCurrentChatId();
+    if (chatId === undefined || chatId.length === 0) {
+      return;
+    }
+    await AppServices.getChatMemoryModeService().setChapterInjectCount(chatId, value);
   }
 
   getCurrentChatUserNameOverride(): string {

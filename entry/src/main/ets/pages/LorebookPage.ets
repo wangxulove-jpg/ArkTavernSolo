@@ -68,6 +68,8 @@ struct LorebookPage {
   @State editLorebookActivationMode: number = 0;
   @State editLorebookBudget: string = '';
   @State editLorebookScanDepth: string = '';
+  /** 本地 @State 镜像:全局按需深度注入位置(0-8,0=对话之后,缓存最优) */
+  @State globalInjectionDepth: number = 0;
   /** 顶部状态栏避让高度(由 EntryAbility 写入 AppStorage) */
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   /** 底部手势条/导航栏避让高度(由 EntryAbility 写入 AppStorage) */
@@ -132,6 +134,7 @@ struct LorebookPage {
     this.editLorebookActivationMode = this.viewModel.editLorebookActivationMode;
     this.editLorebookBudget = this.viewModel.editLorebookBudget;
     this.editLorebookScanDepth = this.viewModel.editLorebookScanDepth;
+    this.globalInjectionDepth = this.viewModel.globalInjectionDepth;
   }
 
   /** 选择并导入世界书文件(JSON)。成功后弹出操作弹窗。 */
@@ -225,6 +228,44 @@ struct LorebookPage {
 
         // 内容区
         Column() {
+          // 全局按需深度注入位置(仅"按需加载"模式生效,0=对话之后为缓存最优)
+          Column() {
+            Row() {
+              Text('按需深度注入位置')
+                .fontSize(13)
+                .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+                .layoutWeight(1)
+
+              Text(this.globalInjectionDepth === 0
+                ? '对话之后(缓存最优)'
+                : '倒数第 ' + this.globalInjectionDepth + ' 条消息前')
+                .fontSize(13)
+                .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+            }
+            .width('100%')
+            .margin({ bottom: 2 })
+
+            Slider({ value: this.globalInjectionDepth, min: 0, max: 8, step: 1 })
+              .width('100%')
+              .height(28)
+              .onChange((value: number) => {
+                const depth: number = Math.round(value);
+                if (depth !== this.globalInjectionDepth) {
+                  this.globalInjectionDepth = depth;
+                  if (this.viewModel !== null) {
+                    void this.viewModel.setGlobalInjectionDepth(depth);
+                  }
+                }
+              })
+
+            Text('仅"按需加载"模式生效:关键词命中条目的注入位置。0=全部对话之后,不打断前缀、缓存命中最优;数值越大越靠近对话末尾(模型关注度更高,但会打断缓存前缀)。')
+              .fontSize(11)
+              .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+              .width('100%')
+          }
+          .width('100%')
+          .padding({ left: 16, right: 16, top: 4, bottom: 8 })
+
           if (this.lorebooks.length === 0) {
             this.emptyState();
           } else {
@@ -785,69 +826,94 @@ struct LorebookPage {
             }
           })
 
-        // 激活方式(三选一:全量发给模型 / 按需加载 / 按需锁定)
+        // 激活方式(四选一:全量发给模型 / 按需加载 / 按需锁定 / 粘滞按需)
         Text('加载方式')
           .fontSize(13)
           .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
           .width('100%')
           .margin({ bottom: 4 })
 
-        Row() {
-          Button('全部发给模型')
-            .fontSize(12)
-            .backgroundColor(this.editLorebookActivationMode === 1
-              ? ThemePalette.accentColor(this.effectiveTheme)
-              : ThemePalette.surface2Color(this.effectiveTheme))
-            .fontColor(this.editLorebookActivationMode === 1
-              ? $r('app.color.app_on_accent')
-              : ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .borderRadius(16)
-            .height(32)
-            .layoutWeight(1)
-            .margin({ right: 4 })
-            .onClick(() => {
-              if (this.viewModel !== null) {
-                this.viewModel.editLorebookActivationMode = 1;
-              }
-              this.editLorebookActivationMode = 1;
-            })
+        Column() {
+          Row() {
+            Button('全部发给模型')
+              .fontSize(12)
+              .backgroundColor(this.editLorebookActivationMode === 1
+                ? ThemePalette.accentColor(this.effectiveTheme)
+                : ThemePalette.surface2Color(this.effectiveTheme))
+              .fontColor(this.editLorebookActivationMode === 1
+                ? $r('app.color.app_on_accent')
+                : ThemePalette.textPrimaryColor(this.effectiveTheme))
+              .borderRadius(16)
+              .height(32)
+              .layoutWeight(1)
+              .margin({ right: 4 })
+              .onClick(() => {
+                if (this.viewModel !== null) {
+                  this.viewModel.editLorebookActivationMode = 1;
+                }
+                this.editLorebookActivationMode = 1;
+              })
 
-          Button('按需加载')
-            .fontSize(12)
-            .backgroundColor(this.editLorebookActivationMode === 2
-              ? ThemePalette.accentColor(this.effectiveTheme)
-              : ThemePalette.surface2Color(this.effectiveTheme))
-            .fontColor(this.editLorebookActivationMode === 2
-              ? $r('app.color.app_on_accent')
-              : ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .borderRadius(16)
-            .height(32)
-            .layoutWeight(1)
-            .margin({ right: 4 })
-            .onClick(() => {
-              if (this.viewModel !== null) {
-                this.viewModel.editLorebookActivationMode = 2;
-              }
-              this.editLorebookActivationMode = 2;
-            })
+            Button('按需加载')
+              .fontSize(12)
+              .backgroundColor(this.editLorebookActivationMode === 2
+                ? ThemePalette.accentColor(this.effectiveTheme)
+                : ThemePalette.surface2Color(this.effectiveTheme))
+              .fontColor(this.editLorebookActivationMode === 2
+                ? $r('app.color.app_on_accent')
+                : ThemePalette.textPrimaryColor(this.effectiveTheme))
+              .borderRadius(16)
+              .height(32)
+              .layoutWeight(1)
+              .onClick(() => {
+                if (this.viewModel !== null) {
+                  this.viewModel.editLorebookActivationMode = 2;
+                }
+                this.editLorebookActivationMode = 2;
+              })
+          }
+          .width('100%')
+          .margin({ bottom: 6 })
 
-          Button('按需锁定')
-            .fontSize(12)
-            .backgroundColor(this.editLorebookActivationMode === 3
-              ? ThemePalette.accentColor(this.effectiveTheme)
-              : ThemePalette.surface2Color(this.effectiveTheme))
-            .fontColor(this.editLorebookActivationMode === 3
-              ? $r('app.color.app_on_accent')
-              : ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .borderRadius(16)
-            .height(32)
-            .layoutWeight(1)
-            .onClick(() => {
-              if (this.viewModel !== null) {
-                this.viewModel.editLorebookActivationMode = 3;
-              }
-              this.editLorebookActivationMode = 3;
-            })
+          Row() {
+            Button('按需锁定')
+              .fontSize(12)
+              .backgroundColor(this.editLorebookActivationMode === 3
+                ? ThemePalette.accentColor(this.effectiveTheme)
+                : ThemePalette.surface2Color(this.effectiveTheme))
+              .fontColor(this.editLorebookActivationMode === 3
+                ? $r('app.color.app_on_accent')
+                : ThemePalette.textPrimaryColor(this.effectiveTheme))
+              .borderRadius(16)
+              .height(32)
+              .layoutWeight(1)
+              .margin({ right: 4 })
+              .onClick(() => {
+                if (this.viewModel !== null) {
+                  this.viewModel.editLorebookActivationMode = 3;
+                }
+                this.editLorebookActivationMode = 3;
+              })
+
+            Button('粘滞按需')
+              .fontSize(12)
+              .backgroundColor(this.editLorebookActivationMode === 4
+                ? ThemePalette.accentColor(this.effectiveTheme)
+                : ThemePalette.surface2Color(this.effectiveTheme))
+              .fontColor(this.editLorebookActivationMode === 4
+                ? $r('app.color.app_on_accent')
+                : ThemePalette.textPrimaryColor(this.effectiveTheme))
+              .borderRadius(16)
+              .height(32)
+              .layoutWeight(1)
+              .onClick(() => {
+                if (this.viewModel !== null) {
+                  this.viewModel.editLorebookActivationMode = 4;
+                }
+                this.editLorebookActivationMode = 4;
+              })
+          }
+          .width('100%')
         }
         .width('100%')
         .margin({ bottom: 4 })
@@ -856,6 +922,8 @@ struct LorebookPage {
           ? '全量:整本世界书全部发给模型,内容固定、缓存命中最高,适合小书'
           : this.editLorebookActivationMode === 3
           ? '按需锁定:首次按消息匹配后固定注入到记忆之后、对话之前,切换对话/重新生成都不变化,手动记忆总结时才刷新,缓存友好,适合大书'
+          : this.editLorebookActivationMode === 4
+          ? '粘滞按需:关键词命中后会话内持续保留,按首次命中顺序追加注入到对话之后,不打断对话前缀,缓存命中最优(推荐)'
           : '按需:恒定条目注入头部,关键词命中条目注入对话尾部,最省上下文,适合大书')
           .fontSize(11)
           .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))

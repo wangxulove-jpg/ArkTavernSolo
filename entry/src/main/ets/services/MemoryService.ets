@@ -300,13 +300,18 @@ export class MemoryService {
    *        v47: 跨会话只注入 会话记忆(入口摘要),不再注入世界共享核心记忆;
    *        章节只注入本会话的最近 N 章;
    *        其他会话细节通过"会话记忆 + 按需加载"串联。默认 '' 不启用(章节为空)。
+   * @param chapterInjectCount v50: 会话级"注入最近章节数"覆盖(1-20)。
+   *        未传(0)时使用 chapterConfig.recentChapterInjectCount 默认值。
    * @returns 多层记忆注入上下文(全空时 enabled=false)
    */
   async getMultiLayerInjectionContext(
     branchId: string,
     worldId: string = '',
-    currentChatId: string = ''
+    currentChatId: string = '',
+    chapterInjectCount: number = 0
   ): Promise<MultiLayerMemoryInjection> {
+    const injectCount: number = chapterInjectCount > 0
+      ? chapterInjectCount : this.chapterConfig.recentChapterInjectCount;
     if (branchId.length === 0) {
       return createEmptyMultiLayerInjection();
     }
@@ -353,7 +358,7 @@ export class MemoryService {
 
       // Chapter 按时间倒序保留最近 N 个
       chapter.sort((a: ChatMemory, b: ChatMemory): number => b.endPosition - a.endPosition);
-      const recentChapter: ChatMemory[] = chapter.slice(0, this.chapterConfig.recentChapterInjectCount);
+      const recentChapter: ChatMemory[] = chapter.slice(0, injectCount);
 
       // Rolling 保留最近 1 条(endPosition 最大)
       rolling.sort((a: ChatMemory, b: ChatMemory): number => b.endPosition - a.endPosition);
@@ -383,7 +388,7 @@ export class MemoryService {
         const ownChapters: ChatMemory[] = worldChapters.filter(
           (m: ChatMemory): boolean => m.chatId === currentChatId
         );
-        finalChapter = ownChapters.slice(0, this.chapterConfig.recentChapterInjectCount);
+        finalChapter = ownChapters.slice(0, injectCount);
       }
 
       const combined: string = buildCombinedSummary(finalCore, finalSession, finalChapter, recentRolling, legacy);
@@ -783,6 +788,36 @@ export class MemoryService {
 
     // 2. 未达章节阈值或章节失败 → rolling
     return await this.trySummarize(chatId, branchId, branchMessages);
+  }
+
+  /**
+   * v50: 自动章节归档模式(会话级记忆模式 'auto')。
+   *
+   * 与 tryGenerateMultiLayerMemory 的区别:
+   * - 只做章节生成:**不回退 rolling 覆盖更新**(rolling 每次覆盖会破坏
+   *   对话前缀缓存,与缓存命中率目标冲突)
+   * - 未达章节阈值直接返回成功(无操作),达阈值追加新章节(append-only)
+   * - 章节生成失败也返回 success=false 但不产生 rolling
+   */
+  async tryAutoChapterMemory(
+    chatId: string,
+    branchId: string,
+    branchMessages: ChatMessage[]
+  ): Promise<MemorySummaryResult> {
+    if (branchMessages.length === 0) {
+      return { success: true, memory: null };
+    }
+    const shouldChapter: boolean = await this.shouldGenerateChapter(branchId, branchMessages, chatId);
+    if (!shouldChapter) {
+      return { success: true, memory: null };
+    }
+    const chapterResult: MemorySummaryResult = await this.generateChapterMemory(
+      chatId, branchId, branchMessages
+    );
+    if (chapterResult.success) {
+      this.triggerCoreMemoryUpdateAsync(chatId, branchId, branchMessages);
+    }
+    return chapterResult;
   }
 
   /**

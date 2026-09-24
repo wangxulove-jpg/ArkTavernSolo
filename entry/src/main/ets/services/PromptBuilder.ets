@@ -110,6 +110,13 @@ export interface PromptBuildContext {
    * 注入到核心记忆之后、会话记忆之前(LorebookPinned 位置),随手动记忆总结一起更新。
    */
   pinnedLorebookEntries?: LorebookEntry[];
+  /**
+   * v46: StickyOnDemand(粘滞按需)模式的会话粘滞命中条目(可选)。
+   * 由调用方通过 LorebookStickyService.ensureStickyEntries 预先解析后传入;
+   * 合并为单条 System 消息注入到对话之后、PostHistory 之前(LorebookSticky 位置),
+   * append-only 保证块内已注入前缀缓存命中。
+   */
+  stickyLorebookEntries?: LorebookEntry[];
   /** v44: 记忆关键词检索命中的历史章节(可选开关,位置固定于对话前)。 */
   memoryKeywordHits?: MemoryKeywordHit[];
   /** 用户身份(可选,提供时注入到提示词) */
@@ -411,6 +418,27 @@ export class PromptBuilder {
       segments.push(lorebookDepthSeg);
     }
 
+    // 5.7 StickyOnDemand 粘滞世界书命中(v46)
+    // 合并为单条 System 消息注入到对话之后、PostHistory 之前(尾部动态区)。
+    // 单条消息保证 token 序列 append-only:块尾追加新命中时已注入前缀缓存命中。
+    if (context.stickyLorebookEntries !== undefined && context.stickyLorebookEntries.length > 0) {
+      const parts: string[] = [];
+      for (let i = 0; i < context.stickyLorebookEntries.length; i++) {
+        matchedIds.push(context.stickyLorebookEntries[i].id);
+        parts.push(context.stickyLorebookEntries[i].content);
+      }
+      const stickySeg: PromptSegment = createPromptSegment(
+        'lorebook-sticky',
+        PromptSegmentPosition.LorebookSticky,
+        ChatRole.System,
+        parts.join('\n\n'),
+        0,
+        ChatMessageSource.LorebookSticky,
+        '粘滞世界书'
+      );
+      segments.push(stickySeg);
+    }
+
     // 6. Post-History Instructions(放在聊天历史之后)
     // 只有在功能启用时才注入,不作为可见聊天消息保存
     if (context.character !== undefined && context.character !== null) {
@@ -654,11 +682,17 @@ export class PromptBuilder {
       this.pushHeadSegments(this.lorebookService.collectAllEntries(book), segments, matchedIds);
       return;
     }
-    // OnDemand / OnDemandPinned:constant 注入头部
+    // OnDemand / OnDemandPinned / StickyOnDemand:constant 注入头部
     this.pushHeadSegments(this.lorebookService.collectConstantEntries(book), segments, matchedIds);
     if (mode === LorebookActivationMode.OnDemandPinned) {
       // OnDemandPinned:非 constant 条目由会话钉选决定(context.pinnedLorebookEntries),
       // 在步骤 4.7 注入到记忆之后、对话之前;不做逐次关键词匹配与深度注入
+      return;
+    }
+    if (mode === LorebookActivationMode.StickyOnDemand) {
+      // StickyOnDemand:非 constant 条目由会话粘滞命中决定(context.stickyLorebookEntries),
+      // 在步骤 5.7 注入到对话之后、PostHistory 之前(append-only 保缓存);
+      // 不做逐次深度注入
       return;
     }
     // OnDemand:命中条目累积到深度计划

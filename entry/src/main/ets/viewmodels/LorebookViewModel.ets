@@ -30,6 +30,7 @@ const LOG_TAG: string = 'LorebookViewModel';
 const GLOBAL_MODE_FULL_INJECT: LorebookActivationMode = LorebookActivationMode.FullInject;
 const GLOBAL_MODE_ON_DEMAND: LorebookActivationMode = LorebookActivationMode.OnDemand;
 const GLOBAL_MODE_ON_DEMAND_PINNED: LorebookActivationMode = LorebookActivationMode.OnDemandPinned;
+const GLOBAL_MODE_STICKY: LorebookActivationMode = LorebookActivationMode.StickyOnDemand;
 /** 注入预算上限(与模型校验一致) */
 const MAX_INJECTION_BUDGET_CHARS: number = 200000;
 
@@ -97,10 +98,10 @@ export class LorebookViewModel {
   deleteTargetEntry: LorebookEntry | null = null;
   deleteTargetEntryLorebookId: string = '';
 
-  /** 全局默认激活方式(FullInject / OnDemand),默认 OnDemand */
-  globalActivationMode: LorebookActivationMode = GLOBAL_MODE_ON_DEMAND;
-  /** 全局深度注入位置(0-8),默认 2 */
-  globalInjectionDepth: number = 2;
+  /** 全局默认激活方式(FullInject/OnDemand/OnDemandPinned/StickyOnDemand),默认 StickyOnDemand(v46 缓存最优) */
+  globalActivationMode: LorebookActivationMode = GLOBAL_MODE_STICKY;
+  /** 全局深度注入位置(0-8),默认 0=对话之后(v46 缓存最优) */
+  globalInjectionDepth: number = 0;
 
   private readonly service: LorebookService;
   private readonly characterService: CharacterService;
@@ -141,24 +142,24 @@ export class LorebookViewModel {
       const modeVal: string = await this.appPreferences.getString(
         LOREBOOK_ACTIVATION_DEFAULT_PREFS_KEY, '');
       if (modeVal === GLOBAL_MODE_FULL_INJECT || modeVal === GLOBAL_MODE_ON_DEMAND
-        || modeVal === GLOBAL_MODE_ON_DEMAND_PINNED) {
+        || modeVal === GLOBAL_MODE_ON_DEMAND_PINNED || modeVal === GLOBAL_MODE_STICKY) {
         this.globalActivationMode = modeVal as LorebookActivationMode;
       } else {
-        this.globalActivationMode = GLOBAL_MODE_ON_DEMAND;
+        this.globalActivationMode = GLOBAL_MODE_STICKY;
       }
     } catch (e) {
       Logger.warn(LOG_TAG, 'loadGlobalSettings mode failed: ' + String(e));
-      this.globalActivationMode = GLOBAL_MODE_ON_DEMAND;
+      this.globalActivationMode = GLOBAL_MODE_STICKY;
     }
     try {
       const depthStr: string = await this.appPreferences.getString(
         LOREBOOK_INJECTION_DEPTH_PREFS_KEY, '');
       const parsed: number = Number(depthStr);
       this.globalInjectionDepth = Number.isFinite(parsed) && parsed >= 0 && parsed <= 8
-        ? Math.floor(parsed) : 2;
+        ? Math.floor(parsed) : 0;
     } catch (e) {
       Logger.warn(LOG_TAG, 'loadGlobalSettings depth failed: ' + String(e));
-      this.globalInjectionDepth = 2;
+      this.globalInjectionDepth = 0;
     }
   }
 
@@ -384,13 +385,16 @@ export class LorebookViewModel {
       if (this.globalActivationMode === GLOBAL_MODE_ON_DEMAND_PINNED) {
         return 3;
       }
+      if (this.globalActivationMode === GLOBAL_MODE_STICKY) {
+        return 4;
+      }
       return 2;
     }
     return this.activationModeToNumber(mode);
   }
 
   /**
-   * 激活方式枚举 → UI 档位(1=全量/2=按需/3=按需锁定,0 仅供遗留 FollowGlobal 展示)。
+   * 激活方式枚举 → UI 档位(1=全量/2=按需/3=按需锁定/4=粘滞按需,0 仅供遗留 FollowGlobal 展示)。
    */
   activationModeToNumber(mode: LorebookActivationMode): number {
     if (mode === LorebookActivationMode.FullInject) {
@@ -401,6 +405,9 @@ export class LorebookViewModel {
     }
     if (mode === LorebookActivationMode.OnDemandPinned) {
       return 3;
+    }
+    if (mode === LorebookActivationMode.StickyOnDemand) {
+      return 4;
     }
     return 0;
   }
@@ -417,6 +424,9 @@ export class LorebookViewModel {
     }
     if (value === 3) {
       return LorebookActivationMode.OnDemandPinned;
+    }
+    if (value === 4) {
+      return LorebookActivationMode.StickyOnDemand;
     }
     return LorebookActivationMode.FollowGlobal;
   }
@@ -519,7 +529,8 @@ export class LorebookViewModel {
     const mode: LorebookActivationMode = modeOverride !== undefined
       ? modeOverride : lorebook.activationMode;
     if (mode === LorebookActivationMode.OnDemand
-      || mode === LorebookActivationMode.OnDemandPinned) {
+      || mode === LorebookActivationMode.OnDemandPinned
+      || mode === LorebookActivationMode.StickyOnDemand) {
       return '';
     }
     const stats: LorebookStats = this.computeLorebookStats(lorebook);
@@ -531,7 +542,7 @@ export class LorebookViewModel {
     return '';
   }
 
-  /** 编辑弹窗按 UI 档位(1=全量/2=按需/3=按需锁定)即时判断超预算告警。 */
+  /** 编辑弹窗按 UI 档位(1=全量/2=按需/3=按需锁定/4=粘滞按需)即时判断超预算告警。 */
   computeBudgetWarningForUi(lorebook: Lorebook, uiMode: number): string {
     const mode: LorebookActivationMode = this.numberToActivationMode(uiMode);
     return this.computeBudgetWarning(lorebook, mode);
@@ -559,6 +570,9 @@ export class LorebookViewModel {
     }
     if (mode === LorebookActivationMode.OnDemandPinned) {
       return '按需锁定';
+    }
+    if (mode === LorebookActivationMode.StickyOnDemand) {
+      return '粘滞';
     }
     return '跟随全局';
   }

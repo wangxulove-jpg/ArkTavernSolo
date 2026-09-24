@@ -30,12 +30,16 @@ export enum LorebookPosition {
  * - OnDemand: 按需激活(constant 注入头部 + 关键词命中注入深度位置,省上下文)
  * - OnDemandPinned: 按需锁定(首次按需匹配后固定注入到记忆之后、对话之前,
  *   按会话持久化;仅在手动记忆总结成功后用全量对话重新匹配刷新,缓存友好)
+ * - StickyOnDemand: 粘滞按需(constant 注入头部;非 constant 关键词命中后会话内
+ *   只增不减,按首次命中顺序追加注入到对话之后(尾部动态区),追加式保证块内
+ *   已注入前缀缓存命中;仅手动记忆总结成功后全量重算刷新;膨胀由注入预算控制)
  */
 export enum LorebookActivationMode {
   FollowGlobal = 'FollowGlobal',
   FullInject = 'FullInject',
   OnDemand = 'OnDemand',
-  OnDemandPinned = 'OnDemandPinned'
+  OnDemandPinned = 'OnDemandPinned',
+  StickyOnDemand = 'StickyOnDemand'
 }
 
 /**
@@ -220,7 +224,8 @@ export function isValidActivationMode(mode: LorebookActivationMode): boolean {
   return mode === LorebookActivationMode.FollowGlobal ||
     mode === LorebookActivationMode.FullInject ||
     mode === LorebookActivationMode.OnDemand ||
-    mode === LorebookActivationMode.OnDemandPinned;
+    mode === LorebookActivationMode.OnDemandPinned ||
+    mode === LorebookActivationMode.StickyOnDemand;
 }
 
 /**

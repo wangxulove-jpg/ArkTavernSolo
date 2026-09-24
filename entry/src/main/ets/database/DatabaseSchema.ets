@@ -118,6 +118,10 @@ import {
   COLUMN_PIN_CHAT_ID,
   COLUMN_PIN_LOREBOOK_ID,
   COLUMN_PIN_ENTRY_IDS_JSON,
+  TABLE_CHAT_LOREBOOK_STICKY,
+  COLUMN_STICKY_CHAT_ID,
+  COLUMN_STICKY_LOREBOOK_ID,
+  COLUMN_STICKY_ENTRY_IDS_JSON,
   TABLE_CHAT_MEMORIES,
   COLUMN_MEMORY_ID,
   COLUMN_MEMORY_CHAT_ID,
@@ -2518,10 +2522,35 @@ export const V44_TO_V45_DDL_STATEMENTS: string[] = [
   CREATE_CHAT_LOREBOOK_PINS_TABLE
 ];
 
+// ===== v46: 粘滞按需世界书会话命中(StickyOnDemand) =====
+/** 会话粘滞命中表(每个 chat 一行,chat_id 主键,entry_ids_json 按首次命中顺序) */
+const CREATE_CHAT_LOREBOOK_STICKY_TABLE: string =
+  `CREATE TABLE IF NOT EXISTS ${TABLE_CHAT_LOREBOOK_STICKY} (` +
+  `${COLUMN_STICKY_CHAT_ID} TEXT PRIMARY KEY NOT NULL, ` +
+  `${COLUMN_STICKY_LOREBOOK_ID} TEXT NOT NULL, ` +
+  `${COLUMN_STICKY_ENTRY_IDS_JSON} TEXT NOT NULL DEFAULT '[]', ` +
+  `${COLUMN_CREATED_AT} INTEGER NOT NULL, ` +
+  `${COLUMN_UPDATED_AT} INTEGER NOT NULL` +
+  `)`;
+
+/**
+ * v45→v46 迁移 DDL(粘滞按需世界书会话命中表)。
+ * 安全性:仅 CREATE TABLE IF NOT EXISTS,幂等,不动现有数据。
+ */
+export const V45_TO_V46_DDL_STATEMENTS: string[] = [
+  CREATE_CHAT_LOREBOOK_STICKY_TABLE
+];
+
 /** v45 完整 Schema(新安装使用) */
 export const V45_SCHEMA_STATEMENTS: string[] = [
   ...V44_SCHEMA_STATEMENTS,
   CREATE_CHAT_LOREBOOK_PINS_TABLE
+];
+
+/** v46 完整 Schema(新安装使用) */
+export const V46_SCHEMA_STATEMENTS: string[] = [
+  ...V45_SCHEMA_STATEMENTS,
+  CREATE_CHAT_LOREBOOK_STICKY_TABLE
 ];
 
 export function getSchemaStatements(version: number): string[] {
@@ -2650,6 +2679,9 @@ export function getSchemaStatements(version: number): string[] {
   }
   if (version === 45) {
     return [...V45_SCHEMA_STATEMENTS];
+  }
+  if (version === 46) {
+    return [...V46_SCHEMA_STATEMENTS];
   }
   return [];
 }

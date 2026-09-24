@@ -611,4 +611,32 @@ export class LorebookService {
     }
     return result;
   }
+
+  /**
+   * 按 ids 数组顺序返回 enabled 条目(与 getEntriesByIds 的区别:保持入参顺序)。
+   * 供 StickyOnDemand 粘滞命中按首次命中顺序注入使用(append-only 保缓存前缀)。
+   */
+  getEntriesByIdsOrdered(lorebook: Lorebook, ids: string[]): LorebookEntry[] {
+    const byId: Map<string, LorebookEntry> = new Map();
+    for (let i = 0; i < lorebook.entries.length; i++) {
+      const entry: LorebookEntry = lorebook.entries[i];
+      if (entry.enabled) {
+        byId.set(entry.id, entry);
+      }
+    }
+    const result: LorebookEntry[] = [];
+    const seen: Set<string> = new Set();
+    for (let i = 0; i < ids.length; i++) {
+      const id: string = ids[i];
+      if (seen.has(id)) {
+        continue;
+      }
+      seen.add(id);
+      const entry: LorebookEntry | undefined = byId.get(id);
+      if (entry !== undefined) {
+        result.push(entry);
+      }
+    }
+    return result;
+  }
 }

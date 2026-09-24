@@ -52,6 +52,8 @@ export struct ChatMoreMenuSheet {
   onGoChatBackground: () => void = () => {};
   /** 前往对话记忆管理 */
   onGoMemory: () => void = () => {};
+  /** v50: 打开记忆模式选择(手动总结/自动归档 + 章节注入数) */
+  onEditMemoryMode: () => void = () => {};
   /** 前往上下文管理 */
   onGoContextBudget: () => void = () => {};
   /** 前往续写/代写引导设置 */
@@ -81,6 +83,8 @@ export struct ChatMoreMenuSheet {
   @Prop currentConversationId: string = '';
   /** T-CHAT.1: 当前角色 ID(空表示无角色,隐藏"导出该角色全部聊天") */
   @Prop currentCharacterId: string = '';
+  /** v50: 当前会话记忆模式显示文本(手动总结/自动归档) */
+  @Prop memoryModeText: string = '手动总结';
 
   aboutToAppear(): void {
     // 组件挂载(chatPage 外层 if 为真)时触发 bindSheet 向上滑出
@@ -150,6 +154,14 @@ export struct ChatMoreMenuSheet {
           return;
         }
         this.onGoMemory();
+      })
+
+      // v50: 记忆模式(手动总结/自动归档,会话级)
+      this.infoRow('记忆模式', this.memoryModeText, !this.busy, (): void => {
+        if (this.busy) {
+          return;
+        }
+        this.onEditMemoryMode();
       })
 
       // 上下文管理(预算设置 + 占用查看)

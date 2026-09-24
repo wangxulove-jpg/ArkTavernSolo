@@ -1,5 +1,5 @@
 /**
- * 世界书激活方式枚举测试(v45: 新增 OnDemandPinned 按需锁定)
+ * 世界书激活方式枚举测试(v45: 新增 OnDemandPinned 按需锁定;v46: 新增 StickyOnDemand 粘滞按需)
  *
  * 验证:
  * - 枚举值字符串与持久化格式一致
@@ -15,11 +15,16 @@ export default function lorebookActivationTest() {
       expect(LorebookActivationMode.OnDemandPinned).assertEqual('OnDemandPinned');
     });
 
+    it('sticky_on_demand_has_persisted_value', 0, () => {
+      expect(LorebookActivationMode.StickyOnDemand).assertEqual('StickyOnDemand');
+    });
+
     it('on_demand_pinned_passes_validation', 0, () => {
       expect(isValidActivationMode(LorebookActivationMode.OnDemandPinned)).assertTrue();
       expect(isValidActivationMode(LorebookActivationMode.FollowGlobal)).assertTrue();
       expect(isValidActivationMode(LorebookActivationMode.FullInject)).assertTrue();
       expect(isValidActivationMode(LorebookActivationMode.OnDemand)).assertTrue();
+      expect(isValidActivationMode(LorebookActivationMode.StickyOnDemand)).assertTrue();
       // 非法字符串应被拒绝
       expect(isValidActivationMode('Whatever' as LorebookActivationMode)).assertFalse();
     });
@@ -35,7 +40,8 @@ export default function lorebookActivationTest() {
         LorebookActivationMode.FollowGlobal,
         LorebookActivationMode.FullInject,
         LorebookActivationMode.OnDemand,
-        LorebookActivationMode.OnDemandPinned
+        LorebookActivationMode.OnDemandPinned,
+        LorebookActivationMode.StickyOnDemand
       ];
       const seen: Set<string> = new Set<string>();
       for (let i = 0; i < values.length; i++) {

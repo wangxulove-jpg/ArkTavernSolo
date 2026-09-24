@@ -21,7 +21,16 @@ import { util } from '@kit.ArkTS';
 import { Character, createCharacter, updateCharacter, validateCharacter, CharacterUpdates } from '../models/Character';
 import { CharacterRepository, CharacterBookRef } from '../repositories/CharacterRepository';
 import { LorebookRepository } from '../repositories/LorebookRepository';
-import { LorebookPosition, createLorebook, createLorebookEntry, updateLorebook, Lorebook, LorebookEntry } from '../models/Lorebook';
+import {
+  LorebookPosition,
+  createLorebook,
+  createLorebookEntry,
+  updateLorebook,
+  Lorebook,
+  LorebookEntry,
+  LorebookActivationMode,
+  isValidActivationMode
+} from '../models/Lorebook';
 import { CharacterSelectionStore } from '../storage/CharacterSelectionStore';
 import { CharacterAssetStore } from '../storage/CharacterAssetStore';
 import { DatabaseError, DatabaseErrorType } from '../models/DatabaseError';
@@ -838,7 +847,14 @@ export class CharacterService {
       return '';
     }
     const bookName: string = parsed.name + CHARACTER_BOOK_NAME_SUFFIX;
-    const lorebook: Lorebook = createLorebook(bookName, '从角色卡导入的专属世界书', true);
+    // v50: 读取 character_book.extensions.arktavern 注入建议(制卡工具写入),
+    // 回退 V2 标准 scanDepth / tokenBudget
+    const suggestion: BookInjectionSuggestion =
+      parseBookInjectionSuggestion(parsed.characterBook);
+    const lorebook: Lorebook = createLorebook(
+      bookName, '从角色卡导入的专属世界书', true,
+      suggestion.activationMode, suggestion.injectionBudgetChars, suggestion.scanDepth
+    );
     const entries: LorebookEntry[] = [];
     for (let i = 0; i < parsed.characterBook.entries.length; i++) {
       const entry: ParsedCharacterBookEntry = parsed.characterBook.entries[i];
@@ -1029,6 +1045,67 @@ function mapCharacterBookPosition(position: string): LorebookPosition {
     return LorebookPosition.AfterCharacter;
   }
   return LorebookPosition.BeforeCharacter;
+}
+
+/** v50: character_book.extensions.arktavern 注入建议(制卡工具写入)。 */
+interface BookInjectionSuggestion {
+  activationMode: LorebookActivationMode;
+  injectionBudgetChars: number;
+  scanDepth: number;
+}
+
+/**
+ * v50: 解析 character_book 的注入建议。
+ *
+ * 优先读取 extensions.arktavern 子对象的:
+ * - activationMode(校验合法枚举才用,默认 FollowGlobal 跟随全局默认)
+ * - scanDepth(0-50)
+ * - injectionBudgetChars(0-200000)
+ *
+ * 回退:extensions 无建议时,scanDepth 用 V2 标准 scan_depth,
+ * token_budget(按 1 token ≈ 4 字符)折算注入预算(上限 200000)。
+ */
+function parseBookInjectionSuggestion(book: ParsedCharacterBook): BookInjectionSuggestion {
+  const result: BookInjectionSuggestion = {
+    activationMode: LorebookActivationMode.FollowGlobal,
+    injectionBudgetChars: 0,
+    scanDepth: 0
+  };
+  // V2 标准 fallback:scan_depth + token_budget(≈4 字符/token)
+  if (book.scanDepth > 0) {
+    result.scanDepth = Math.min(50, Math.floor(book.scanDepth));
+  }
+  if (book.tokenBudget > 0) {
+    result.injectionBudgetChars = Math.min(200000, Math.floor(book.tokenBudget * 4));
+  }
+  // extensions.arktavern 建议优先
+  const arktavern: Object | undefined = book.extensions['arktavern'];
+  if (arktavern === undefined || arktavern === null) {
+    return result;
+  }
+  const suggestion: Record<string, Object> = arktavern as Record<string, Object>;
+  const modeObj: Object | undefined = suggestion['activationMode'];
+  if (modeObj !== undefined && typeof modeObj === 'string') {
+    const mode: string = modeObj as string;
+    if (isValidActivationMode(mode as LorebookActivationMode)) {
+      result.activationMode = mode as LorebookActivationMode;
+    }
+  }
+  const scanObj: Object | undefined = suggestion['scanDepth'];
+  if (scanObj !== undefined && typeof scanObj === 'number') {
+    const scan: number = scanObj as number;
+    if (Number.isFinite(scan) && scan > 0) {
+      result.scanDepth = Math.min(50, Math.floor(scan));
+    }
+  }
+  const budgetObj: Object | undefined = suggestion['injectionBudgetChars'];
+  if (budgetObj !== undefined && typeof budgetObj === 'number') {
+    const budget: number = budgetObj as number;
+    if (Number.isFinite(budget) && budget > 0) {
+      result.injectionBudgetChars = Math.min(200000, Math.floor(budget));
+    }
+  }
+  return result;
 }
 
 /**

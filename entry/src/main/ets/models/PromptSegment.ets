@@ -56,6 +56,8 @@ export enum PromptSegmentPosition {
   MemorySummary = 'MemorySummary',
   /** 聊天历史(Conversation) */
   Conversation = 'Conversation',
+  /** StickyOnDemand 粘滞世界书命中块(对话之后、PostHistory 之前,append-only 保缓存) */
+  LorebookSticky = 'LorebookSticky',
   /** Post-History Instructions,位于聊天历史之后 */
   PostHistory = 'PostHistory'
 }
@@ -120,7 +122,8 @@ const POSITION_ORDER: Record<string, number> = {
   'MemoryKeyword': 13,
   'MemorySummary': 14,
   'Conversation': 15,
-  'PostHistory': 16
+  'LorebookSticky': 16,
+  'PostHistory': 17
 };
 
 /**

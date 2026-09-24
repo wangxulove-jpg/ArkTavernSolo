@@ -22,6 +22,7 @@
  */
 
 import { ChatViewModel } from '../viewmodels/ChatViewModel';
+import { ChatMemoryMode } from '../services/ChatMemoryModeService';
 import { ChatMessage, ChatMessageStatus } from '../models/ChatMessage';
 import { ChatRole } from '../models/ChatRole';
 import { ChatStatusState, ChatStatusEntry } from '../models/ChatStatusState';
@@ -136,6 +137,14 @@ struct ChatPage {
   @State ttsIsSpeaking: boolean = false;
   /** v9: 是否显示本对话称呼覆盖编辑对话框 */
   @State showUserNameOverrideDialog: boolean = false;
+  /** v50: 是否显示记忆模式选择对话框 */
+  @State showMemoryModeDialog: boolean = false;
+  /** v50: 记忆模式草稿(true=自动归档,false=手动总结) */
+  @State memoryModeIsAuto: boolean = false;
+  /** v50: 注入最近章节数草稿(1-20) */
+  @State memoryModeChapterCount: number = 4;
+  /** v50: 当前会话记忆模式显示文本(供 ChatMoreMenuSheet 展示) */
+  @State memoryModeText: string = '手动总结';
   /** v9: 对话称呼输入草稿(对话框中使用) */
   @State userNameOverrideDraft: string = '';
   /** v9: 当前生效的用户称呼(供 ChatMoreMenuSheet 展示) */
@@ -264,6 +273,20 @@ struct ChatPage {
   @State frontendPanelWidth: number = 360;
   /** 前端面板建议高度(vp 或百分比,缺省 '65%') */
   @State frontendPanelHeight: string = '65%';
+  /** 前端面板是否固定:固定后点击面板以外区域不会自动收起 */
+  @State frontendPanelPinned: boolean = false;
+  /** 前端面板当前宽度(vp,打开时由建议值初始化,角落拖动可实时调整) */
+  @State frontendPanelCurWidth: number = 360;
+  /** 前端面板当前高度(vp,打开时由建议值初始化,角落拖动可实时调整) */
+  @State frontendPanelCurHeight: number = 0;
+  /** 角落拖动起始宽度(vp) */
+  private frontendResizeStartW: number = 360;
+  /** 角落拖动起始高度(vp) */
+  private frontendResizeStartH: number = 0;
+  /** 窗口宽度缓存(vp,首次布局时取) */
+  private cachedScreenW: number = -1;
+  /** 窗口高度缓存(vp,首次布局时取) */
+  private cachedScreenH: number = -1;
 
   // ===== Prompt Cache 命中率 =====
   @State cacheHitRatio: number = -1;
@@ -1171,6 +1194,10 @@ struct ChatPage {
             onGoBranchMap: (): void => { this.navigateToBranchMap(); },
             onGoChatBackground: (): void => { this.navigateToChatBackgroundSettings(); },
             onGoMemory: (): void => { this.navigateToMemoryManagement(); },
+            onEditMemoryMode: (): void => {
+              this.openMemoryModeDialog();
+            },
+            memoryModeText: this.memoryModeText,
             onGoContextBudget: (): void => { this.navigateToContextBudget(); },
             onGoAutoWriteGuide: (): void => { this.navigateToAutoWriteGuide(); },
             onEditUserNameOverride: (): void => {
@@ -1225,6 +1252,11 @@ struct ChatPage {
         // v9: 本对话称呼覆盖编辑弹窗
         if (this.showUserNameOverrideDialog) {
           this.userNameOverrideDialog()
+        }
+
+        // v50: 记忆模式选择弹窗
+        if (this.showMemoryModeDialog) {
+          this.memoryModeDialog()
         }
 
         // Persona 选择弹窗
@@ -1354,6 +1386,7 @@ struct ChatPage {
         .onClick(() => {
           this.refreshUserNameDisplay();
           this.refreshPersonaDisplay();
+          this.refreshMemoryModeDisplay();
           this.showMoreMenu = true;
         })
       }
@@ -1425,6 +1458,10 @@ struct ChatPage {
       }
       const spec: FrontendSpec = extractFrontendSpec(character.extensions);
       this.frontendPanelHtml = spec.html;
+      // 以建议尺寸初始化当前尺寸(供角落拖动调整)
+      this.frontendPanelCurWidth = this.frontendPanelWidth > 0 ? this.frontendPanelWidth : 360;
+      this.frontendPanelCurHeight = this.resolvePanelHeightVp();
+      this.frontendPanelPinned = false;
       this.frontendPanelVisible = true;
       return;
     }
@@ -1436,19 +1473,68 @@ struct ChatPage {
   private closeFrontendPanel(): void {
     this.frontendPanelVisible = false;
     this.frontendPanelHtml = '';
+    this.frontendPanelPinned = false;
   }
 
-  /** 解析面板高度:百分比原样使用;数字补 vp;非法/空回退 '65%' */
-  private resolvePanelHeight(): string {
+  /** 解析面板高度为 vp:百分比按窗口高度折算;数字原样;非法/空回退 65% */
+  private resolvePanelHeightVp(): number {
     const h: string = this.frontendPanelHeight;
-    if (h.indexOf('%') >= 0 || h.length === 0) {
-      return h.length === 0 ? '65%' : h;
+    const fallback: number = Math.round(this.screenHeightVp() * 0.65);
+    if (h.length === 0) {
+      return fallback;
+    }
+    if (h.indexOf('%') >= 0) {
+      const pct: number = Number(h.replace('%', ''));
+      if (Number.isNaN(pct)) {
+        return fallback;
+      }
+      return Math.max(180, Math.round(this.screenHeightVp() * (pct / 100)));
     }
     const n: number = Number(h);
-    if (Number.isNaN(n)) {
-      return '65%';
+    return Number.isNaN(n) ? fallback : Math.max(180, n);
+  }
+
+  /** 缓存并返回窗口宽度(vp,失败回退 480) */
+  private screenWidthVp(): number {
+    if (this.cachedScreenW > 0) {
+      return this.cachedScreenW;
     }
-    return n.toString() + 'vp';
+    this.cacheScreenSize();
+    return this.cachedScreenW > 0 ? this.cachedScreenW : 480;
+  }
+
+  /** 缓存并返回窗口高度(vp,失败回退 800) */
+  private screenHeightVp(): number {
+    if (this.cachedScreenH > 0) {
+      return this.cachedScreenH;
+    }
+    this.cacheScreenSize();
+    return this.cachedScreenH > 0 ? this.cachedScreenH : 800;
+  }
+
+  /** 取窗口尺寸(px)换算 vp 并缓存 */
+  private cacheScreenSize(): void {
+    try {
+      const d: display.Display = display.getDefaultDisplaySync();
+      this.cachedScreenW = Math.round(px2vp(d.width));
+      this.cachedScreenH = Math.round(px2vp(d.height));
+    } catch (e) {
+      this.cachedScreenW = 480;
+      this.cachedScreenH = 800;
+    }
+  }
+
+  /** 面板宽度限幅:最小 240vp,最大不超过窗口宽度减去左边距 */
+  private clampPanelWidth(w: number): number {
+    const max: number = this.screenWidthVp() - 24;
+    return Math.min(Math.max(w, 240), max);
+  }
+
+  /** 面板高度限幅:最小 180vp,最大不超出窗口底部留白 */
+  private clampPanelHeight(h: number): number {
+    const nav: number = (AppStorage.get<number>('navigationBarHeight') ?? 0) as number;
+    const max: number = this.screenHeightVp() - this.statusBarHeight - 54 - nav - 24;
+    return Math.min(Math.max(h, 180), max);
   }
 
   /** 前端页面折叠标签(贴屏幕右缘,按顺序排列:有角色状态时排在状态标签下方,无状态时排右上角) */
@@ -1495,52 +1581,81 @@ struct ChatPage {
   @Builder
   frontendPanel() {
     Stack({ alignContent: Alignment.TopEnd }) {
-      // 透明捕获层:点面板以外任意位置即收起
+      // 透明捕获层:点面板以外任意位置即收起(固定后不收起)
       Column()
         .width('100%')
         .height('100%')
         .backgroundColor(Color.Transparent)
         .onClick(() => {
-          this.closeFrontendPanel();
-        })
-
-      // 面板:标题栏 + ArkWeb 内容
-      Column() {
-        Row() {
-          Text(this.frontendPanelTitle.length > 0
-            ? this.frontendPanelTitle
-            : (this.character !== null && this.character!.name.length > 0 ? this.character!.name : '界面'))
-            .fontSize(15)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .layoutWeight(1)
-
-          Text('收起')
-            .fontSize(13)
-            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-            .padding({ left: 10, right: 10, top: 4, bottom: 4 })
-            .onClick(() => {
-              this.closeFrontendPanel();
-            })
-        }
-        .width('100%')
-        .height(44)
-        .padding({ left: 12, right: 8 })
-
-        CardFrontendWeb({
-          vm: this.viewModel,
-          html: this.frontendPanelHtml,
-          onClose: (): void => {
+          if (!this.frontendPanelPinned) {
             this.closeFrontendPanel();
           }
         })
+
+      // 面板:标题栏 + ArkWeb 内容(四角把手可拖动调整大小)
+      Stack({ alignContent: Alignment.TopStart }) {
+        Column() {
+          Row() {
+            Text(this.frontendPanelTitle.length > 0
+              ? this.frontendPanelTitle
+              : (this.character !== null && this.character!.name.length > 0 ? this.character!.name : '界面'))
+              .fontSize(15)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .layoutWeight(1)
+
+            // 固定开关:固定后点面板外不收起
+            Text(this.frontendPanelPinned ? '已固定' : '固定')
+              .fontSize(12)
+              .fontWeight(this.frontendPanelPinned ? FontWeight.Medium : FontWeight.Normal)
+              .fontColor(this.frontendPanelPinned
+                ? ThemePalette.accentColor(this.effectiveTheme)
+                : ThemePalette.textSecondaryColor(this.effectiveTheme))
+              .backgroundColor(this.frontendPanelPinned
+                ? ThemePalette.surface2Color(this.effectiveTheme)
+                : Color.Transparent)
+              .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+              .borderRadius(9)
+              .onClick(() => {
+                this.frontendPanelPinned = !this.frontendPanelPinned;
+              })
+
+            Text('收起')
+              .fontSize(13)
+              .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+              .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+              .onClick(() => {
+                this.closeFrontendPanel();
+              })
+          }
           .width('100%')
-          .layoutWeight(1)
+          .height(44)
+          .padding({ left: 12, right: 8 })
+
+          CardFrontendWeb({
+            vm: this.viewModel,
+            html: this.frontendPanelHtml,
+            onClose: (): void => {
+              this.closeFrontendPanel();
+            }
+          })
+            .width('100%')
+            .layoutWeight(1)
+        }
+        .width('100%')
+        .height('100%')
+
+        // 四角调整大小把手(放在内容区四角,避开标题栏按钮;锚定右上角:左/下边缘随拖动伸缩)
+        this.frontendCornerHandle(0, 44, 0)
+        this.frontendCornerHandle(this.frontendPanelCurWidth - 26, 44, 90)
+        this.frontendCornerHandle(0, this.frontendPanelCurHeight - 26, 270)
+        this.frontendCornerHandle(this.frontendPanelCurWidth - 26,
+          this.frontendPanelCurHeight - 26, 180)
       }
-      .width(this.frontendPanelWidth)
-      .height(this.resolvePanelHeight())
+      .width(this.frontendPanelCurWidth)
+      .height(this.frontendPanelCurHeight)
       .margin({ top: this.statusBarHeight + 54 })
       .borderRadius({ topLeft: 16, topRight: 0, bottomLeft: 16, bottomRight: 0 })
       .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
@@ -1554,6 +1669,54 @@ struct ChatPage {
     .width('100%')
     .height('100%')
     .hitTestBehavior(HitTestMode.Transparent)
+  }
+
+  /** 角落调整大小把手:x/y 为把手左上角(面板内锚点),angle 为角标旋转角 */
+  @Builder
+  frontendCornerHandle(x: number, y: number, angle: number) {
+    Column() {
+      // 角标视觉提示:L 形括号,旋转复用四个角
+      Stack({ alignContent: Alignment.TopStart }) {
+        Text('')
+          .width(8)
+          .height(1.5)
+          .position({ x: 0, y: 0 })
+          .backgroundColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+          .opacity(0.9)
+        Text('')
+          .width(1.5)
+          .height(8)
+          .position({ x: 0, y: 0 })
+          .backgroundColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+          .opacity(0.9)
+      }
+      .width(12)
+      .height(12)
+      .rotate({ angle: angle })
+    }
+    .width(26)
+    .height(26)
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+    .position({ x: x, y: y })
+    .hitTestBehavior(HitTestMode.Block)
+    .gesture(
+      PanGesture({ direction: PanDirection.All })
+        .onActionStart(() => {
+          this.frontendResizeStartW = this.frontendPanelCurWidth;
+          this.frontendResizeStartH = this.frontendPanelCurHeight;
+        })
+        .onActionUpdate((event: GestureEvent | undefined) => {
+          if (event === undefined) {
+            return;
+          }
+          // 面板锚定右上角:向右拖(offsetX>0)收窄宽度,向左拖加宽;向下拖加高,向上拖变矮
+          this.frontendPanelCurWidth =
+            this.clampPanelWidth(this.frontendResizeStartW - event.offsetX);
+          this.frontendPanelCurHeight =
+            this.clampPanelHeight(this.frontendResizeStartH + event.offsetY);
+        })
+    )
   }
 
   // ===== 角色状态侧边栏(CHAT-STATUS-1B) =====
@@ -3853,6 +4016,200 @@ struct ChatPage {
     }
     this.userNameOverrideDraft = this.viewModel!.getCurrentChatUserNameOverride();
     this.showUserNameOverrideDialog = true;
+  }
+
+  // ===== v50: 记忆模式选择对话框 =====
+
+  /**
+   * 打开记忆模式选择对话框:读取当前会话的记忆模式与章节注入数到草稿。
+   */
+  private async openMemoryModeDialog(): Promise<void> {
+    if (this.viewModel === null) {
+      return;
+    }
+    try {
+      const mode: ChatMemoryMode = await this.viewModel!.getMemoryMode();
+      this.memoryModeIsAuto = mode === 'auto';
+      this.memoryModeChapterCount = await this.viewModel!.getChapterInjectCount();
+    } catch (_e) {
+      // 读取失败用默认值打开
+      this.memoryModeIsAuto = false;
+      this.memoryModeChapterCount = 4;
+    }
+    this.showMemoryModeDialog = true;
+  }
+
+  /**
+   * 保存记忆模式与章节注入数(仅当前会话)。
+   */
+  private async saveMemoryMode(): Promise<void> {
+    if (this.viewModel === null) {
+      this.showMemoryModeDialog = false;
+      return;
+    }
+    try {
+      await this.viewModel!.setMemoryMode(this.memoryModeIsAuto ? 'auto' : 'manual');
+      await this.viewModel!.setChapterInjectCount(this.memoryModeChapterCount);
+      await this.refreshMemoryModeDisplay();
+    } catch (_e) {
+      // 失败时只关闭对话框,不阻塞后续操作
+    }
+    this.showMemoryModeDialog = false;
+  }
+
+  /**
+   * 刷新菜单中的记忆模式显示文本。
+   */
+  private async refreshMemoryModeDisplay(): Promise<void> {
+    if (this.viewModel === null) {
+      return;
+    }
+    try {
+      const mode: ChatMemoryMode = await this.viewModel!.getMemoryMode();
+      this.memoryModeText = mode === 'auto' ? '自动归档' : '手动总结';
+    } catch (_e) {
+      this.memoryModeText = '手动总结';
+    }
+  }
+
+  @Builder
+  memoryModeDialog() {
+    Stack() {
+      Column() {
+        Column() {
+          Text('记忆模式')
+            .fontSize(17)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .margin({ bottom: 16 })
+
+          // 模式选项:手动总结
+          Row() {
+            Column() {
+              Text('手动总结')
+                .fontSize(15)
+                .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+              Text('在记忆管理页手动生成章节摘要,完全可控')
+                .fontSize(12)
+                .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+                .margin({ top: 2 })
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start)
+
+            if (!this.memoryModeIsAuto) {
+              Text('✓')
+                .fontSize(16)
+                .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+            }
+          }
+          .width('100%')
+          .padding(12)
+          .borderRadius(12)
+          .backgroundColor(this.memoryModeIsAuto
+            ? ThemePalette.surface2Color(this.effectiveTheme)
+            : ThemePalette.accentColor(this.effectiveTheme) + '22')
+          .onClick(() => {
+            this.memoryModeIsAuto = false;
+          })
+
+          // 模式选项:自动归档
+          Row() {
+            Column() {
+              Text('自动归档')
+                .fontSize(15)
+                .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+              Text('未归档消息达 50 条或 2 万字符时,回复完成后自动生成章节摘要;只在归档时刻一次性重建缓存前缀')
+                .fontSize(12)
+                .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+                .margin({ top: 2 })
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start)
+
+            if (this.memoryModeIsAuto) {
+              Text('✓')
+                .fontSize(16)
+                .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+            }
+          }
+          .width('100%')
+          .padding(12)
+          .borderRadius(12)
+          .margin({ top: 8 })
+          .backgroundColor(this.memoryModeIsAuto
+            ? ThemePalette.surface2Color(this.effectiveTheme)
+            : ThemePalette.accentColor(this.effectiveTheme) + '22')
+          .onClick(() => {
+            this.memoryModeIsAuto = true;
+          })
+
+          // 章节注入数
+          Row() {
+            Text('注入最近章节数')
+              .fontSize(14)
+              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+              .layoutWeight(1)
+            Text(String(this.memoryModeChapterCount))
+              .fontSize(14)
+              .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+          }
+          .width('100%')
+          .margin({ top: 16, bottom: 2 })
+
+          Slider({ value: this.memoryModeChapterCount, min: 1, max: 20, step: 1 })
+            .width('100%')
+            .height(28)
+            .onChange((value: number) => {
+              this.memoryModeChapterCount = Math.round(value);
+            })
+
+          Text('每章约 2000-3000 字,章节数越多上下文占用越大(默认 4)')
+            .fontSize(11)
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            .width('100%')
+
+          Row() {
+            Button('取消')
+              .fontSize(15)
+              .backgroundColor(Color.Transparent)
+              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+              .height(40)
+              .layoutWeight(1)
+              .onClick(() => {
+                this.showMemoryModeDialog = false;
+              })
+            Button('保存')
+              .fontSize(15)
+              .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
+              .fontColor($r('app.color.app_on_accent'))
+              .borderRadius($r('app.float.app_radius_sm'))
+              .height(40)
+              .layoutWeight(1)
+              .margin({ left: 12 })
+              .onClick(() => {
+                void this.saveMemoryMode();
+              })
+          }
+          .width('100%')
+          .margin({ top: 16 })
+        }
+        .width('88%')
+        .padding(20)
+        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+        .borderRadius($r('app.float.app_radius_lg'))
+      }
+      .width('100%')
+      .height('100%')
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('rgba(0,0,0,0.5)')
+    .onClick(() => {
+      this.showMemoryModeDialog = false;
+    })
   }
 
   /**

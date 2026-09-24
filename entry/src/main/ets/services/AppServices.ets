@@ -33,6 +33,8 @@ import { CharacterService } from './CharacterService';
 import { CharacterMigrationService } from './CharacterMigrationService';
 import { LorebookService } from './LorebookService';
 import { LorebookPinService } from './LorebookPinService';
+import { LorebookStickyService } from './LorebookStickyService';
+import { ChatMemoryModeService } from './ChatMemoryModeService';
 import { LorebookMigrationService } from './LorebookMigrationService';
 import { MacroReplacer } from './MacroReplacer';
 import { PromptBuilder } from './PromptBuilder';
@@ -55,6 +57,7 @@ import { MessageSwipePersistenceService } from './MessageSwipePersistenceService
 import { ConversationBranchPersistenceService } from './ConversationBranchPersistenceService';
 import { ChatMemoryRepository } from '../repositories/ChatMemoryRepository';
 import { ChatLorebookPinRepository } from '../repositories/ChatLorebookPinRepository';
+import { ChatLorebookStickyRepository } from '../repositories/ChatLorebookStickyRepository';
 import { MemoryPersistenceService } from './MemoryPersistenceService';
 import { MemoryService, DEFAULT_CHAPTER_TRIGGER } from './MemoryService';
 import { DEFAULT_SUMMARY_POINTS, DEFAULT_MEMORY_TRIGGER } from '../models/ChatMemory';
@@ -111,6 +114,8 @@ export class AppServices {
   readonly lorebookService: LorebookService;
   /** v45: LorebookPinService 按需锁定世界书会话钉选服务 */
   readonly lorebookPinService: LorebookPinService;
+  /** v46: LorebookStickyService 粘滞按需世界书会话命中服务 */
+  readonly lorebookStickyService: LorebookStickyService;
   /** PromptBuilder 提示词构建器 */
   readonly promptBuilder: PromptBuilder;
   /** TokenCounter 上下文 Token 估算服务(不对页面公开) */
@@ -173,6 +178,8 @@ export class AppServices {
   private readonly forkChatService: ForkChatService;
   /** ContextBudgetService per-chat 上下文预算服务(v8.1) */
   private contextBudgetService: ContextBudgetService | null = null;
+  /** v50: 会话级记忆模式服务(manual/auto + 章节注入数) */
+  private readonly chatMemoryModeService: ChatMemoryModeService;
   /** v46: MemoryLoadRefService 按需加载记忆引用服务。在 initialize 中创建。 */
   private memoryLoadRefService: MemoryLoadRefService | null = null;
   /** ChatBackgroundService 聊天背景图服务(导入图片 + 模糊度 + 暗化)。在 initialize 中创建。 */
@@ -221,6 +228,8 @@ export class AppServices {
    */
   private constructor() {
     this.appPreferences = new AppPreferences();
+    // v50: 会话级记忆模式服务(只需 appPreferences,构造即可用)
+    this.chatMemoryModeService = new ChatMemoryModeService(this.appPreferences);
     this.themeManager = ThemeManager.getInstance(this.appPreferences);
     this.chatTextStyleSettings = new ChatTextStyleSettings(this.appPreferences);
     const configStore: ProviderConfigStore = new ProviderConfigStore(this.appPreferences);
@@ -262,6 +271,11 @@ export class AppServices {
     // v45: 按需锁定世界书会话钉选服务(OnDemandPinned)
     this.lorebookPinService = new LorebookPinService(
       new ChatLorebookPinRepository(this.dbHelper),
+      this.lorebookService
+    );
+    // v46: 粘滞按需世界书会话命中服务(StickyOnDemand)
+    this.lorebookStickyService = new LorebookStickyService(
+      new ChatLorebookStickyRepository(this.dbHelper),
       this.lorebookService
     );
     this.lorebookMigrationService = new LorebookMigrationService(
@@ -534,6 +548,21 @@ export class AppServices {
   }
 
   /**
+   * 获取 LorebookStickyService 实例(v46 粘滞按需世界书会话命中)。
+   */
+  static getLorebookStickyService(): LorebookStickyService {
+    return AppServices.getInstance().lorebookStickyService;
+  }
+
+  /**
+   * 获取 ChatMemoryModeService 实例(v50 会话级记忆模式)。
+   * 用于 ChatPage 记忆模式弹窗读写当前会话的 manual/auto 与章节注入数。
+   */
+  static getChatMemoryModeService(): ChatMemoryModeService {
+    return AppServices.getInstance().chatMemoryModeService;
+  }
+
+  /**
    * 获取 PromptPresetService 实例(T-6.1B 接入 Chat 后使用)。
    */
   static getPromptPresetService(): PromptPresetService {
@@ -700,7 +729,9 @@ export class AppServices {
       services.contextBudgetService,
       services.appPreferences,
       services.recentMessageSelector,
-      services.lorebookPinService
+      services.lorebookPinService,
+      services.lorebookStickyService,
+      services.chatMemoryModeService
     );
   }
 

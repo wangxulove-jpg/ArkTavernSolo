@@ -52,5 +52,7 @@ export enum ChatMessageSource {
   /** OnDemand 世界书深度注入(受保护,不进入聊天历史) */
   LorebookDepth = 'lorebookDepth',
   /** OnDemandPinned 固定世界书(受保护,记忆之后、对话之前,不进入聊天历史) */
-  LorebookPinned = 'lorebookPinned'
+  LorebookPinned = 'lorebookPinned',
+  /** StickyOnDemand 粘滞世界书命中(受保护,对话之后、PostHistory 之前,append-only 不进入聊天历史) */
+  LorebookSticky = 'lorebookSticky'
 }

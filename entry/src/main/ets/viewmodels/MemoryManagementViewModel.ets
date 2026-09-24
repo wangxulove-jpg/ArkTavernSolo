@@ -711,6 +711,7 @@ export class MemoryManagementViewModel {
    * v45: 手动记忆总结成功后刷新 OnDemandPinned(按需锁定)会话钉选。
    * 解析当前会话角色绑定的世界书,按全部对话消息重新全量关键词匹配。
    * 失败仅记录日志,不影响总结结果。
+   * v46: 同时刷新 StickyOnDemand 会话粘滞命中(按书级模式分派)。
    */
   private async refreshLorebookPinAsync(messages: ChatMessage[]): Promise<void> {
     try {
@@ -732,6 +733,8 @@ export class MemoryManagementViewModel {
       }
       await AppServices.getLorebookPinService()
         .refreshPinnedEntries(this.chatId, book, messages);
+      await AppServices.getLorebookStickyService()
+        .refreshStickyEntries(this.chatId, book, messages);
     } catch (e) {
       Logger.warn(LOG_TAG, 'refreshLorebookPinAsync failed: ' + String(e));
     }

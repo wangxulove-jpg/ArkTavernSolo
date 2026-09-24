@@ -210,6 +210,8 @@ export function sourceDisplayLabel(src: ChatMessageSource): string {
       return '世界书(固定)';
     case ChatMessageSource.LorebookDepth:
       return '世界书(深度注入)';
+    case ChatMessageSource.LorebookSticky:
+      return '世界书(粘滞命中)';
     case ChatMessageSource.MemorySummary:
       return '记忆摘要';
     case ChatMessageSource.MemoryCore:

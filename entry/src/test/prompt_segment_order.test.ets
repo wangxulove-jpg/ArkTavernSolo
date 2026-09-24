@@ -1,9 +1,11 @@
 /**
- * PromptSegment 排序测试(v45: 新增 LorebookPinned 固定世界书段)
+ * PromptSegment 排序测试(v45: 新增 LorebookPinned 固定世界书段;v46: 新增 LorebookSticky 粘滞世界书段)
  *
  * 验证:
  * - LorebookPinned 位于 MemorySummary 之后、Conversation 之前
  *   (即"记忆 → 世界书 → 历史"的核心顺序保证)
+ * - LorebookSticky 位于 Conversation 之后、PostHistory 之前
+ *   (尾部动态区,append-only 保缓存前缀)
  * - 同位置内按 priority 降序
  */
 
@@ -25,7 +27,7 @@ export default function promptSegmentOrderTest() {
           'conversation', PromptSegmentPosition.Conversation, ChatRole.User, 'hi', 0, ChatMessageSource.Conversation
         ),
         createPromptSegment(
-          'memory', PromptSegmentPosition.MemorySummary, ChatRole.System, 'mem', 0, ChatMessageSource.MemorySummary
+          'core', PromptSegmentPosition.MemoryCore, ChatRole.System, 'core', 0, ChatMessageSource.MemoryCore
         ),
         createPromptSegment(
           'pinned', PromptSegmentPosition.LorebookPinned, ChatRole.System, 'lore', 50, ChatMessageSource.LorebookPinned
@@ -42,9 +44,10 @@ export default function promptSegmentOrderTest() {
       const positions: PromptSegmentPosition[] = sorted.map((s: PromptSegment): PromptSegmentPosition => s.position);
 
       // hypium assertEqual 用 === 比较,数组字面量每次引用不同,改为字符串比较
+      // (契约:MemoryCore(7) → LorebookPinned(8) → Conversation(15),见 POSITION_ORDER)
       expect(positions.join(',')).assertEqual(
         PromptSegmentPosition.PromptPreset + ','
-        + PromptSegmentPosition.MemorySummary + ','
+        + PromptSegmentPosition.MemoryCore + ','
         + PromptSegmentPosition.LorebookPinned + ','
         + PromptSegmentPosition.Conversation + ','
         + PromptSegmentPosition.PostHistory
@@ -53,13 +56,13 @@ export default function promptSegmentOrderTest() {
 
     it('lorebook_pinned_memory_before_conversation', 0, () => {
       const segments: PromptSegment[] = [
-        createPromptSegment('m', PromptSegmentPosition.MemorySummary, ChatRole.System, 'm'),
+        createPromptSegment('m', PromptSegmentPosition.MemoryCore, ChatRole.System, 'm'),
         createPromptSegment('p', PromptSegmentPosition.LorebookPinned, ChatRole.System, 'p'),
         createPromptSegment('c', PromptSegmentPosition.Conversation, ChatRole.User, 'c')
       ];
       const orders: PromptSegmentPosition[] = sortSegments(segments)
         .map((s: PromptSegment): PromptSegmentPosition => s.position);
-      const mi: number = orders.indexOf(PromptSegmentPosition.MemorySummary);
+      const mi: number = orders.indexOf(PromptSegmentPosition.MemoryCore);
       const pi: number = orders.indexOf(PromptSegmentPosition.LorebookPinned);
       const ci: number = orders.indexOf(PromptSegmentPosition.Conversation);
       expect(mi).assertLess(pi);
@@ -91,6 +94,23 @@ export default function promptSegmentOrderTest() {
       const chapterIdx: number = positions.indexOf(PromptSegmentPosition.MemoryChapter);
       expect(coreIdx).assertLess(sessionIdx);
       expect(sessionIdx).assertLess(chapterIdx);
+    });
+
+    it('lorebook_sticky_between_conversation_and_post_history', 0, () => {
+      const segments: PromptSegment[] = [
+        createPromptSegment('post', PromptSegmentPosition.PostHistory, ChatRole.System, 'post'),
+        createPromptSegment('sticky', PromptSegmentPosition.LorebookSticky, ChatRole.System, 'stk'),
+        createPromptSegment('conversation', PromptSegmentPosition.Conversation, ChatRole.User, 'hi'),
+        createPromptSegment('pinned', PromptSegmentPosition.LorebookPinned, ChatRole.System, 'pin')
+      ];
+      const sorted: PromptSegment[] = sortSegments(segments);
+      const positions: PromptSegmentPosition[] = sorted
+        .map((s: PromptSegment): PromptSegmentPosition => s.position);
+      const conversationIdx: number = positions.indexOf(PromptSegmentPosition.Conversation);
+      const stickyIdx: number = positions.indexOf(PromptSegmentPosition.LorebookSticky);
+      const postIdx: number = positions.indexOf(PromptSegmentPosition.PostHistory);
+      expect(conversationIdx).assertLess(stickyIdx);
+      expect(stickyIdx).assertLess(postIdx);
     });
   });
 }
