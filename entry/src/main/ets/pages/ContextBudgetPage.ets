@@ -517,6 +517,20 @@ struct ContextBudgetPage {
         .width('100%')
         .margin({ top: 2 })
 
+      // 加载方式标签:说明该条是按哪种方式(常量/命中/粘滞按需/钉选/深度注入…)加载进请求的
+      if (item.methodLabel.length > 0) {
+        Text(item.methodLabel)
+          .fontSize(11)
+          .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+          .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+          .borderRadius(6)
+          .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+          .width('100%')
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .margin({ top: 4, left: 32 })
+      }
+
       // 内容预览(缩略)
       if (item.preview.length > 0) {
         Text(item.preview)
@@ -568,15 +582,19 @@ struct ContextBudgetPage {
     return this.sheetItem!.sourceLabel;
   }
 
-  /** 弹窗元信息行:角色 / 序号 / 本条 Token / 累计 Token。 */
+  /** 弹窗元信息行:角色 / 序号 / 本条 Token / 累计 Token / 加载方式。 */
   private getSheetMeta(): string {
     if (this.sheetItem === null) {
       return '';
     }
-    return '角色 ' + this.sheetItem!.roleLabel
+    let meta: string = '角色 ' + this.sheetItem!.roleLabel
       + ' · 序号 ' + this.sheetItem!.index.toString()
       + ' · 本条 ' + this.formatTokenNumber(this.sheetItem!.tokenCount)
       + ' · 累计 ' + this.formatTokenNumber(this.sheetItem!.cumulativeTokens);
+    if (this.sheetItem!.methodLabel.length > 0) {
+      meta += '\n' + this.sheetItem!.methodLabel;
+    }
+    return meta;
   }
 
   /**

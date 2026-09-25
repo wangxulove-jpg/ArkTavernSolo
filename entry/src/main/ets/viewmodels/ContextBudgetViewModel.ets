@@ -42,7 +42,7 @@ import { ProviderConfig } from '../models/ProviderConfig';
 import { ChatMessage } from '../models/ChatMessage';
 import { ChatRole } from '../models/ChatRole';
 import { ChatMessageSource } from '../models/ChatMessageSource';
-import { sourceDisplayLabel } from '../services/ContextBudgetEstimator';
+import { sourceDisplayLabel, sourceMethodLabel } from '../services/ContextBudgetEstimator';
 import { Logger } from '../utils/Logger';
 
 const LOG_TAG: string = 'BudgetVM';
@@ -53,8 +53,10 @@ const SESSION_TITLE_PREFIX: string = '会话记忆 · ';
 /** 发送给模型上下文顺序中的单条展示项。 */
 export interface ContextOrderItem {
   readonly index: number;
-  /** 来源中文名(与分段统计一致) */
+  /** 来源中文名(与分段统计一致,含加载方式提示) */
   readonly sourceLabel: string;
+  /** 该来源加载方式的一句话说明(无则空串,不展示) */
+  readonly methodLabel: string;
   /** 右侧辅助名称(世界书条目名 / 会话名称 / 章节标题,无则空) */
   readonly name: string;
   /** 角色名(user / assistant / system) */
@@ -394,9 +396,11 @@ export class ContextBudgetViewModel {
       const m: ChatMessage = msgs[i];
       const tokens: number = this.estimateMessage(m);
       cum += tokens;
+      const src: ChatMessageSource = m.source !== undefined ? m.source : this.defaultSource();
       items.push({
         index: i + 1,
-        sourceLabel: sourceDisplayLabel(m.source !== undefined ? m.source : this.defaultSource()),
+        sourceLabel: sourceDisplayLabel(src),
+        methodLabel: sourceMethodLabel(src),
         name: this.displayName(m),
         roleLabel: this.roleLabel(m.role),
         tokenCount: tokens,

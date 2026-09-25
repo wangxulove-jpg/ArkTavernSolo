@@ -101,17 +101,31 @@ export class ContextBudgetEstimator {
     // 计算每段 Token
     const segmentStats: SegmentTokenStat[] = [];
     let totalInputTokens: number = 0;
+    // 实际请求顺序(与 PromptSegment.POSITION_ORDER 对齐)。
+    // 必须包含全部来源:此前缺少 粘滞/按需锁定/深度注入/分层记忆 等来源,
+    // 导致这些段既不显示在"分段占用"里,也不计入 totalInputTokens(占用被低估)。
     const orderedSources: ChatMessageSource[] = [
       ChatMessageSource.PromptPresetSystem,
-      ChatMessageSource.ExternalSystem,
-      ChatMessageSource.CharacterPrompt,
       ChatMessageSource.LorebookBefore,
+      ChatMessageSource.PersonaBefore,
+      ChatMessageSource.CharacterPrompt,
+      ChatMessageSource.PersonaAfter,
       ChatMessageSource.LorebookAfter,
-      ChatMessageSource.MemorySummary,
       ChatMessageSource.CharacterMesExample,
+      ChatMessageSource.MemoryCore,
+      ChatMessageSource.LorebookPinned,
+      ChatMessageSource.MemorySession,
+      ChatMessageSource.MemoryChapter,
+      ChatMessageSource.MemoryRolling,
+      ChatMessageSource.MemoryLegacy,
+      ChatMessageSource.MemorySummary,
+      ChatMessageSource.CrossSessionContext,
       ChatMessageSource.CharacterFirstMessage,
       ChatMessageSource.NarratorInstruction,
+      ChatMessageSource.ExternalSystem,
       ChatMessageSource.Conversation,
+      ChatMessageSource.LorebookDepth,
+      ChatMessageSource.LorebookSticky,
       ChatMessageSource.CharacterPostHistory
     ];
 
@@ -191,57 +205,93 @@ export class ContextBudgetEstimator {
 /**
  * 将消息来源(source)转换为用户可读的中文名称。
  * 供分段统计与"发送顺序"展示共用,保证两处名称一致。
+ * 名称中带"加载方式"说明(常量/命中/粘滞/钉选/深度/常驻…),便于在
+ * "发送给模型的上下文顺序"里一眼看出每条是按哪种方式加载进来的。
  */
 export function sourceDisplayLabel(src: ChatMessageSource): string {
   switch (src) {
     case ChatMessageSource.PromptPresetSystem:
-      return 'Prompt Preset';
+      return '预设系统提示(常驻)';
     case ChatMessageSource.ExternalSystem:
-      return 'System Prompt';
+      return 'System Prompt(会话内注入)';
     case ChatMessageSource.CharacterPrompt:
-      return '角色卡';
+      return '角色卡定义(常驻)';
     case ChatMessageSource.LorebookBefore:
     // 按插入位置命名(角色前/后),而不是"角色/全局"——注入消息不区分来源书,
     // 全局书与角色书的条目都按 entry.position 归属这两段,避免误导用户以为加载了全局世界书
-      return '世界书(角色前)';
+      return '世界书·角色前(常量/命中)';
     case ChatMessageSource.LorebookAfter:
-      return '世界书(角色后)';
+      return '世界书·角色后(常量/命中)';
     case ChatMessageSource.LorebookPinned:
-      return '世界书(固定)';
+      return '世界书·按需锁定(会话钉选)';
     case ChatMessageSource.LorebookDepth:
-      return '世界书(深度注入)';
+      return '世界书·按需加载(深度注入)';
     case ChatMessageSource.LorebookSticky:
-      return '世界书(粘滞命中)';
+      return '世界书·粘滞按需(累积命中)';
     case ChatMessageSource.MemorySummary:
-      return '记忆摘要';
+      return '记忆摘要(旧版兼容)';
     case ChatMessageSource.MemoryCore:
-      return '核心记忆';
+      return '核心记忆(常驻)';
     case ChatMessageSource.MemorySession:
-      return '会话记忆';
+      return '会话记忆(常驻)';
     case ChatMessageSource.MemoryChapter:
-      return '章节记忆';
+      return '章节记忆(按时间注入)';
     case ChatMessageSource.MemoryRolling:
-      return '滚动记忆';
+      return '滚动记忆(近期摘要)';
     case ChatMessageSource.MemoryLegacy:
-      return '旧记忆';
+      return '旧记忆(迁移兼容)';
     case ChatMessageSource.PersonaBefore:
-      return 'Persona(角色前)';
+      return 'Persona(角色前/按深度)';
     case ChatMessageSource.PersonaAfter:
       return 'Persona(角色后)';
     case ChatMessageSource.CrossSessionContext:
-      return '跨会话上下文';
+      return '跨会话上下文(摘要)';
     case ChatMessageSource.CharacterMesExample:
-      return '对话示例';
+      return '对话示例(常驻)';
     case ChatMessageSource.CharacterFirstMessage:
       return '角色首条消息';
     case ChatMessageSource.NarratorInstruction:
       return '旁白指令';
     case ChatMessageSource.Conversation:
-      return '最近聊天历史';
+      return '最近聊天历史(可裁剪)';
     case ChatMessageSource.CharacterPostHistory:
-      return 'Post-History Instructions';
+      return 'Post-History(常驻)';
     default:
       return '其他';
+  }
+}
+
+/**
+ * 该来源的加载方式说明(一句话,供"上下文顺序"逐条展示)。
+ * 无特别说明时返回空串(调用方不展示)。
+ */
+export function sourceMethodLabel(src: ChatMessageSource): string {
+  switch (src) {
+    case ChatMessageSource.LorebookSticky:
+      return '加载方式:粘滞按需(StickyOnDemand)——关键词命中后常驻,只增不减,'
+        + '追加在对话之后、PostHistory 之前(尾部 append-only 保缓存)';
+    case ChatMessageSource.LorebookPinned:
+      return '加载方式:按需锁定(OnDemandPinned)——本会话首次钉选后固定,'
+        + '注入在核心记忆之后、会话记忆之前(随手动记忆总结刷新)';
+    case ChatMessageSource.LorebookDepth:
+      return '加载方式:按需加载(OnDemand)——关键词命中后按深度插入到对话内部,'
+        + '每轮重新匹配(未命中的轮次不会出现)';
+    case ChatMessageSource.LorebookBefore:
+    case ChatMessageSource.LorebookAfter:
+      return '加载方式:常量常驻 + 关键词命中(注入角色定义前/后)';
+    case ChatMessageSource.MemoryCore:
+    case ChatMessageSource.MemorySession:
+    case ChatMessageSource.MemoryChapter:
+    case ChatMessageSource.MemoryRolling:
+    case ChatMessageSource.MemoryLegacy:
+    case ChatMessageSource.MemorySummary:
+      return '加载方式:长期记忆分层注入(不进入可见聊天记录)';
+    case ChatMessageSource.Conversation:
+      return '加载方式:可见聊天历史(超预算时可被裁剪)';
+    case ChatMessageSource.CharacterFirstMessage:
+      return '加载方式:角色卡开场白(对话流起点)';
+    default:
+      return '';
   }
 }
 

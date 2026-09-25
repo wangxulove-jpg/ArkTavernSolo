@@ -142,6 +142,8 @@ interface LorebookDepthPlan {
   readonly content: string;
   /** 深度值(0-8),0 表示全部消息之后 */
   readonly depth: number;
+  /** 命中条目名(仅供"上下文顺序"展示,不进入请求内容) */
+  readonly names: string[];
 }
 
 /** OnDemand 深度注入默认深度 */
@@ -206,11 +208,13 @@ export class PromptBuilder {
     // OnDemand 模式下的关键词命中条目由深度计划返回,在步骤 5 按深度注入
     let lorebookDepthContent: string = '';
     let lorebookDepthValue: number = 0;
+    let lorebookDepthNames: string[] = [];
     const lorebookDepthPlan: LorebookDepthPlan =
       this.collectLorebookSegments(context, segments, matchedIds);
     if (lorebookDepthPlan.content.length > 0) {
       lorebookDepthContent = lorebookDepthPlan.content;
       lorebookDepthValue = lorebookDepthPlan.depth;
+      lorebookDepthNames = lorebookDepthPlan.names;
     }
 
     // 3. Character System Prompt(支持 {{original}})
@@ -332,7 +336,7 @@ export class PromptBuilder {
           entry.content,
           entry.priority,
           ChatMessageSource.LorebookPinned,
-          entry.name
+          '钉选·' + entry.name
         );
         segments.push(pinnedSeg);
       }
@@ -363,7 +367,8 @@ export class PromptBuilder {
           ChatRole.System,
           lorebookDepthContent,
           0,
-          ChatMessageSource.LorebookDepth
+          ChatMessageSource.LorebookDepth,
+          this.formatEntryNames('按需命中', lorebookDepthNames)
         );
         segments.push(lorebookDepthSeg);
         injectedLorebookDepth = true;
@@ -413,7 +418,8 @@ export class PromptBuilder {
         ChatRole.System,
         lorebookDepthContent,
         0,
-        ChatMessageSource.LorebookDepth
+        ChatMessageSource.LorebookDepth,
+        this.formatEntryNames('按需命中', lorebookDepthNames)
       );
       segments.push(lorebookDepthSeg);
     }
@@ -423,9 +429,11 @@ export class PromptBuilder {
     // 单条消息保证 token 序列 append-only:块尾追加新命中时已注入前缀缓存命中。
     if (context.stickyLorebookEntries !== undefined && context.stickyLorebookEntries.length > 0) {
       const parts: string[] = [];
+      const stickyNames: string[] = [];
       for (let i = 0; i < context.stickyLorebookEntries.length; i++) {
         matchedIds.push(context.stickyLorebookEntries[i].id);
         parts.push(context.stickyLorebookEntries[i].content);
+        stickyNames.push(context.stickyLorebookEntries[i].name);
       }
       const stickySeg: PromptSegment = createPromptSegment(
         'lorebook-sticky',
@@ -434,7 +442,7 @@ export class PromptBuilder {
         parts.join('\n\n'),
         0,
         ChatMessageSource.LorebookSticky,
-        '粘滞世界书'
+        this.formatEntryNames('粘滞命中', stickyNames)
       );
       segments.push(stickySeg);
     }
@@ -627,22 +635,26 @@ export class PromptBuilder {
     matchedIds: string[]
   ): LorebookDepthPlan {
     const depthParts: string[] = [];
+    const depthNames: string[] = [];
     if (context.characterBook !== undefined && context.characterBook !== null
       && context.characterBook.enabled) {
       const charMode: LorebookActivationMode | undefined = this.resolveBookMode(
         context.characterBook, context.characterBookActivationMode
       );
-      this.collectBookEntries(context.characterBook, charMode, context, segments, matchedIds, depthParts);
+      this.collectBookEntries(
+        context.characterBook, charMode, context, segments, matchedIds, depthParts, depthNames
+      );
     }
     if (depthParts.length === 0) {
-      const empty: LorebookDepthPlan = { content: '', depth: 0 };
+      const empty: LorebookDepthPlan = { content: '', depth: 0, names: [] };
       return empty;
     }
     const depthValue: number = context.lorebookDepth !== undefined
       ? context.lorebookDepth : DEFAULT_LOREBOOK_DEPTH;
     const plan: LorebookDepthPlan = {
       content: depthParts.join('\n\n'),
-      depth: depthValue
+      depth: depthValue,
+      names: depthNames
     };
     return plan;
   }
@@ -671,19 +683,24 @@ export class PromptBuilder {
     context: PromptBuildContext,
     segments: PromptSegment[],
     matchedIds: string[],
-    depthParts: string[]
+    depthParts: string[],
+    depthNames: string[]
   ): void {
     if (mode === undefined) {
-      this.pushHeadSegments(this.lorebookService.matchEntriesForLorebook(book, context.messages),
-        segments, matchedIds);
+      this.pushHeadSegments(
+        this.lorebookService.matchEntriesForLorebook(book, context.messages),
+        segments, matchedIds, '命中'
+      );
       return;
     }
     if (mode === LorebookActivationMode.FullInject) {
-      this.pushHeadSegments(this.lorebookService.collectAllEntries(book), segments, matchedIds);
+      this.pushHeadSegments(this.lorebookService.collectAllEntries(book), segments, matchedIds, '全量');
       return;
     }
     // OnDemand / OnDemandPinned / StickyOnDemand:constant 注入头部
-    this.pushHeadSegments(this.lorebookService.collectConstantEntries(book), segments, matchedIds);
+    this.pushHeadSegments(
+      this.lorebookService.collectConstantEntries(book), segments, matchedIds, '常量'
+    );
     if (mode === LorebookActivationMode.OnDemandPinned) {
       // OnDemandPinned:非 constant 条目由会话钉选决定(context.pinnedLorebookEntries),
       // 在步骤 4.7 注入到记忆之后、对话之前;不做逐次关键词匹配与深度注入
@@ -700,7 +717,21 @@ export class PromptBuilder {
     for (let i = 0; i < matched.length; i++) {
       matchedIds.push(matched[i].id);
       depthParts.push(matched[i].content);
+      depthNames.push(matched[i].name);
     }
+  }
+
+  /**
+   * 生成展示用的条目名摘要(仅供"上下文顺序"展示,不进入请求内容)。
+   * 最多列出 4 个名称,其余折叠为"… 等 N 条 共 M 条"。
+   */
+  private formatEntryNames(prefix: string, names: string[]): string {
+    if (names.length === 0) {
+      return prefix;
+    }
+    const shown: string[] = names.length <= 4 ? names : names.slice(0, 4);
+    const tail: string = names.length > shown.length ? ' 等' : '';
+    return prefix + shown.join('、') + tail + '(共' + names.length.toString() + '条)';
   }
 
   /**
@@ -709,7 +740,8 @@ export class PromptBuilder {
   private pushHeadSegments(
     entries: LorebookEntry[],
     segments: PromptSegment[],
-    matchedIds: string[]
+    matchedIds: string[],
+    modeTag: string
   ): void {
     for (let i = 0; i < entries.length; i++) {
       const entry: LorebookEntry = entries[i];
@@ -728,7 +760,7 @@ export class PromptBuilder {
         entry.content,
         entry.priority,
         source,
-        entry.name
+        modeTag + '·' + entry.name
       );
       segments.push(seg);
     }
