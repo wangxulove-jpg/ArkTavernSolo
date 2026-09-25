@@ -3,7 +3,7 @@
  *
  * 用 ArkWeb 渲染角色卡 extensions.arktavern.frontend 的 HTML,
  * 通过 javaScriptProxy 注入 window.arktavern Bridge(getVersion/getState/getStatusSchema/
- * setState/getCharacter/send/close),App → 页面事件经 runJavaScript 调用
+ * setState/getCharacter/getMessages/send/close),App → 页面事件经 runJavaScript 调用
  * window.arktavernPush.dispatch(json)。
  *
  * 设计:
@@ -35,6 +35,7 @@ interface PushSnapshotEvent {
 interface MessageSnapshotData {
   generating: boolean;
   lastAssistant: string;
+  messageCount: number;
 }
 
 /** 注入"接口就绪"探针:页面 JS 可据此自查 Bridge 是否可用 */
@@ -47,6 +48,11 @@ export struct CardFrontendWeb {
   vm: ChatViewModel | null = null;
   /** 要渲染的完整 HTML(extensions.arktavern.frontend 内容) */
   html: string = '';
+  /**
+   * 宿主是否处于"活跃展示"状态(面板模式:展开中;全屏页:恒 true)。
+   * 转为 false 时主动 blur 页面内焦点,避免保活隐藏后键盘留在页面上不收起。
+   */
+  @Prop @Watch('onActiveChanged') active: boolean = true;
   /** 关闭回调:全屏页返回 / 面板模式收起面板 */
   onClose: () => void = (): void => {};
 
@@ -69,6 +75,27 @@ export struct CardFrontendWeb {
 
   aboutToDisappear(): void {
     this.releaseBridge();
+  }
+
+  /**
+   * 活跃态变化:宿主收起(保活隐藏)时 blur 页面内焦点,
+   * 否则 ArkWeb 仍持有输入焦点,收起面板后系统键盘不会自动收起。
+   */
+  onActiveChanged(): void {
+    if (this.active || this.disposed) {
+      return;
+    }
+    this.blurActiveElement();
+  }
+
+  /** 让页面内当前焦点元素失焦(收起安全区内的输入法) */
+  private blurActiveElement(): void {
+    try {
+      this.controller.runJavaScript(
+        'try{document.activeElement&&document.activeElement.blur&&document.activeElement.blur();}catch(e){}');
+    } catch (_e) {
+      // 页面尚未加载完成时忽略
+    }
   }
 
   /** 基于当前 vm 的角色卡构建 Bridge(每次进入重建,确保订阅与会话绑定) */
@@ -186,7 +213,11 @@ export struct CardFrontendWeb {
         break;
       }
     }
-    const msgData: MessageSnapshotData = { generating: vm.isGenerating, lastAssistant: lastAssistant };
+    const msgData: MessageSnapshotData = {
+      generating: vm.isGenerating,
+      lastAssistant: lastAssistant,
+      messageCount: msgs.length
+    };
     const messageEvent: PushSnapshotEvent = { kind: 'message_update', data: msgData };
     this.pushToPage(JSON.stringify(messageEvent));
   }
@@ -278,7 +309,7 @@ export struct CardFrontendWeb {
               object: this.bridge!,
               name: 'arktavern',
               methodList: ['getVersion', 'getState', 'getStatusSchema',
-                'setState', 'getCharacter', 'send', 'close'],
+                'setState', 'getCharacter', 'getMessages', 'send', 'close'],
               controller: this.controller
             })
 

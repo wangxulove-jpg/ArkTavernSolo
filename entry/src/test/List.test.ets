@@ -9,6 +9,8 @@ import lorebookStickyServiceTest from './lorebook_sticky_service.test';
 import chapterMemoryIndexerTest from './chapter_memory_indexer.test';
 import memoryLoadRefServiceTest from './memory_load_ref_service.test';
 import statusSchemaTest from './status_schema.test';
+import geminiModelFilterTest from './gemini_model_filter.test';
+import frontendSpecV2Test from './frontend_spec_v2.test';
 
 export default function testsuite() {
   promptSegmentOrderTest();
@@ -17,4 +19,6 @@ export default function testsuite() {
   chapterMemoryIndexerTest();
   memoryLoadRefServiceTest();
   statusSchemaTest();
+  geminiModelFilterTest();
+  frontendSpecV2Test();
 }

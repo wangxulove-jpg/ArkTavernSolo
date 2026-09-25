@@ -1,11 +1,11 @@
 /**
- * CardFrontendBridge 前端页面 JS Bridge(契约版本 v1)
+ * CardFrontendBridge 前端页面 JS Bridge(契约版本 v2)
  *
  * 通过 ArkWeb 的 javaScriptProxy 注入到角色卡前端页面,暴露 `window.arktavern.*` 方法:
- * - getVersion / getState / setState / getCharacter / send / close
+ * - getVersion / getState / getStatusSchema / setState / getCharacter / getMessages / send / close
  *
- * App → 页面事件由 FrontendCardPage 通过 runJavaScript 调用 `window.arktavernPush.dispatch(json)`:
- * - message_update: 消息更新(含当前生成中状态与最后一条助手消息)
+ * App → 页面事件由 FrontendCardPage/ChatPage 面板通过 runJavaScript 调用 `window.arktavernPush.dispatch(json)`:
+ * - message_update: 消息更新(含当前生成中状态、最后一条助手消息、消息总数)
  * - status_update:   角色状态更新
  *
  * 设计约束:
@@ -13,6 +13,11 @@
  * - 所有 JS 可调方法只返回同步字符串(避免 JS proxy 对异步返回值的不确定支持)
  * - 不持有 @State;通过 ChatViewModel 的多订阅(subscribeMessages/subscribeStatus)接收更新
  * - 与 ChatPage 的原生回调(onMessagesUpdate 等)并存,不互相覆盖
+ *
+ * 版本历史:
+ * - v1:getVersion/getState/getStatusSchema/setState/getCharacter/send/close
+ * - v2:新增 getMessages(limit)(历史消息,供全屏前端页在页面内自绘对话)与
+ *      message_update.messageCount(计数对齐用);frontend.chrome 支持 'none' 沉浸
  */
 
 import { ChatViewModel } from '../viewmodels/ChatViewModel';
@@ -21,12 +26,18 @@ import { ChatRole } from '../models/ChatRole';
 import { ChatStatusState } from '../models/ChatStatusState';
 
 /** Bridge 提供给页面的契约版本号 */
-const BRIDGE_VERSION: string = '1';
+const BRIDGE_VERSION: string = '2';
+
+/** getMessages 默认返回条数(不传 limit 时) */
+const DEFAULT_MESSAGE_LIMIT: number = 50;
+
+/** getMessages 允许的最大返回条数 */
+const MAX_MESSAGE_LIMIT: number = 200;
 
 /**
  * 前端页面规格(arktavern-card-extensions v1)。
  * - 兼容旧写法:extensions.arktavern.frontend 为字符串 → mode='fullscreen'(全屏页)
- * - 新写法:对象 { html, mode?, title?, size? }
+ * - 新写法:对象 { html, mode?, title?, size?, chrome? }
  */
 export interface FrontendSpec {
   /** 完整 HTML 字符串(含 <style>/<script>,全部内联) */
@@ -39,16 +50,20 @@ export interface FrontendSpec {
   sizeWidth: number;
   /** panel 模式建议高度(vp 或百分比);'' = 未指定 */
   sizeHeight: string;
+  /** 全屏页外观:'auto'(默认,带 App 顶栏) | 'none'(沉浸,无 App 顶栏) */
+  chrome: string;
 }
 
 function emptyFrontendSpec(): FrontendSpec {
-  return { html: '', mode: 'fullscreen', title: '', sizeWidth: 0, sizeHeight: '' };
+  return {
+    html: '', mode: 'fullscreen', title: '', sizeWidth: 0, sizeHeight: '', chrome: 'auto'
+  };
 }
 
 /**
  * 从角色卡 extensions 解析 extensions.arktavern.frontend 前端页面规格。
  * - frontend 为字符串 → 兼容旧卡,等价 mode='fullscreen',html 即字符串
- * - frontend 为对象 → { html, mode?, title?, size? }
+ * - frontend 为对象 → { html, mode?, title?, size?, chrome? }
  * - 缺失/类型不合法 → 返回空规格(html 为 '')
  */
 export function extractFrontendSpec(extensions: Record<string, Object>): FrontendSpec {
@@ -64,7 +79,8 @@ export function extractFrontendSpec(extensions: Record<string, Object>): Fronten
       mode: 'fullscreen',
       title: '',
       sizeWidth: 0,
-      sizeHeight: ''
+      sizeHeight: '',
+      chrome: 'auto'
     };
   }
   if (!(frontend instanceof Object)) {
@@ -98,7 +114,8 @@ export function extractFrontendSpec(extensions: Record<string, Object>): Fronten
     mode: mode === 'panel' ? 'panel' : 'fullscreen',
     title: title,
     sizeWidth: sizeWidth,
-    sizeHeight: sizeHeight
+    sizeHeight: sizeHeight,
+    chrome: fo['chrome'] === 'none' ? 'none' : 'auto'
   };
 }
 
@@ -108,6 +125,47 @@ export function extractFrontendSpec(extensions: Record<string, Object>): Fronten
  */
 export function extractFrontendHtml(extensions: Record<string, Object>): string {
   return extractFrontendSpec(extensions).html;
+}
+
+/** getMessages 返回的单条消息(契约 v2) */
+export interface FrontendMessageEntry {
+  /** 'user' | 'assistant' */
+  role: string;
+  /** 正文(角色卡状态块已在入库时剥离) */
+  content: string;
+}
+
+/** 归一化 getMessages 的 limit:非法/非正数取默认,超出上限截断 */
+function normalizeMessageLimit(limit: number): number {
+  const n: number = Number(limit);
+  if (!Number.isFinite(n) || n <= 0) {
+    return DEFAULT_MESSAGE_LIMIT;
+  }
+  return Math.min(Math.floor(n), MAX_MESSAGE_LIMIT);
+}
+
+/**
+ * 构造 getMessages 返回的 JSON(最近 limit 条,按时间正序)。
+ * 只保留 user/assistant 且正文非空的消息;纯函数,便于单测。
+ */
+export function buildMessagesJson(messages: ChatMessage[], limit: number): string {
+  const n: number = normalizeMessageLimit(limit);
+  const picked: FrontendMessageEntry[] = [];
+  for (let i = messages.length - 1; i >= 0 && picked.length < n; i--) {
+    const msg: ChatMessage = messages[i];
+    let role: string = '';
+    if (msg.role === ChatRole.User) {
+      role = 'user';
+    } else if (msg.role === ChatRole.Assistant) {
+      role = 'assistant';
+    }
+    if (role.length === 0 || msg.content.length === 0) {
+      continue;
+    }
+    picked.push({ role: role, content: msg.content });
+  }
+  picked.reverse();
+  return JSON.stringify(picked);
 }
 
 /** 角色卡前端页面可用的角色信息(构造时快照,避免动态绑定) */
@@ -129,6 +187,8 @@ interface PushEvent {
 interface MessageUpdateData {
   generating: boolean;
   lastAssistant: string;
+  /** 当前会话消息总数(页面据此发现与本地不一致时重新 getMessages 对齐) */
+  messageCount: number;
 }
 
 export class CardFrontendBridge {
@@ -237,6 +297,19 @@ export class CardFrontendBridge {
   }
 
   /**
+   * 返回最近 N 条会话消息 JSON(契约 v2):
+   * `[{"role":"user"|"assistant","content":"..."}]`,按时间正序。
+   * 供全屏前端页在页面内自绘对话时拉取历史;流式增量仍走 message_update 事件。
+   * @param limit 条数(默认 50,上限 200);非法值按默认处理
+   */
+  getMessages(limit: number): string {
+    if (this.disposed) {
+      return '[]';
+    }
+    return buildMessagesJson(this.viewModel.messages, limit);
+  }
+
+  /**
    * 发送一条消息到当前会话(与正常聊天同链路,消息会进入聊天气泡流)。
    * 返回 'ok' / 'busy' / 'empty' / 'disposed';发送结果通过 message_update 事件反馈。
    */
@@ -281,7 +354,8 @@ export class CardFrontendBridge {
     }
     const data: MessageUpdateData = {
       generating: this.viewModel.isGenerating,
-      lastAssistant: lastAssistant
+      lastAssistant: lastAssistant,
+      messageCount: messages.length
     };
     this.pushEvent('message_update', data);
   }

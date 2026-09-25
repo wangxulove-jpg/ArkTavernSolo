@@ -5,14 +5,18 @@
  * 复用 CardFrontendWeb 组件渲染 + Bridge 注入。
  * 顶栏由本页提供;内容区(CardFrontendWeb)与 ChatPage 面板模式共用同一套渲染/Bridge 逻辑。
  *
- * 消息发送走 ChatViewModel.sendExternalText,与正常聊天同链路。
+ * 外观:frontend.chrome='none' 时不渲染 App 顶栏(沉浸),内容区直接铺满
+ * (仍从状态栏下方开始,底部保持原样);退出靠系统返回手势/返回键或页面 close()。
+ *
+ * 消息发送走 ChatViewModel.sendExternalText,与正常聊天同链路;
+ * 页面内自绘对话可调 window.arktavern.getMessages() 拉历史(契约 v2)。
  *
  * 契约版本:与 CardFrontendBridge 同步,见 docs/frontend-card-contract.md
  */
 
 import { router } from '@kit.ArkUI';
 import { CardFrontendWeb } from '../components/CardFrontendWeb';
-import { extractFrontendHtml } from '../bridge/CardFrontendBridge';
+import { extractFrontendSpec, FrontendSpec } from '../bridge/CardFrontendBridge';
 import { ChatViewModel } from '../viewmodels/ChatViewModel';
 import { Character } from '../models/Character';
 import { ThemePalette } from '../theme/ThemePalette';
@@ -30,6 +34,8 @@ struct FrontendCardPage {
   /** 传给 CardFrontendWeb 的引用(普通属性,非状态) */
   private vmRef: ChatViewModel | null = null;
   private frontendHtml: string = '';
+  /** 是否隐藏 App 顶栏(卡声明 chrome:'none' → 沉浸) */
+  private hideChrome: boolean = false;
 
   aboutToAppear(): void {
     const vm: ChatViewModel | null = AppStorage.get<ChatViewModel>(ACTIVE_CHAT_VM_KEY) ?? null;
@@ -40,7 +46,9 @@ struct FrontendCardPage {
     this.characterName = vm.characterName;
     const character: Character | null = vm.currentCharacter;
     if (character !== null) {
-      this.frontendHtml = extractFrontendHtml(character.extensions);
+      const spec: FrontendSpec = extractFrontendSpec(character.extensions);
+      this.frontendHtml = spec.html;
+      this.hideChrome = spec.chrome === 'none';
     }
   }
 
@@ -54,31 +62,38 @@ struct FrontendCardPage {
 
   build() {
     Column() {
-      // 顶栏
-      Row() {
-        Text('‹')
-          .fontSize(22)
-          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-          .width(40)
-          .height(40)
-          .textAlign(TextAlign.Center)
-          .onClick(() => {
-            this.goBack();
-          })
+      // 顶栏(chrome:'none' 的沉浸卡不渲染,内容直接铺满)
+      if (!this.hideChrome) {
+        Row() {
+          Text('‹')
+            .fontSize(22)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .width(40)
+            .height(40)
+            .textAlign(TextAlign.Center)
+            .onClick(() => {
+              this.goBack();
+            })
 
-        Text(this.characterName.length > 0 ? this.characterName + ' · 界面' : '角色界面')
-          .fontSize(16)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .layoutWeight(1)
+          Text(this.characterName.length > 0 ? this.characterName + ' · 界面' : '角色界面')
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+        }
+        .width('100%')
+        .height(48)
+        .padding({ left: 4, right: 12 })
+        .margin({ top: this.statusBarHeight })
+        .alignItems(VerticalAlign.Center)
+      } else {
+        // 沉浸模式:仅避让状态栏,其余交给页面自身布局
+        Row()
+          .width('100%')
+          .height(this.statusBarHeight)
       }
-      .width('100%')
-      .height(48)
-      .padding({ left: 4, right: 12 })
-      .margin({ top: this.statusBarHeight })
-      .alignItems(VerticalAlign.Center)
 
       // 主体
       if (this.vmRef !== null && this.frontendHtml.trim().length > 0) {

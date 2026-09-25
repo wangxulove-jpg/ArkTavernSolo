@@ -279,6 +279,20 @@ struct ChatPage {
   @State frontendPanelCurWidth: number = 360;
   /** 前端面板当前高度(vp,打开时由建议值初始化,角落拖动可实时调整) */
   @State frontendPanelCurHeight: number = 0;
+  /**
+   * 前端面板是否已挂载(ArkWeb 保活):
+   * 首次点击「界面」后保持挂载,收起只做位移隐藏,不销毁节点 → 再展开不再白屏重载。
+   * 仅在离开本页或切换到别的角色卡时重置(见 resetFrontendPanel)。
+   */
+  @State frontendPanelMounted: boolean = false;
+  /** 面板挂载时的角色卡 id(换卡时用于重置挂载) */
+  private frontendMountedCardId: string = '';
+  /** 已持久化的面板宽度(vp,0=无记录) */
+  private persistedPanelW: number = 0;
+  /** 已持久化的面板高度(vp,0=无记录) */
+  private persistedPanelH: number = 0;
+  /** 本次展开是否被用户拖动调整过(只有调整过才落盘,避免把卡声明尺寸冻结成用户值) */
+  private frontendPanelResized: boolean = false;
   /** 角落拖动起始宽度(vp) */
   private frontendResizeStartW: number = 360;
   /** 角落拖动起始高度(vp) */
@@ -342,6 +356,9 @@ struct ChatPage {
   private static readonly PREF_KEY_SEND_BUTTON_POS: string = 'chat_send_button_position';
   /** 智感握姿开关偏好 key */
   private static readonly PREF_KEY_SMART_GRIP: string = 'chat_smart_grip_enabled';
+
+  /** 前端界面面板尺寸持久化 key 前缀(按角色卡:id 后缀,值 "宽x高" vp) */
+  private static readonly PREF_KEY_FRONTEND_PANEL_SIZE: string = 'fe_panel_size_';
 
   /** 发送按钮位置: true = 左侧, false = 右侧 */
   @State sendButtonLeft: boolean = false;
@@ -856,6 +873,8 @@ struct ChatPage {
     // 关闭角色状态侧边栏并清空条目
     this.statusPanelExpanded = false;
     this.statusEntries = [];
+    // 释放前端界面面板(卸下保活的 ArkWeb)
+    this.resetFrontendPanel();
     // 关闭 TTS 引擎
     this.ttsService.shutdown();
     this.edgeTtsService.shutdown();
@@ -1159,7 +1178,8 @@ struct ChatPage {
         }
 
         // ===== 前端界面浮层面板(mode=panel,聊天页内展开,对话仍可继续) =====
-        if (this.frontendPanelVisible && this.viewModel !== null) {
+        // 挂载后不随收起卸载(ArkWeb 保活,再展开无白屏重载);隐藏由面板自身位移+透明实现
+        if (this.frontendPanelMounted && this.viewModel !== null) {
           this.frontendPanel()
         }
 
@@ -1425,6 +1445,8 @@ struct ChatPage {
 
   /** 刷新"是否带前端页面"标识,并缓存其 mode/HTML/尺寸(会话角色加载完成后调用) */
   private refreshHasFrontend(): void {
+    // 角色卡可能已变化:先释放旧面板(OFF 挂载),避免拿着上一张卡的 HTML 保活
+    this.resetFrontendPanel();
     if (this.viewModel === null) {
       this.hasFrontend = false;
       return;
@@ -1440,6 +1462,20 @@ struct ChatPage {
     this.frontendPanelWidth = spec.sizeWidth > 0 ? spec.sizeWidth : 360;
     this.frontendPanelHeight = spec.sizeHeight.length > 0 ? spec.sizeHeight : '65%';
     this.frontendPanelTitle = spec.title;
+    // 读取该卡上次调整过的面板尺寸(异步,取到后作为下次展开的初始值)
+    this.loadPersistedPanelSize(character.id);
+  }
+
+  /** 释放前端面板(收起并卸下 ArkWeb 挂载),用于换卡/离开会话 */
+  private resetFrontendPanel(): void {
+    this.frontendPanelVisible = false;
+    this.frontendPanelMounted = false;
+    this.frontendPanelHtml = '';
+    this.frontendMountedCardId = '';
+    this.frontendPanelPinned = false;
+    this.frontendPanelResized = false;
+    this.persistedPanelW = 0;
+    this.persistedPanelH = 0;
   }
 
   /**
@@ -1456,24 +1492,107 @@ struct ChatPage {
       if (character === null) {
         return;
       }
-      const spec: FrontendSpec = extractFrontendSpec(character.extensions);
-      this.frontendPanelHtml = spec.html;
-      // 以建议尺寸初始化当前尺寸(供角落拖动调整)
-      this.frontendPanelCurWidth = this.frontendPanelWidth > 0 ? this.frontendPanelWidth : 360;
-      this.frontendPanelCurHeight = this.resolvePanelHeightVp();
+      if (this.frontendPanelMounted && this.frontendMountedCardId !== character.id) {
+        // 换了角色卡:卸旧再挂新
+        this.resetFrontendPanel();
+      }
+      if (!this.frontendPanelMounted) {
+        const spec: FrontendSpec = extractFrontendSpec(character.extensions);
+        this.frontendPanelHtml = spec.html;
+        this.frontendMountedCardId = character.id;
+        this.frontendPanelMounted = true;
+      }
+      // 尺寸初始化:上次调整过的持久化值 > 卡声明建议值 > 默认(360 / 65%)
+      this.frontendPanelCurWidth = this.clampPanelWidth(
+        this.persistedPanelW > 0
+          ? this.persistedPanelW
+          : (this.frontendPanelWidth > 0 ? this.frontendPanelWidth : 360));
+      this.frontendPanelCurHeight = this.clampPanelHeight(
+        this.persistedPanelH > 0 ? this.persistedPanelH : this.resolvePanelHeightVp());
       this.frontendPanelPinned = false;
-      this.frontendPanelVisible = true;
+      animateTo({ duration: 220, curve: Curve.EaseOut }, (): void => {
+        this.frontendPanelVisible = true;
+      });
       return;
     }
     AppStorage.setOrCreate<ChatViewModel>(ACTIVE_CHAT_VM_KEY, this.viewModel!);
     router.pushUrl({ url: 'pages/FrontendCardPage' });
   }
 
-  /** 关闭前端浮层面板(收起,回到聊天视图) */
+  /**
+   * 关闭前端浮层面板(收起,回到聊天视图)。
+   * 保活:只做位移隐藏,不卸载 ArkWeb、不清 HTML,再展开即刻可见。
+   */
   private closeFrontendPanel(): void {
-    this.frontendPanelVisible = false;
-    this.frontendPanelHtml = '';
+    if (this.frontendPanelResized) {
+      this.persistPanelSize();
+    }
     this.frontendPanelPinned = false;
+    animateTo({ duration: 180, curve: Curve.EaseIn }, (): void => {
+      this.frontendPanelVisible = false;
+    });
+  }
+
+  /** 面板隐藏时的横向位移(vp):足以把面板整体移出右边界(不改变布局尺寸) */
+  private panelHideOffset(): number {
+    return this.frontendPanelCurWidth + 120;
+  }
+
+  /** 读取该角色卡上次调整过的面板尺寸(vp);无记录/解析失败则保持 0 */
+  private loadPersistedPanelSize(cardId: string): void {
+    if (cardId.length === 0) {
+      return;
+    }
+    try {
+      const prefs = AppServices.getAppPreferences();
+      if (!prefs.isInitialized()) {
+        return;
+      }
+      prefs.getString(ChatPage.PREF_KEY_FRONTEND_PANEL_SIZE + cardId, '')
+        .then((value: string): void => {
+          const m: RegExpMatchArray | null = value.match(/^(\d{1,4})x(\d{1,4})$/);
+          if (m === null) {
+            return;
+          }
+          const w: number = Number(m[1]);
+          const h: number = Number(m[2]);
+          if (w > 0 && h > 0) {
+            this.persistedPanelW = w;
+            this.persistedPanelH = h;
+          }
+        })
+        .catch((_e: Object): void => {
+          // 读取失败静默使用卡声明值
+        });
+    } catch (_e) {
+      // AppServices 未初始化时静默
+    }
+  }
+
+  /** 持久化当前面板尺寸(按角色卡);写入失败静默忽略 */
+  private persistPanelSize(): void {
+    if (!this.frontendPanelMounted || this.frontendMountedCardId.length === 0) {
+      return;
+    }
+    if (this.frontendPanelCurWidth <= 0 || this.frontendPanelCurHeight <= 0) {
+      return;
+    }
+    const value: string =
+      Math.round(this.frontendPanelCurWidth).toString() + 'x' + Math.round(this.frontendPanelCurHeight).toString();
+    this.persistedPanelW = Math.round(this.frontendPanelCurWidth);
+    this.persistedPanelH = Math.round(this.frontendPanelCurHeight);
+    try {
+      const prefs = AppServices.getAppPreferences();
+      if (!prefs.isInitialized()) {
+        return;
+      }
+      prefs.putString(ChatPage.PREF_KEY_FRONTEND_PANEL_SIZE + this.frontendMountedCardId, value)
+        .catch((_e: Object): void => {
+          // 写入失败不影响交互
+        });
+    } catch (_e) {
+      // AppServices 未初始化时静默
+    }
   }
 
   /** 解析面板高度为 vp:百分比按窗口高度折算;数字原样;非法/空回退 65% */
@@ -1581,18 +1700,21 @@ struct ChatPage {
   @Builder
   frontendPanel() {
     Stack({ alignContent: Alignment.TopEnd }) {
-      // 透明捕获层:点面板以外任意位置即收起(固定后不收起)
-      Column()
-        .width('100%')
-        .height('100%')
-        .backgroundColor(Color.Transparent)
-        .onClick(() => {
-          if (!this.frontendPanelPinned) {
-            this.closeFrontendPanel();
-          }
-        })
+      // 透明捕获层:点面板以外任意位置即收起(固定后不收起);收起态不存在,不拦截点击
+      if (this.frontendPanelVisible) {
+        Column()
+          .width('100%')
+          .height('100%')
+          .backgroundColor(Color.Transparent)
+          .onClick(() => {
+            if (!this.frontendPanelPinned) {
+              this.closeFrontendPanel();
+            }
+          })
+      }
 
       // 面板:标题栏 + ArkWeb 内容(四角把手可拖动调整大小)
+      // 保活:收起只做位移+透明(布局尺寸不变,ArkWeb 节点不重建),再展开即刻显示,无白屏
       Stack({ alignContent: Alignment.TopStart }) {
         Column() {
           Row() {
@@ -1637,6 +1759,7 @@ struct ChatPage {
           CardFrontendWeb({
             vm: this.viewModel,
             html: this.frontendPanelHtml,
+            active: this.frontendPanelVisible,
             onClose: (): void => {
               this.closeFrontendPanel();
             }
@@ -1661,14 +1784,12 @@ struct ChatPage {
       .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
       .clip(true)
       .shadow({ radius: 10, color: 'rgba(0,0,0,0.18)' })
-      .transition(
-        TransitionEffect.opacity(0).combine(TransitionEffect.translate({ x: 80 }))
-          .animation({ duration: 220, curve: Curve.EaseOut })
-      )
+      .translate({ x: this.frontendPanelVisible ? 0 : this.panelHideOffset() })
+      .opacity(this.frontendPanelVisible ? 1 : 0)
     }
     .width('100%')
     .height('100%')
-    .hitTestBehavior(HitTestMode.Transparent)
+    .hitTestBehavior(this.frontendPanelVisible ? HitTestMode.Transparent : HitTestMode.None)
   }
 
   /** 角落调整大小把手:x/y 为把手左上角(面板内锚点),angle 为角标旋转角 */
@@ -1715,6 +1836,11 @@ struct ChatPage {
             this.clampPanelWidth(this.frontendResizeStartW - event.offsetX);
           this.frontendPanelCurHeight =
             this.clampPanelHeight(this.frontendResizeStartH + event.offsetY);
+        })
+        .onActionEnd(() => {
+          // 拖动结束落盘(按角色卡记忆,下次展开/重启后沿用)
+          this.frontendPanelResized = true;
+          this.persistPanelSize();
         })
     )
   }
