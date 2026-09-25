@@ -19,6 +19,9 @@
 docs/AGENT/
 docs/角色卡/
 docs/*.md
+# 例外:前端卡契约文档是 App 与制卡工具的单一事实来源,必须进版本库
+!docs/frontend-card-contract.md
+!docs/arktavern-card-extensions.md
 AGENT.md
 spec/
 /tools/
