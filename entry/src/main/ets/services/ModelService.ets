@@ -46,6 +46,7 @@ import { getPreset } from '../models/ProviderPreset';
 import { ProviderConfigStore } from '../storage/ProviderConfigStore';
 import { ProviderKeyStore } from '../storage/ProviderKeyStore';
 import { AiProvider } from '../network/providers/AiProvider';
+import { filterGeminiChatModels } from '../network/providers/GeminiModelFilter';
 import { Logger } from '../utils/Logger';
 import {
   ProviderFactory,
@@ -454,6 +455,12 @@ export class ModelService {
       models = await provider.fetchModels(config.baseUrl, resolvedKey as string);
     } catch (e) {
       fetchError = this.wrapNetworkError(e, 'fetchAvailableModels failed');
+    }
+
+    // Gemini 的 models 接口返回全部 60+ 模型(含 embedding/TTS/图像/视频等),
+    // 只保留对话模型,并去掉 "models/" 前缀使 ID 与预设一致
+    if (models.length > 0 && config.type === ProviderType.Gemini) {
+      models = filterGeminiChatModels(models);
     }
 
     if (models.length > 0) {

@@ -381,24 +381,24 @@ const MINIMAX_PRESET: ProviderPreset = {
 
 const GEMINI_MODELS: ModelOption[] = [
   {
+    id: 'gemini-3.6-flash',
+    displayName: 'Gemini 3.6 Flash',
+    description: '通用快速,对新密钥最稳定(约 1M 上下文)'
+  },
+  {
     id: 'gemini-3.8-flash',
     displayName: 'Gemini 3.8 Flash',
-    description: '通用快速,官方 OpenAI 兼容端点(约 1M 上下文)'
+    description: '官方 OpenAI 兼容端点,新密钥偶发 503(约 1M 上下文)'
   },
   {
-    id: 'gemini-3.1-pro',
-    displayName: 'Gemini 3.1 Pro',
-    description: '旗舰深度推理(约 1M 上下文)'
+    id: 'gemini-3.1-pro-preview',
+    displayName: 'Gemini 3.1 Pro (Preview)',
+    description: '旗舰深度推理,限流较严格(约 1M 上下文)'
   },
   {
-    id: 'gemini-2.5-pro',
-    displayName: 'Gemini 2.5 Pro',
-    description: '成熟旗舰推理(1M 上下文)'
-  },
-  {
-    id: 'gemini-2.5-flash',
-    displayName: 'Gemini 2.5 Flash',
-    description: '快速响应(1M 上下文)'
+    id: 'gemini-3.1-flash-lite',
+    displayName: 'Gemini 3.1 Flash Lite',
+    description: '轻量快速,成本最低(约 1M 上下文)'
   }
 ];
 
