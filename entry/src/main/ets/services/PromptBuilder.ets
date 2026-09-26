@@ -117,6 +117,12 @@ export interface PromptBuildContext {
    * append-only 保证块内已注入前缀缓存命中。
    */
   stickyLorebookEntries?: LorebookEntry[];
+  /**
+   * v50: 前端卡界面交互记录(可选,契约 v3 appendInteraction)。
+   * 由 ChatService.buildFrontendInteractionBlock() 生成(空串=无记录,不产生段);
+   * 注入到粘滞世界书之后、PostHistory 之前(FrontendInteraction 位置,尾部动态区保缓存)。
+   */
+  frontendInteractionLog?: string;
   /** v44: 记忆关键词检索命中的历史章节(可选开关,位置固定于对话前)。 */
   memoryKeywordHits?: MemoryKeywordHit[];
   /** 用户身份(可选,提供时注入到提示词) */
@@ -445,6 +451,21 @@ export class PromptBuilder {
         this.formatEntryNames('粘滞命中', stickyNames)
       );
       segments.push(stickySeg);
+    }
+
+    // 5.8 v50: 前端卡界面交互记录(契约 v3 appendInteraction):
+    // 内容来自 CardFrontendBridge.appendInteraction 攒下的轻交互(零请求),
+    // 位置在粘滞世界书之后、PostHistory 之前(尾部动态区,append-only 保缓存)。
+    if (context.frontendInteractionLog !== undefined && context.frontendInteractionLog.length > 0) {
+      const interactionSeg: PromptSegment = createPromptSegment(
+        'frontend-interaction',
+        PromptSegmentPosition.FrontendInteraction,
+        ChatRole.System,
+        context.frontendInteractionLog,
+        0,
+        ChatMessageSource.FrontendInteraction
+      );
+      segments.push(interactionSeg);
     }
 
     // 6. Post-History Instructions(放在聊天历史之后)

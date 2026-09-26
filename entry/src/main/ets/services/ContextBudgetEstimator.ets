@@ -126,6 +126,7 @@ export class ContextBudgetEstimator {
       ChatMessageSource.Conversation,
       ChatMessageSource.LorebookDepth,
       ChatMessageSource.LorebookSticky,
+      ChatMessageSource.FrontendInteraction,
       ChatMessageSource.CharacterPostHistory
     ];
 
@@ -254,6 +255,8 @@ export function sourceDisplayLabel(src: ChatMessageSource): string {
       return '旁白指令';
     case ChatMessageSource.Conversation:
       return '最近聊天历史(可裁剪)';
+    case ChatMessageSource.FrontendInteraction:
+      return '前端交互记录(卡片界面操作)';
     case ChatMessageSource.CharacterPostHistory:
       return 'Post-History(常驻)';
     default:
@@ -276,6 +279,9 @@ export function sourceMethodLabel(src: ChatMessageSource): string {
     case ChatMessageSource.LorebookDepth:
       return '加载方式:按需加载(OnDemand)——关键词命中后按深度插入到对话内部,'
         + '每轮重新匹配(未命中的轮次不会出现)';
+    case ChatMessageSource.FrontendInteraction:
+      return '加载方式:角色卡前端界面交互(契约 v3 appendInteraction)——页面轻交互攒下,'
+        + '不触发模型请求,下一轮随本段注入(最近 30 条/2000 字符,尾部滚动窗口)';
     case ChatMessageSource.LorebookBefore:
     case ChatMessageSource.LorebookAfter:
       return '加载方式:常量常驻 + 关键词命中(注入角色定义前/后)';

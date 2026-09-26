@@ -309,7 +309,7 @@ export struct CardFrontendWeb {
               object: this.bridge!,
               name: 'arktavern',
               methodList: ['getVersion', 'getState', 'getStatusSchema',
-                'setState', 'getCharacter', 'getMessages', 'send', 'close'],
+                'setState', 'getCharacter', 'getMessages', 'send', 'appendInteraction', 'close'],
               controller: this.controller
             })
 

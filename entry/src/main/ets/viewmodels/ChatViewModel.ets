@@ -306,6 +306,19 @@ export class ChatViewModel {
   }
 
   /**
+   * 记录一条前端界面交互(契约 v3,供卡片页面 Bridge appendInteraction 调用)。
+   * 只入会话级内存缓冲:不写聊天历史、不进气泡、不触发模型请求;
+   * 下一轮正常发言时由 ChatService 的「前端交互记录」提示词段带给模型。
+   * @returns true=已记录; false=空文本或已销毁
+   */
+  appendFrontendInteraction(text: string): boolean {
+    if (this.disposed) {
+      return false;
+    }
+    return this.chatService.appendFrontendInteraction(text);
+  }
+
+  /**
    * 发送指定文本内容(供前端页面 Bridge 调用,不依赖输入框 inputText)。
    * 与 send() 走同一发送链路(流式、状态、历史同步进聊天气泡流)。
    * @param text 要发送的文本

@@ -54,5 +54,7 @@ export enum ChatMessageSource {
   /** OnDemandPinned 固定世界书(受保护,记忆之后、对话之前,不进入聊天历史) */
   LorebookPinned = 'lorebookPinned',
   /** StickyOnDemand 粘滞世界书命中(受保护,对话之后、PostHistory 之前,append-only 不进入聊天历史) */
-  LorebookSticky = 'lorebookSticky'
+  LorebookSticky = 'lorebookSticky',
+  /** v50: 角色卡前端界面交互记录(受保护,粘滞世界书之后、PostHistory 之前,不进入聊天历史) */
+  FrontendInteraction = 'frontendInteraction'
 }

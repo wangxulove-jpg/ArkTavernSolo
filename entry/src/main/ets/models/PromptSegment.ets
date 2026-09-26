@@ -8,7 +8,7 @@
  * PromptPreset → BeforeCharacter → Character → AfterCharacter
  *   → DialogueExamples → MemoryCore → LorebookPinned(OnDemandPinned世界书)
  *   → MemorySession → MemoryChapter → MemoryRolling → MemoryLegacy
- *   → Conversation → PostHistory
+ *   → Conversation → LorebookSticky → FrontendInteraction(v50 前端交互记录) → PostHistory
  *
  * v12 多层记忆:
  * - MemoryCore:核心长期事实(最高优先级)
@@ -58,6 +58,11 @@ export enum PromptSegmentPosition {
   Conversation = 'Conversation',
   /** StickyOnDemand 粘滞世界书命中块(对话之后、PostHistory 之前,append-only 保缓存) */
   LorebookSticky = 'LorebookSticky',
+  /**
+   * v50: 角色卡前端界面交互记录(契约 v3 appendInteraction)。
+   * 由页面轻交互攒下(不请求模型),位于粘滞世界书之后、PostHistory 之前(尾部动态区,保缓存)。
+   */
+  FrontendInteraction = 'FrontendInteraction',
   /** Post-History Instructions,位于聊天历史之后 */
   PostHistory = 'PostHistory'
 }
@@ -123,7 +128,8 @@ const POSITION_ORDER: Record<string, number> = {
   'MemorySummary': 14,
   'Conversation': 15,
   'LorebookSticky': 16,
-  'PostHistory': 17
+  'FrontendInteraction': 17,
+  'PostHistory': 18
 };
 
 /**

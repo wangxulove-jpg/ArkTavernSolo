@@ -157,6 +157,126 @@ const DEFAULT_LOREBOOK_INJECTION_DEPTH: number = 0;
 /** 自动记忆总结开关 Preferences key(全局,跨会话,默认 false) */
 export const MEMORY_AUTO_SUMMARY_PREFS_KEY: string = 'memory_auto_summary_enabled';
 
+/** 前端卡交互记录:最多保留条数(v50,契约 v3 appendInteraction) */
+export const FRONTEND_INTERACTION_MAX_ITEMS: number = 30;
+/** 前端卡交互记录:注入提示词时的字符上限(超出从最旧开始丢) */
+export const FRONTEND_INTERACTION_MAX_CHARS: number = 2000;
+
+// ===== 纯函数(便于单测;ChatService 对应方法均委托这些实现) =====
+
+/**
+ * 交互记录入队:空文本忽略并返回 false;超条数从最旧丢;超字符数从最旧继续丢(至少保留 1 条)。
+ */
+export function pushFrontendInteractionRecord(records: string[], text: string): boolean {
+  const content: string = text.trim();
+  if (content.length === 0) {
+    return false;
+  }
+  records.push(content);
+  while (records.length > FRONTEND_INTERACTION_MAX_ITEMS) {
+    records.shift();
+  }
+  let total: number = 0;
+  for (let i = 0; i < records.length; i++) {
+    total += records[i].length;
+  }
+  while (records.length > 1 && total > FRONTEND_INTERACTION_MAX_CHARS) {
+    const removed: string | undefined = records.shift();
+    total -= removed !== undefined ? removed.length : 0;
+  }
+  return true;
+}
+
+/**
+ * 构建「前端交互记录」提示词段文本:无记录返回空串(PromptBuilder 据此不产生段)。
+ * 不带时间戳:省 token,内容 append-only 对前缀缓存友好。
+ */
+export function buildFrontendInteractionText(records: string[]): string {
+  if (records.length === 0) {
+    return '';
+  }
+  const lines: string[] = [];
+  for (let i = 0; i < records.length; i++) {
+    lines.push('- ' + records[i]);
+  }
+  return '【前端交互记录】\n'
+    + '以下是玩家在角色卡界面里的操作(按发生顺序),仅供你了解玩家做过什么,不要在正文中复述本段:\n'
+    + lines.join('\n');
+}
+
+/**
+ * 状态字段指令行:「- 金币｜说明:钱｜当前值:999(由界面/玩家设定)｜已锁定(不可更新)」。
+ * 当前值让模型看到玩家/界面改过什么(零额外请求)。
+ */
+export function formatStatusFieldInstructionLine(
+  name: string, desc: string, value: string, fromUser: boolean, locked: boolean
+): string {
+  const descPart: string = desc.length > 0 ? '｜说明:' + desc : '';
+  const lockedPart: string = locked ? '｜已锁定(不可更新)' : '';
+  const valuePart: string = '｜当前值:' + (value.length > 0 ? value : '(空)');
+  const sourcePart: string = fromUser ? '(由界面/玩家设定)' : '';
+  return '- ' + name + descPart + valuePart + sourcePart + lockedPart;
+}
+
+/**
+ * 构建状态输出指令文本(声明式 v1):
+ * - 无声明 schema / 全部 locked → 返回空串(不注入,状态功能整体禁用)
+ * - regenerate=true → 只输出 JSON(一次性刷新字段)
+ * - 正常路径 → 正文后附带 <|status|> 状态块;locked 字段单列作参考、严禁输出
+ */
+export function buildStatusInstructionText(
+  schema: ChatStatusSchemaEntry[], entries: ChatStatusEntry[], regenerate: boolean
+): string {
+  if (schema.length === 0) {
+    return '';
+  }
+  const updatable: string[] = [];
+  const lockedLines: string[] = [];
+  for (let i = 0; i < schema.length; i++) {
+    const e: ChatStatusSchemaEntry = schema[i];
+    let value: string = '';
+    let fromUser: boolean = false;
+    for (let j = 0; j < entries.length; j++) {
+      if (entries[j].name === e.name) {
+        value = entries[j].value;
+        fromUser = entries[j].fromUser;
+        break;
+      }
+    }
+    const line: string = formatStatusFieldInstructionLine(e.name, e.desc, value, fromUser, e.locked);
+    if (e.locked) {
+      lockedLines.push(line);
+    } else {
+      updatable.push(line);
+    }
+  }
+  if (updatable.length === 0) {
+    return '';
+  }
+  const fieldsText: string = updatable.join('\n');
+  const lockedText: string = lockedLines.length > 0
+    ? '\n- 以下字段已锁定,仅列出当前值供你参考,严禁输出:\n' + lockedLines.join('\n')
+    : '';
+  if (regenerate) {
+    return '【角色状态输出规则】\n' +
+      '根据角色当前处境,为下面这些状态维度生成/刷新当前值。' +
+      '只输出一个 JSON 对象,不要输出任何其他文字或解释:\n' +
+      '{"字段名":"值"}\n' +
+      '- 严格只包含这些字段,数量与字段名完全一致,不要新增或删除(列出格式为「字段名｜说明｜当前值」,' +
+      '当前值仅供你了解现状,输出仍是纯值):\n' +
+      fieldsText;
+  }
+  return '【角色状态输出规则】\n' +
+    '在回复正文之后,单独输出一行 JSON 状态块,格式严格如下(正文中不要提及状态块):\n' +
+    '<|status|>\n' +
+    '{"字段名":"值"}\n' +
+    '<|/status|>\n' +
+    '- 状态块只能包含这些字段,字段名与数量必须完全一致,严禁新增或删除字段\n' +
+    '- 下列每行的「当前值」反映最新状态(可能由玩家在卡片界面里调整过),仅供你了解现状,输出仍是纯值:\n' +
+    fieldsText + lockedText + '\n' +
+    '- 每轮都要重新输出全部字段的最新值,反映当前进展;若剧情没有变化,值保持不变';
+}
+
 /** 代写(🎭3候选)引导指令 Preferences key(全局,跨会话;空=用内置默认中文提示词) */
 export const IMPRES_GUIDE_KEY: string = 'impres_guide_prompt';
 
@@ -464,6 +584,13 @@ export class ChatService {
    * 可由用户在记忆管理页手动切换。默认 true。
    */
   private statusInstructionEnabled: boolean = true;
+  /**
+   * 前端卡交互记录(契约 v3 appendInteraction)。
+   * 角色卡界面里的轻交互由页面调 Bridge 攒到这里:不写聊天历史、不触发模型请求,
+   * 只在下一轮正常请求时作为「前端交互记录」提示词段注入(尾部动态区,滚动窗口 30 条/2000 字符)。
+   * 会话级内存态:切会话/重启即清。
+   */
+  private frontendInteractions: string[] = [];
   /** 当前会话的最大 sequenceNumber(空会话为 0) */
   private currentSequenceNumber: number = 0;
   /** 会话是否已初始化 */
@@ -648,6 +775,8 @@ export class ChatService {
   private async doInitializeSession(character?: Character, forceNew: boolean = false): Promise<void> {
     this.character = character !== undefined ? character : null;
     this.syncStatusSchemaFromCharacter();
+    // v50: 前端交互记录是会话级内存态,切会话/新会话即清(避免把上一会话的界面操作带进新上下文)
+    this.clearFrontendInteractions();
 
     // 加载自动记忆总结开关(全局偏好,跨会话)
     this.loadMemoryAutoSummaryPref();
@@ -2484,6 +2613,41 @@ export class ChatService {
     return JSON.stringify(this.statusSchema);
   }
 
+  // ===== 前端卡交互记录(契约 v3 appendInteraction):零请求地把界面操作带进下一轮上下文 =====
+
+  /**
+   * 追加一条前端界面交互记录(角色卡页面经 Bridge appendInteraction 调用)。
+   * 只入内存缓冲:不写聊天历史、不进聊天气泡、不触发模型请求;
+   * 下一轮正常请求时由 buildFrontendInteractionBlock 作为提示词段注入。
+   * 滚动窗口:最多 30 条、2000 字符(超出从最旧开始丢)。
+   * @returns true=已记录;false=空文本或已销毁
+   */
+  appendFrontendInteraction(text: string): boolean {
+    if (this.disposed) {
+      return false;
+    }
+    return pushFrontendInteractionRecord(this.frontendInteractions, text);
+  }
+
+  /** 清空前端交互记录(会话切换/新会话时调用;内存态,不持久化) */
+  clearFrontendInteractions(): void {
+    if (this.frontendInteractions.length > 0) {
+      this.frontendInteractions = [];
+    }
+  }
+
+  /** 是否有待注入的前端交互记录(供 UI/测试查询) */
+  hasFrontendInteractions(): boolean {
+    return this.frontendInteractions.length > 0;
+  }
+
+  /**
+   * 构建「前端交互记录」提示词段文本;无记录返回空串(PromptBuilder 据此不产生段)。
+   */
+  buildFrontendInteractionBlock(): string {
+    return buildFrontendInteractionText(this.frontendInteractions);
+  }
+
   /**
    * CHAT-STATUS-1A: 请求下一次回复重新生成/优化角色状态字段。
    * 由"AI 生成"按钮调用,在下一轮 buildStatusInstruction 时生效,回复完成后复位。
@@ -3231,40 +3395,7 @@ export class ChatService {
    * - 正常路径 → 让 AI 在正文后输出状态块,只更新已声明字段,禁止增删字段
    */
   private buildStatusInstruction(): string {
-    const schema: ChatStatusSchemaEntry[] = this.statusSchema;
-    if (schema.length === 0) {
-      return '';
-    }
-    const lines: string[] = [];
-    for (let i = 0; i < schema.length; i++) {
-      const e: ChatStatusSchemaEntry = schema[i];
-      if (e.locked) {
-        continue;
-      }
-      const line: string = e.desc.length > 0 ? e.name + '(' + e.desc + ')' : e.name;
-      lines.push(line);
-    }
-    const fieldsText: string = lines.join('、');
-    // 全部为 locked(无可由 AI 更新的字段)时不注入状态输出指令
-    if (fieldsText.length === 0) {
-      return '';
-    }
-    if (this.statusFieldGenerationRequested) {
-      return '【角色状态输出规则】\n' +
-        '根据角色当前处境,为下面这些状态维度生成/刷新当前值。' +
-        '只输出一个 JSON 对象,不要输出任何其他文字或解释:\n' +
-        '{"字段名":"值"}\n' +
-        '- 严格只包含这些字段,数量与字段名完全一致,不要新增或删除:\n' +
-        fieldsText;
-    }
-    return '【角色状态输出规则】\n' +
-      '在回复正文之后,单独输出一行 JSON 状态块,格式严格如下(正文中不要提及状态块):\n' +
-      '<|status|>\n' +
-      '{"字段名":"值"}\n' +
-      '<|/status|>\n' +
-      '- 状态块只能包含这些字段,字段名与数量必须完全一致,严禁新增或删除字段:\n' +
-      fieldsText + '\n' +
-      '- 每轮都要重新输出全部字段的最新值,反映当前进展;若剧情没有变化,值保持不变';
+    return buildStatusInstructionText(this.statusSchema, this.currentStatusState.entries, this.statusFieldGenerationRequested);
   }
 
   /**
@@ -4131,6 +4262,8 @@ export class ChatService {
       pinnedLorebookEntries: pinnedLorebookEntries,
       // v46: StickyOnDemand 会话粘滞命中条目(对话之后、PostHistory 之前注入)
       stickyLorebookEntries: stickyLorebookEntries,
+      // v50: 前端卡交互记录(粘滞世界书之后、PostHistory 之前;无记录时为空串→不产生段)
+      frontendInteractionLog: this.buildFrontendInteractionBlock(),
       // Persona 注入
       persona: effectivePersona !== null ? effectivePersona : undefined
       // enablePostHistoryInstructions 默认为 true

@@ -25,8 +25,8 @@ import { ChatMessage } from '../models/ChatMessage';
 import { ChatRole } from '../models/ChatRole';
 import { ChatStatusState } from '../models/ChatStatusState';
 
-/** Bridge 提供给页面的契约版本号 */
-const BRIDGE_VERSION: string = '2';
+/** Bridge 提供给页面的契约版本号(v3: 新增 appendInteraction;v1/v2 能力全保留) */
+const BRIDGE_VERSION: string = '3';
 
 /** getMessages 默认返回条数(不传 limit 时) */
 const DEFAULT_MESSAGE_LIMIT: number = 50;
@@ -336,6 +336,28 @@ export class CardFrontendBridge {
     if (this.closeHandler !== null) {
       this.closeHandler();
     }
+    return 'ok';
+  }
+
+  /**
+   * 记录一条界面交互(契约 v3):**不触发模型请求、不写聊天历史、不进聊天气泡**,
+   * 只攒进会话缓冲,下一轮正常发言时随「前端交互记录」提示词段进入模型上下文。
+   * 适合轻交互(点选项、买东西、切界面);需要角色立刻回应时才用 send()(会发一次完整请求)。
+   * 返回 'ok' / 'empty' / 'disposed'。
+   */
+  appendInteraction(text: string): string {
+    if (this.disposed) {
+      return 'disposed';
+    }
+    const trimmed: string = text.trim();
+    if (trimmed.length === 0) {
+      return 'empty';
+    }
+    const ok: boolean = this.viewModel.appendFrontendInteraction(trimmed);
+    if (!ok) {
+      return 'empty';
+    }
+    this.logger('appendInteraction: ' + (trimmed.length > 48 ? trimmed.substring(0, 48) + '…' : trimmed));
     return 'ok';
   }
 
