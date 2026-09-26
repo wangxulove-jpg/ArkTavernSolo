@@ -1,9 +1,10 @@
 # 前端页面角色卡 · Bridge 契约（frontend-card-contract）
 
 > 本文档是 **ArkTavern App** 与 **PC 转换工具**（大模型 + skill 将其他平台角色卡改造成符合本结构）之间的接口契约。
-> Bridge 当前版本：`v2`（App 侧 `CardFrontendBridge.getVersion()` 返回 `"2"`）。
+> Bridge 当前版本：`v3`（App 侧 `CardFrontendBridge.getVersion()` 返回 `"3"`）。
 > 版本历史：`v1` = getVersion/getState/getStatusSchema/setState/getCharacter/send/close；
-> `v2` = 新增 `getMessages(limit)`、`message_update.messageCount`，`frontend.chrome` 支持 `"none"`（沉浸全屏）。
+> `v2` = 新增 `getMessages(limit)`、`message_update.messageCount`，`frontend.chrome` 支持 `"none"`（沉浸全屏）；
+> `v3` = 新增 `appendInteraction(text)`（轻交互回传，**不触发模型请求**），状态输出指令开始携带各字段**当前值**。
 > 变更本契约时必须同步更新：`CardFrontendBridge.ets`、`CardFrontendWeb.ets`、`FrontendCardPage.ets`、本文档，且不破坏已导入卡（向前兼容）。
 
 ---
@@ -60,7 +61,8 @@ App 在聊天页右下发出现"界面"折叠标签（仅当该角色卡含有�
 | `setState(name, value)` | `name: string`, `value: string` | `string` | 写角色状态：字段存在则更新；`value` 为空表示删除；字段不存在且非空则新增。返回 `"ok"` / `"invalid"` / `"disposed"` |
 | `getCharacter()` | 无 | `string` | 角色卡信息 JSON：`{"name":"…","description":"…","personality":"…","scenario":"…","systemPrompt":"…"}` |
 | `getMessages(limit)` | `limit?: number` | `string` | **v2 新增**。会话历史消息 JSON 数组（按时间正序，只含 user/assistant、正文已剥离状态块）：`[{"role":"user","content":"…"},{"role":"assistant","content":"…"}]`。`limit` 默认 50、上限 200（非法值按默认）。供全屏前端页在页面内自绘对话时拉历史 |
-| `send(text)` | `text: string` | `string` | 发送一条消息到当前会话（同正常聊天链路，消息进入聊天气泡与历史）。返回 `"ok"` / `"busy"` / `"empty"` / `"disposed"`；发送结果经 `message_update` 事件反馈 |
+| `send(text)` | `text: string` | `string` | 发送一条消息到当前会话（同正常聊天链路，消息进入聊天气泡与历史）。**会触发一次完整的模型回复**。返回 `"ok"` / `"busy"` / `"empty"` / `"disposed"`；发送结果经 `message_update` 事件反馈 |
+| `appendInteraction(text)` | `text: string` | `string` | **v3 新增**。记录一条界面交互（如"在商店买了 3 瓶药水""打赢第 3 关"）：**不写聊天历史、不进聊天气泡、不触发模型请求**，只攒进会话缓冲（滚动窗口 30 条 / 2000 字符），下一轮正常发言时随「前端交互记录」提示词段进入模型上下文。返回 `"ok"` / `"empty"` / `"disposed"` |
 | `close()` | 无 | `string` | 关闭前端页面返回聊天页（面板模式=收起面板；全屏页=返回聊天页），返回 `"ok"` |
 
 ## 4. App → 页面事件（`window.arktavernPush.dispatch`）
@@ -138,6 +140,22 @@ function doSend(text) {
 
 **兼容降级**：老版本 App（`getVersion()` 返回 `"1"`）没有 `getMessages`，页面用 `typeof window.arktavern.getMessages !== 'function'` 判定，此时退化为"只渲染 `message_update.lastAssistant`"（仍可对话，但看不到历史）。v1 页面在 v2 App 上行为完全不变（纯新增能力）。
 
+## 5.1 交互回传：轻交互 vs 重交互（v3）
+
+模型**不会**自动看到页面里发生的事。按"要不要角色立刻开口"二选一：
+
+| 场景 | 用什么 | 代价 |
+|---|---|---|
+| 点选项、买东西、切界面、打完一关 —— **不需要角色马上回应** | `appendInteraction('在商店买了 3 瓶药水')` | **零请求**：只攒进缓冲，下一轮玩家正常发言时随「前端交互记录」提示词段带给模型 |
+| 需要角色立刻回应（进入下一场景、向 NPC 搭话、回合结束） | `send('我决定渡海')` | 一次完整模型请求（与聊天框发言等价） |
+| 数值变化（金币/血量/好感度） | `setState(name, value)` | 零请求，且各字段**当前值**会随状态输出指令一起给模型（模型下一轮就知道金币已是 999） |
+
+要点：
+- **不要**每个轻交互都调 `send()`：会连发多次完整请求，既慢又费 token；攒着等玩家下一句话一起带上即可。
+- `appendInteraction` 记录**不进聊天气泡**（聊天框只显示玩家与角色的对话）；想让交互可见就用 `send()`。
+- 交互记录只存在**当前会话内存**（切会话/重启即清），注入上限：最近 30 条 / 2000 字符（超出丢最旧）。
+- 写法建议：一条一句话、带关键数值，例如 `appendInteraction('在铁匠铺把长剑升级到 +3（花费 120 金币）')`。
+
 ## 6. 安全约束（页面与转换工具必须遵守）
 
 - 页面**不允许**发起导航（`window.location` 跳转、`<a>` 点击）——App 会拦截并记录日志
@@ -195,7 +213,7 @@ function doSend(text) {
 
 ## 8. 版本兼容建议
 
-- 契约版本当前为 `v2`（纯新增，v1 页面无需改动）
-- App 升级且**破坏性**变更契约时，将 `getVersion()` 提升到 `v3`，页面通过 `getVersion()` 判级做降级展示
-- 新增能力（如 `getMessages`）优先用 `typeof window.arktavern.xxx === 'function'` 探测，不要硬判版本号
-- 转换工具输出页面时建议写入版本注释尾巴：`<!-- arktavern-bridge:2 -->`
+- 契约版本当前为 `v3`（纯新增：`appendInteraction` 与状态当前值，v1/v2 页面无需改动）
+- App 升级且**破坏性**变更契约时，将 `getVersion()` 提升到下一个大版本，页面通过 `getVersion()` 判级做降级展示
+- 新增能力（如 `getMessages` / `appendInteraction`）优先用 `typeof window.arktavern.xxx === 'function'` 探测，不要硬判版本号
+- 转换工具输出页面时建议写入版本注释尾巴：`<!-- arktavern-bridge:3 -->`
