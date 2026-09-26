@@ -12,6 +12,7 @@ import statusSchemaTest from './status_schema.test';
 import geminiModelFilterTest from './gemini_model_filter.test';
 import frontendSpecV2Test from './frontend_spec_v2.test';
 import contextOrderLabelTest from './context_order_label.test';
+import frontendInteractionTest from './frontend_interaction.test';
 
 export default function testsuite() {
   promptSegmentOrderTest();
@@ -23,4 +24,5 @@ export default function testsuite() {
   geminiModelFilterTest();
   frontendSpecV2Test();
   contextOrderLabelTest();
+  frontendInteractionTest();
 }

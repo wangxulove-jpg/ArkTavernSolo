@@ -72,6 +72,11 @@ export struct ChatRichText {
   @Prop @Watch('onThemeChange') colorTheme: ChatMarkdownColorTheme | null = null;
   /** 是否可选择(长按复制) */
   @Prop selectable: boolean = true;
+  /**
+   * 是否把「前端界面 HTML 大块」折叠成一行(默认 true,契约 v3 卡片开场白的整页 HTML)。
+   * 折叠块内部嵌套渲染必须传 false,否则源码会被再次折叠(套娃)。
+   */
+  @Prop foldFrontendHtml: boolean = true;
   /** 交互动作回调(分支选项点击时触发,由上层注入"把选项作为消息发送给 AI") */
   onInteractiveAction?: (text: string) => void;
 
@@ -261,7 +266,8 @@ export struct ChatRichText {
 
     const options: ChatTextParserOptions = {
       enableMarkdown: settings.enableMarkdown,
-      enableDialogue: settings.enableDialogue
+      enableDialogue: settings.enableDialogue,
+      extractFrontendHtml: this.foldFrontendHtml
     };
 
     // 打字机揭示中(流式或排空):跳过缓存,直接解析当前已揭示文本
@@ -270,7 +276,7 @@ export struct ChatRichText {
       return;
     }
 
-    // 完整内容:使用 LRU 缓存复用
+    // 完整内容:使用 LRU 缓存复用(折叠开关进 key,避免两种解析结果互相串)
     const contentHash: number = hashString(text);
     const cacheKey: string = this.buildCacheKey(contentHash, settings);
     const cached: CacheEntry | undefined = ChatRichText.cache.get(cacheKey);
@@ -307,6 +313,7 @@ export struct ChatRichText {
       + settings.lineHeight.toString() + '_'
       + settings.quoteStyle + '_'
       + settings.codeStyle + '_'
+      + (this.foldFrontendHtml ? 'fe1' : 'fe0') + '_'
       + this.buildThemeFingerprint();
   }
 
@@ -541,6 +548,7 @@ export struct ChatRichText {
                 settings: this.settings,
                 colorTheme: this.colorTheme,
                 selectable: true,
+                foldFrontendHtml: false,
                 onInteractiveAction: this.onInteractiveAction
               })
             }

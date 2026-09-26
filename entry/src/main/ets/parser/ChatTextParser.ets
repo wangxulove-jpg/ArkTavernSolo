@@ -158,12 +158,18 @@ export interface ChatTextParserOptions {
   readonly enableMarkdown: boolean;
   /** 是否启用对白配色(默认 true) */
   readonly enableDialogue: boolean;
+  /**
+   * 是否把「前端界面 HTML 大块」抽成折叠块(默认 true)。
+   * 折叠块内部嵌套渲染时必须传 false,否则源码会被再次折叠(套娃)。
+   */
+  readonly extractFrontendHtml?: boolean;
 }
 
 /** 默认解析选项 */
 export const DEFAULT_PARSER_OPTIONS: ChatTextParserOptions = {
   enableMarkdown: true,
-  enableDialogue: true
+  enableDialogue: true,
+  extractFrontendHtml: true
 };
 
 // ===== 占位符工具 =====
@@ -1015,6 +1021,97 @@ export function parseChatChunks(
   }
 }
 
+// ===== v50: 前端界面 HTML 大块折叠 =====
+
+/** HTML 型围栏的语言标记(命中即视为前端页面,不看长度) */
+const FRONTEND_HTML_LANGS: string[] = ['html', 'htm', 'xml'];
+/** 无语言标记时,内容达到该长度且含 HTML 特征才视为前端页面 */
+const FRONTEND_HTML_MIN_CHARS: number = 600;
+/** 折叠块占位符(仅解析中间态,渲染后不出现) */
+const FE_PLACEHOLDER: string = '\uE300';
+const FE_PLACEHOLDER_END: string = '\uE301';
+const FE_PLACEHOLDER_PATTERN: RegExp =
+  new RegExp('^' + FE_PLACEHOLDER + '(\\d+)' + FE_PLACEHOLDER_END + '$');
+
+/** 前端界面大块抽取结果 */
+interface FrontendExtraction {
+  /** 抽走大块后的剩余文本(原位置留一行占位符,渲染时按序还原为折叠块) */
+  readonly residual: string;
+  /** 折叠块(按出现顺序) */
+  readonly blocks: CollapsibleChatRenderChunk[];
+}
+
+/** 该围栏内容是否像「角色卡前端界面」(整页 HTML):先过长度门槛(短示例不折叠),再看语言/结构 */
+function isFrontendHtmlFence(lang: string, body: string): boolean {
+  // 短片段(对话里的 HTML 示例)保持原样,不当成前端页面
+  if (body.length < FRONTEND_HTML_MIN_CHARS) {
+    return false;
+  }
+  const l: string = lang.trim().toLowerCase();
+  for (let i = 0; i < FRONTEND_HTML_LANGS.length; i++) {
+    if (l === FRONTEND_HTML_LANGS[i]) {
+      return true;
+    }
+  }
+  const lower: string = body.toLowerCase();
+  return lower.indexOf('<style') >= 0 || lower.indexOf('<div') >= 0
+    || lower.indexOf('<script') >= 0 || lower.indexOf('<!doctype') >= 0
+    || lower.indexOf('<body') >= 0;
+}
+
+/**
+ * 抽取「前端界面 HTML 大块」(契约 v3 卡片:开场白常把整页前端 HTML 放在 ``` 围栏里)。
+ * 不抽的话整页标签会铺满聊天气泡,而且 sanitizeHtmlTags 会先删掉标签导致源码都看不全;
+ * 抽出后气泡只显示一行「🖼 前端界面」标题,点开才看源码(原文照旧保存在消息里)。
+ * 必须在 sanitizeHtmlTags 之前调用(消毒会删标签)。
+ */
+function extractFrontendHtmlBlocks(text: string): FrontendExtraction {
+  const blocks: CollapsibleChatRenderChunk[] = [];
+  const outLines: string[] = [];
+  const lines: string[] = text.split('\n');
+  let i: number = 0;
+  while (i < lines.length) {
+    const open: RegExpMatchArray | null = lines[i].match(/^ {0,3}```([^\n`]*)$/);
+    if (open === null) {
+      outLines.push(lines[i]);
+      i++;
+      continue;
+    }
+    let close: number = -1;
+    for (let j = i + 1; j < lines.length; j++) {
+      if (/^ {0,3}```\s*$/.test(lines[j])) {
+        close = j;
+        break;
+      }
+    }
+    if (close < 0) {
+      // 未闭合(可能还在流式输出):原样保留,闭合后再折叠
+      outLines.push(lines[i]);
+      i++;
+      continue;
+    }
+    const lang: string = open[1];
+    const body: string = lines.slice(i + 1, close).join('\n');
+    if (isFrontendHtmlFence(lang, body)) {
+      const kb: number = Math.max(1, Math.round(body.length / 1024));
+      blocks.push({
+        type: 'collapsible',
+        id: 'fe' + blocks.length.toString(),
+        title: '🖼 前端界面（' + kb.toString() + 'KB，点开查看源码）',
+        // 内容仍按代码块交给嵌套渲染:等宽显示与长按复制不变
+        content: '```\n' + body + '\n```'
+      });
+      outLines.push(FE_PLACEHOLDER + (blocks.length - 1).toString() + FE_PLACEHOLDER_END);
+    } else {
+      for (let k = i; k <= close; k++) {
+        outLines.push(lines[k]);
+      }
+    }
+    i = close + 1;
+  }
+  return { residual: outLines.join('\n'), blocks: blocks };
+}
+
 /**
  * 轻量管线(无交互块时的文本构建):
  * 隐藏指令块 → 掷骰宏 → HTML 消毒 → 按行扫描,把连续表格行聚合成 table 分块,
@@ -1041,6 +1138,13 @@ function buildLightChunks(text: string, options: ChatTextParserOptions): ChatRen
   s = setExtracted.residual;
   s = stripInstructionBlocks(s);
   s = resolveDiceMacros(s);
+  // v50: 先抽「前端界面 HTML 大块」→ 折叠块(必须在 sanitizeHtmlTags 之前:消毒会删标签,源码就没了)
+  // 折叠块内部嵌套渲染时 options.extractFrontendHtml=false,避免把源码再折叠一层(套娃)
+  let fe: FrontendExtraction = { residual: s, blocks: [] };
+  if (options.extractFrontendHtml !== false) {
+    fe = extractFrontendHtmlBlocks(s);
+  }
+  s = fe.residual;
   s = sanitizeHtmlTags(s);
   if (s.length === 0) {
     return [];
@@ -1077,6 +1181,17 @@ function buildLightChunks(text: string, options: ChatTextParserOptions): ChatRen
   };
 
   for (let i = 0; i < lines.length; i++) {
+    // v50: 前端界面大块占位符 → 按序还原为折叠块(位置与原文一致)
+    const feMatch: RegExpMatchArray | null = lines[i].match(FE_PLACEHOLDER_PATTERN);
+    if (feMatch !== null) {
+      flushText();
+      flushTable();
+      const feIdx: number = parseInt(feMatch[1], 10);
+      if (feIdx >= 0 && feIdx < fe.blocks.length) {
+        result.push(fe.blocks[feIdx]);
+      }
+      continue;
+    }
     if (isTableRow(lines[i])) {
       flushText();
       tableLines.push(lines[i]);
