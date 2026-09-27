@@ -1188,7 +1188,7 @@ export class ChatService {
   }
 
   /** 手动刷新世界书激活内容(按模式分派 Pin/Sticky;委托 ChatContextMaintenanceService)。 */
-  refreshLorebookPinNow(): Promise<boolean> {
+  async refreshLorebookPinNow(): Promise<boolean> {
     return this.contextMaintenance.refreshLorebookPinNow();
   }
 
