@@ -51,7 +51,6 @@ import {
   ConversationBranchSummary,
   ConversationRecordCounts
 } from '../models/ConversationBranch';
-import { WorldGroup } from '../models/WorldGroup';
 
 const LOG_TAG: string = 'ChatViewModel';
 
@@ -103,20 +102,9 @@ export class ChatViewModel {
   isExtractingUserPersona: boolean = false;
   isSummarizingUserPersona: boolean = false;
 
-  // ===== T-4.5 会话列表状态 =====
-  sessions: Chat[] = [];
-  showSessionList: boolean = false;
-  isLoadingSessions: boolean = false;
+  // ===== 会话操作状态(切换 / 新建章节进行中与错误反馈) =====
   isSessionOperating: boolean = false;
   sessionError: string = '';
-  pendingDeleteChatId: string = '';
-  showDeleteSessionConfirm: boolean = false;
-
-  // ===== v42 世界分组(章节)状态 =====
-  /** worldId → 分组名(加载失败或分组已删除时为空) */
-  worldNames: Map<string, string> = new Map<string, string>();
-  /** 全部世界分组(按 createdAt 升序) */
-  worldGroupList: WorldGroup[] = [];
 
   // ===== T-6.4B-1 Branch 状态 =====
   branches: ConversationBranchSummary[] = [];
@@ -664,21 +652,7 @@ export class ChatViewModel {
     }
   }
 
-  // ===== T-4.5 会话列表方法 =====
-
-  async openSessionList(): Promise<void> {
-    if (this.disposed) {
-      return;
-    }
-    this.showSessionList = true;
-    this.sessionError = '';
-    await this.refreshSessions();
-  }
-
-  closeSessionList(): void {
-    this.showSessionList = false;
-  }
-
+  /** 刷新当前预设名(供更多菜单展示) */
   async refreshCurrentPresetName(): Promise<void> {
     if (this.disposed) {
       return;
@@ -696,55 +670,6 @@ export class ChatViewModel {
     }
   }
 
-  async refreshSessions(): Promise<void> {
-    if (this.disposed) {
-      return;
-    }
-    this.isLoadingSessions = true;
-    try {
-      this.sessions = await this.chatService.listSessions();
-      // v42: 同步世界分组名与分组列表(供会话列表分组渲染)
-      const groups: WorldGroup[] = await AppServices.getWorldGroupService().list();
-      const names: Map<string, string> = new Map<string, string>();
-      for (let i = 0; i < groups.length; i++) {
-        names.set(groups[i].id, groups[i].name);
-      }
-      this.worldGroupList = groups;
-      this.worldNames = names;
-    } catch (e) {
-      this.sessionError = '加载会话列表失败';
-      Logger.error(LOG_TAG, 'refreshSessions failed: ' + String(e));
-    } finally {
-      this.isLoadingSessions = false;
-    }
-  }
-
-  async createNewSession(): Promise<void> {
-    if (this.disposed || this.isSessionOperating || this.busy) {
-      return;
-    }
-    this.isSessionOperating = true;
-    this.sessionError = '';
-    try {
-      await this.chatService.startNewSession();
-      this.messages = [...this.chatService.getMessages()];
-      if (this.onMessagesUpdate !== undefined) {
-        this.onMessagesUpdate([...this.messages]);
-      }
-      this.canRegenerate = this.chatService.canRegenerate();
-      this.syncBranchState();
-      this.syncStatusState();
-      this.errorMessage = '';
-      this.statusMessage = '';
-      await this.refreshSessions();
-    } catch (e) {
-      this.sessionError = this.toSessionOpError(String(e));
-      Logger.error(LOG_TAG, 'createNewSession failed: ' + String(e));
-    } finally {
-      this.isSessionOperating = false;
-    }
-  }
-
   async selectSession(chatId: string): Promise<void> {
     if (this.disposed || this.isSessionOperating || this.busy) {
       return;
@@ -753,7 +678,6 @@ export class ChatViewModel {
       return;
     }
     if (this.isCurrentSession(chatId)) {
-      this.showSessionList = false;
       return;
     }
     this.isSessionOperating = true;
@@ -769,8 +693,6 @@ export class ChatViewModel {
       this.syncStatusState();
       this.errorMessage = '';
       this.statusMessage = '';
-      this.showSessionList = false;
-      await this.refreshSessions();
     } catch (e) {
       this.sessionError = this.toSessionOpError(String(e));
       Logger.error(LOG_TAG, 'selectSession failed: ' + String(e));
@@ -779,102 +701,11 @@ export class ChatViewModel {
     }
   }
 
-  requestDeleteSession(chatId: string): void {
-    if (this.disposed || this.isSessionOperating || this.busy) {
-      return;
-    }
-    if (chatId.length === 0) {
-      return;
-    }
-    this.pendingDeleteChatId = chatId;
-    this.showDeleteSessionConfirm = true;
-    this.sessionError = '';
-  }
-
-  cancelDeleteSession(): void {
-    this.pendingDeleteChatId = '';
-    this.showDeleteSessionConfirm = false;
-  }
-
-  async confirmDeleteSession(): Promise<void> {
-    if (this.disposed || this.isSessionOperating || this.busy) {
-      return;
-    }
-    const chatId: string = this.pendingDeleteChatId;
-    if (chatId.length === 0) {
-      this.showDeleteSessionConfirm = false;
-      return;
-    }
-    this.isSessionOperating = true;
-    this.showDeleteSessionConfirm = false;
-    try {
-      await this.chatService.deleteSession(chatId);
-      this.messages = [...this.chatService.getMessages()];
-      if (this.onMessagesUpdate !== undefined) {
-        this.onMessagesUpdate([...this.messages]);
-      }
-      this.canRegenerate = this.chatService.canRegenerate();
-      this.syncBranchState();
-      this.syncStatusState();
-      this.errorMessage = '';
-      this.statusMessage = '';
-      this.pendingDeleteChatId = '';
-      await this.refreshSessions();
-    } catch (e) {
-      this.sessionError = this.toSessionOpError(String(e));
-      this.pendingDeleteChatId = '';
-      Logger.error(LOG_TAG, 'confirmDeleteSession failed: ' + String(e));
-    } finally {
-      this.isSessionOperating = false;
-    }
-  }
-
-  // ===== v42 世界分组 / 新建章节 =====
+  // ===== v42 新建章节 =====
 
   /** 获取开场白池(供"新建章节"选择器预览) */
   getGreetingPool(): string[] {
     return this.chatService.getGreetingPool();
-  }
-
-  /** 获取分组名(查不到时返回"世界"占位) */
-  getWorldName(worldId: string): string {
-    if (worldId.length === 0) {
-      return '';
-    }
-    const name: string | undefined = this.worldNames.get(worldId);
-    return name !== undefined && name.length > 0 ? name : '世界';
-  }
-
-  /** 组内章节标签:组内会话按 createdAt 升序的序号("第N章") */
-  getChapterLabel(chatId: string): string {
-    let chat: Chat | null = null;
-    for (let i = 0; i < this.sessions.length; i++) {
-      if (this.sessions[i].id === chatId) {
-        chat = this.sessions[i];
-        break;
-      }
-    }
-    if (chat === null || chat.worldId.length === 0) {
-      return '';
-    }
-    const sameWorld: Chat[] = [];
-    for (let i = 0; i < this.sessions.length; i++) {
-      if (this.sessions[i].worldId === chat.worldId) {
-        sameWorld.push(this.sessions[i]);
-      }
-    }
-    sameWorld.sort((a: Chat, b: Chat): number => a.createdAt - b.createdAt);
-    for (let i = 0; i < sameWorld.length; i++) {
-      if (sameWorld[i].id === chatId) {
-        return '第' + (i + 1).toString() + '章';
-      }
-    }
-    return '';
-  }
-
-  /** 全部世界分组(供移动会话/分组管理选择器) */
-  getWorldGroups(): WorldGroup[] {
-    return this.worldGroupList;
   }
 
   /**
@@ -901,7 +732,6 @@ export class ChatViewModel {
       this.syncStatusState();
       this.errorMessage = '';
       this.statusMessage = '';
-      await this.refreshSessions();
       return newChatId;
     } catch (e) {
       this.sessionError = this.toSessionOpError(String(e));
@@ -912,94 +742,9 @@ export class ChatViewModel {
     }
   }
 
-  /** 新建世界分组 */
-  async createWorldGroup(name: string): Promise<boolean> {
-    if (this.disposed) {
-      return false;
-    }
-    try {
-      await AppServices.getWorldGroupService().create(name);
-      await this.refreshSessions();
-      return true;
-    } catch (e) {
-      this.sessionError = '创建分组失败';
-      Logger.error(LOG_TAG, 'createWorldGroup failed: ' + String(e));
-      return false;
-    }
-  }
-
-  /** 重命名世界分组 */
-  async renameWorldGroup(groupId: string, name: string): Promise<boolean> {
-    if (this.disposed) {
-      return false;
-    }
-    try {
-      await AppServices.getWorldGroupService().update(groupId, { name: name });
-      await this.refreshSessions();
-      return true;
-    } catch (e) {
-      this.sessionError = '重命名分组失败';
-      Logger.error(LOG_TAG, 'renameWorldGroup failed: ' + String(e));
-      return false;
-    }
-  }
-
-  /** 删除世界分组(仅解除关联,不删会话) */
-  async deleteWorldGroup(groupId: string): Promise<boolean> {
-    if (this.disposed) {
-      return false;
-    }
-    try {
-      await AppServices.getWorldGroupService().removeWorldGroup(groupId);
-      await this.refreshSessions();
-      return true;
-    } catch (e) {
-      this.sessionError = '删除分组失败';
-      Logger.error(LOG_TAG, 'deleteWorldGroup failed: ' + String(e));
-      return false;
-    }
-  }
-
-  /** 移动会话到分组(worldId 为 null 表示"不分组") */
-  async moveChatToWorld(chatId: string, worldId: string | null): Promise<boolean> {
-    if (this.disposed) {
-      return false;
-    }
-    try {
-      await AppServices.getWorldGroupService().moveChatToWorld(chatId, worldId);
-      await this.refreshSessions();
-      return true;
-    } catch (e) {
-      this.sessionError = '移动会话失败';
-      Logger.error(LOG_TAG, 'moveChatToWorld failed: ' + String(e));
-      return false;
-    }
-  }
-
   isCurrentSession(chatId: string): boolean {
     const currentId: string | undefined = this.chatService.getCurrentChatId();
     return currentId !== undefined && currentId === chatId;
-  }
-
-  get canOperateSessions(): boolean {
-    return !this.isGenerating && !this.isSessionOperating && this.isSessionReady;
-  }
-
-  getSessionTitle(chat: Chat): string {
-    return chat.title.length > 0 ? chat.title : '新对话';
-  }
-
-  getSessionSubtitle(chat: Chat): string {
-    const ts: number = chat.lastMessageAt > 0 ? chat.lastMessageAt : chat.updatedAt;
-    if (ts <= 0) {
-      return '';
-    }
-    const d: Date = new Date(ts);
-    const month: string = (d.getMonth() + 1).toString().padStart(2, '0');
-    const day: string = d.getDate().toString().padStart(2, '0');
-    const hour: string = d.getHours().toString().padStart(2, '0');
-    const minute: string = d.getMinutes().toString().padStart(2, '0');
-    return month + '-' + day + ' ' + hour + ':' + minute;
   }
 
   private toSessionOpError(message: string): string {
