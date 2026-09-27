@@ -490,7 +490,8 @@ export class ChatService {
     this.swipeController = new ChatSwipeController(swipeDeps, swipeHost);
 
     const branchDeps: ConversationBranchDeps = {
-      branchPersistenceService: this.branchPersistenceService
+      branchPersistenceService: this.branchPersistenceService,
+      swipePersistenceService: this.swipePersistenceService
     };
     const branchHost: ConversationBranchHost = {
       isDisposed: (): boolean => this.disposed,
@@ -511,7 +512,26 @@ export class ChatService {
       setRecordCounts: (counts: ConversationRecordCounts | undefined): void => {
         this.recordCounts = counts;
       },
-      getBranchOperationInProgress: (): boolean => this.branchOperationInProgress
+      getBranchOperationInProgress: (): boolean => this.branchOperationInProgress,
+      setBranchOperationInProgress: (inProgress: boolean): void => {
+        this.branchOperationInProgress = inProgress;
+      },
+      getSwipeSummaries: (): MessageSwipeSummary[] => this.swipeSummaries,
+      setSwipeSummaries: (summaries: MessageSwipeSummary[]): void => {
+        this.swipeSummaries = summaries;
+      },
+      reloadCurrentSession: (): Promise<void> => this.reloadCurrentSession(),
+      updateLastAssistantMessageId: (): void => this.updateLastAssistantMessageId(),
+      getLastCallbacks: (): ChatServiceCallbacks | null => this.lastCallbacks,
+      setLastCallbacks: (callbacks: ChatServiceCallbacks | null): void => {
+        this.lastCallbacks = callbacks;
+      },
+      setState: (state: ChatState, callbacks: ChatServiceCallbacks | null): void => {
+        this.setState(state, callbacks);
+      },
+      emitMessages: (callbacks: ChatServiceCallbacks | null): void => {
+        this.emitMessages(callbacks);
+      }
     };
     this.branchService = new ConversationBranchService(branchDeps, branchHost);
 
@@ -3870,109 +3890,17 @@ export class ChatService {
     this.doStream(editResult.newAssistantMessageId, callbacks, this.activeGeneration);
   }
 
-  /**
-   * 切换 Active Branch 到 targetBranchId。
-   *
-   * 流程:
-   * 1. 校验:未忙碌、branchPersistenceService 可用、会话已初始化
-   * 2. 调用 switchActiveBranch(事务内物化 Candidate 到 messages 并同步 group active index)
-   * 3. 重新加载 messages / swipeSummaries / branches / recordCounts
-   * 4. 通知 UI
-   *
-   * @param targetBranchId 目标 Branch ID
-   * @param callbacks 回调集合
-   */
+  /** 切换 Active Branch 到 targetBranchId(事务内物化候选并同步;委托 ConversationBranchService)。 */
   async switchBranch(
     targetBranchId: string,
     callbacks: ChatServiceCallbacks
   ): Promise<void> {
-    if (this.disposed) {
-      throw new Error('ChatService disposed');
-    }
-    if (this.isBusy()) {
-      Logger.warn(LOG_TAG, 'switchBranch rejected: busy');
-      callbacks.onError('操作进行中,请稍候');
-      return;
-    }
-    if (this.branchPersistenceService === null) {
-      callbacks.onError('分支服务不可用');
-      return;
-    }
-    if (this.currentChatId === undefined) {
-      callbacks.onError('会话未初始化');
-      return;
-    }
-    if (targetBranchId.length === 0) {
-      callbacks.onError('目标分支无效');
-      return;
-    }
-    if (targetBranchId === this.activeBranchId) {
-      // 已是当前分支,无操作
-      return;
-    }
-
-    this.branchOperationInProgress = true;
-    this.lastCallbacks = callbacks;
-    try {
-      const chatId: string = this.currentChatId;
-      await this.branchPersistenceService.switchActiveBranch(chatId, targetBranchId);
-      // 重新加载
-      await this.reloadCurrentSession();
-      if (this.swipePersistenceService !== null) {
-        this.swipeSummaries =
-          await this.swipePersistenceService.listSwipeSummariesByChatId(chatId);
-      }
-      this.updateLastAssistantMessageId();
-      await this.refreshBranchState();
-      this.setState(ChatState.Idle, callbacks);
-      this.emitMessages(callbacks);
-    } catch (e) {
-      const msg: string = e instanceof Error ? e.message : String(e);
-      Logger.error(LOG_TAG, 'switchBranch failed: ' + msg);
-      callbacks.onError('切换分支失败,请重试');
-    } finally {
-      this.branchOperationInProgress = false;
-    }
+    return this.branchService.switchBranch(targetBranchId, callbacks);
   }
 
-  /**
-   * T-6.4B-1.1: 外部 Branch 切换后重新加载当前会话。
-   *
-   * 当 BranchMapPage 通过 branchPersistenceService.switchActiveBranch 切换 Active Branch 后,
-   * ChatPage 的 ChatService 需要重新从数据库加载消息和 Branch 状态。
-   * 此方法不执行 switchActiveBranch(已由外部完成),只做 reload + 通知 UI。
-   *
-   * 流程:
-   * 1. 重新加载 messages(从 DB,含 Active Branch 的 Candidate 投影)
-   * 2. 重新加载 swipeSummaries
-   * 3. 更新 lastAssistantMessageId
-   * 4. 刷新 Branch 状态(branches / activeBranchId / recordCounts)
-   * 5. 通知 UI(新数组引用)
-   *
-   * @param callbacks 回调集合
-   */
+  /** 外部 Branch 切换后重新加载当前会话并通知 UI(委托 ConversationBranchService)。 */
   async reloadAfterExternalBranchChange(callbacks: ChatServiceCallbacks): Promise<void> {
-    if (this.disposed) {
-      return;
-    }
-    if (this.currentChatId === undefined) {
-      return;
-    }
-    try {
-      await this.reloadCurrentSession();
-      if (this.swipePersistenceService !== null) {
-        this.swipeSummaries =
-          await this.swipePersistenceService.listSwipeSummariesByChatId(this.currentChatId);
-      }
-      this.updateLastAssistantMessageId();
-      await this.refreshBranchState();
-      this.setState(ChatState.Idle, callbacks);
-      this.emitMessages(callbacks);
-    } catch (e) {
-      const msg: string = e instanceof Error ? e.message : String(e);
-      Logger.error(LOG_TAG, 'reloadAfterExternalBranchChange failed: ' + msg);
-      callbacks.onError('重新加载会话失败');
-    }
+    return this.branchService.reloadAfterExternalBranchChange(callbacks);
   }
 
 

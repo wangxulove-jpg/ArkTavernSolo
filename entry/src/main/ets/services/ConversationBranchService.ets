@@ -23,7 +23,10 @@ import { ConversationBranch, ConversationBranchSummary, ConversationRecordCounts
 import { ChatMessage, ChatMessageStatus } from '../models/ChatMessage';
 import { ChatRole } from '../models/ChatRole';
 import { ChatMessageSource } from '../models/ChatMessageSource';
+import { ChatState, ChatServiceCallbacks } from '../models/ChatServiceContract';
+import { MessageSwipeSummary } from '../models/MessageSwipe';
 import { ConversationBranchPersistenceService } from './ConversationBranchPersistenceService';
+import { MessageSwipePersistenceService } from './MessageSwipePersistenceService';
 import { Logger } from '../utils/Logger';
 
 const LOG_TAG: string = 'ConversationBranchService';
@@ -32,6 +35,8 @@ const LOG_TAG: string = 'ConversationBranchService';
 export interface ConversationBranchDeps {
   /** 对话分支持久化服务 */
   branchPersistenceService: ConversationBranchPersistenceService | null;
+  /** 消息候选持久化服务(会话重载后同步 Swipe 摘要) */
+  swipePersistenceService: MessageSwipePersistenceService | null;
 }
 
 /**
@@ -65,14 +70,34 @@ export interface ConversationBranchHost {
   setRecordCounts: (counts: ConversationRecordCounts | undefined) => void;
   /** Branch 操作互斥标志读取 */
   getBranchOperationInProgress: () => boolean;
+  /** Branch 操作互斥标志写入 */
+  setBranchOperationInProgress: (inProgress: boolean) => void;
+  /** Swipe 摘要列表读取(会话重载后同步) */
+  getSwipeSummaries: () => MessageSwipeSummary[];
+  /** Swipe 摘要列表整体替换 */
+  setSwipeSummaries: (summaries: MessageSwipeSummary[]) => void;
+  /** 从数据库重新加载当前会话消息 */
+  reloadCurrentSession: () => Promise<void>;
+  /** 重算最后一条可 Swipe 的 Assistant 消息 id */
+  updateLastAssistantMessageId: () => void;
+  /** 最近一次回调读取 */
+  getLastCallbacks: () => ChatServiceCallbacks | null;
+  /** 记录最近一次回调(宿主在停止/收尾时读取) */
+  setLastCallbacks: (callbacks: ChatServiceCallbacks | null) => void;
+  /** 设置聊天状态(宿主内做 disposed 判定与去重) */
+  setState: (state: ChatState, callbacks: ChatServiceCallbacks | null) => void;
+  /** 通知消息列表变更 */
+  emitMessages: (callbacks: ChatServiceCallbacks | null) => void;
 }
 
 export class ConversationBranchService {
   private readonly branchPersistenceService: ConversationBranchPersistenceService | null;
+  private readonly swipePersistenceService: MessageSwipePersistenceService | null;
   private readonly host: ConversationBranchHost;
 
   constructor(deps: ConversationBranchDeps, host: ConversationBranchHost) {
     this.branchPersistenceService = deps.branchPersistenceService;
+    this.swipePersistenceService = deps.swipePersistenceService;
     this.host = host;
   }
 
@@ -120,6 +145,42 @@ export class ConversationBranchService {
 
   private get branchOperationInProgress(): boolean {
     return this.host.getBranchOperationInProgress();
+  }
+
+  private set branchOperationInProgress(value: boolean) {
+    this.host.setBranchOperationInProgress(value);
+  }
+
+  private get swipeSummaries(): MessageSwipeSummary[] {
+    return this.host.getSwipeSummaries();
+  }
+
+  private set swipeSummaries(value: MessageSwipeSummary[]) {
+    this.host.setSwipeSummaries(value);
+  }
+
+  private reloadCurrentSession(): Promise<void> {
+    return this.host.reloadCurrentSession();
+  }
+
+  private updateLastAssistantMessageId(): void {
+    this.host.updateLastAssistantMessageId();
+  }
+
+  private setState(state: ChatState, callbacks: ChatServiceCallbacks | null): void {
+    this.host.setState(state, callbacks);
+  }
+
+  private get lastCallbacks(): ChatServiceCallbacks | null {
+    return this.host.getLastCallbacks();
+  }
+
+  private set lastCallbacks(value: ChatServiceCallbacks | null) {
+    this.host.setLastCallbacks(value);
+  }
+
+  private emitMessages(callbacks: ChatServiceCallbacks | null): void {
+    this.host.emitMessages(callbacks);
   }
 
   private isBusy(): boolean {
@@ -385,5 +446,109 @@ export class ConversationBranchService {
       return false;
     }
     return true;
+  }
+  /**
+   * 切换 Active Branch 到 targetBranchId。
+   *
+   * 流程:
+   * 1. 校验:未忙碌、branchPersistenceService 可用、会话已初始化
+   * 2. 调用 switchActiveBranch(事务内物化 Candidate 到 messages 并同步 group active index)
+   * 3. 重新加载 messages / swipeSummaries / branches / recordCounts
+   * 4. 通知 UI
+   *
+   * @param targetBranchId 目标 Branch ID
+   * @param callbacks 回调集合
+   */
+  async switchBranch(
+    targetBranchId: string,
+    callbacks: ChatServiceCallbacks
+  ): Promise<void> {
+    if (this.disposed) {
+      throw new Error('ChatService disposed');
+    }
+    if (this.isBusy()) {
+      Logger.warn(LOG_TAG, 'switchBranch rejected: busy');
+      callbacks.onError('操作进行中,请稍候');
+      return;
+    }
+    if (this.branchPersistenceService === null) {
+      callbacks.onError('分支服务不可用');
+      return;
+    }
+    if (this.currentChatId === undefined) {
+      callbacks.onError('会话未初始化');
+      return;
+    }
+    if (targetBranchId.length === 0) {
+      callbacks.onError('目标分支无效');
+      return;
+    }
+    if (targetBranchId === this.activeBranchId) {
+      // 已是当前分支,无操作
+      return;
+    }
+
+    this.branchOperationInProgress = true;
+    this.lastCallbacks = callbacks;
+    try {
+      const chatId: string = this.currentChatId;
+      await this.branchPersistenceService.switchActiveBranch(chatId, targetBranchId);
+      // 重新加载
+      await this.reloadCurrentSession();
+      if (this.swipePersistenceService !== null) {
+        this.swipeSummaries =
+          await this.swipePersistenceService.listSwipeSummariesByChatId(chatId);
+      }
+      this.updateLastAssistantMessageId();
+      await this.refreshBranchState();
+      this.setState(ChatState.Idle, callbacks);
+      this.emitMessages(callbacks);
+    } catch (e) {
+      const msg: string = e instanceof Error ? e.message : String(e);
+      Logger.error(LOG_TAG, 'switchBranch failed: ' + msg);
+      callbacks.onError('切换分支失败,请重试');
+    } finally {
+      this.branchOperationInProgress = false;
+    }
+  }
+
+  /**
+   * T-6.4B-1.1: 外部 Branch 切换后重新加载当前会话。
+   *
+   * 当 BranchMapPage 通过 branchPersistenceService.switchActiveBranch 切换 Active Branch 后,
+   * ChatPage 的 ChatService 需要重新从数据库加载消息和 Branch 状态。
+   * 此方法不执行 switchActiveBranch(已由外部完成),只做 reload + 通知 UI。
+   *
+   * 流程:
+   * 1. 重新加载 messages(从 DB,含 Active Branch 的 Candidate 投影)
+   * 2. 重新加载 swipeSummaries
+   * 3. 更新 lastAssistantMessageId
+   * 4. 刷新 Branch 状态(branches / activeBranchId / recordCounts)
+   * 5. 通知 UI(新数组引用)
+   *
+   * @param callbacks 回调集合
+   */
+  async reloadAfterExternalBranchChange(callbacks: ChatServiceCallbacks): Promise<void> {
+    if (this.disposed) {
+      return;
+    }
+    if (this.currentChatId === undefined) {
+      return;
+    }
+    try {
+      await this.reloadCurrentSession();
+      if (this.swipePersistenceService !== null) {
+        this.swipeSummaries =
+          await this.swipePersistenceService.listSwipeSummariesByChatId(this.currentChatId);
+      }
+      this.updateLastAssistantMessageId();
+      await this.refreshBranchState();
+      this.setState(ChatState.Idle, callbacks);
+      this.emitMessages(callbacks);
+    } catch (e) {
+      const msg: string = e instanceof Error ? e.message : String(e);
+      Logger.error(LOG_TAG, 'reloadAfterExternalBranchChange failed: ' + msg);
+      callbacks.onError('重新加载会话失败');
+    }
   }
 }
