@@ -28,7 +28,7 @@ import { MemoryManagementViewModel, MemoryDisplayItem, MemoryTypeGroup, EntityGr
 import { parseEntityIndexJson } from '../services/ChapterMemoryIndexer';
 import { Logger } from '../utils/Logger';
 import { ThemePalette } from '../theme/ThemePalette';
-import { MEMORY_AUTO_SUMMARY_PREFS_KEY } from '../services/ChatService';
+import { MEMORY_AUTO_SUMMARY_PREFS_KEY } from '../services/ChatTextContract';
 import { MEMORY_CHAPTER_PROMPT_CUSTOM_KEY, MEMORY_SESSION_PROMPT_CUSTOM_KEY } from '../services/MemoryService';
 
 const LOG_TAG: string = 'MemoryMgmtPage';

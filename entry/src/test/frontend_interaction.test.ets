@@ -26,7 +26,7 @@ import {
   formatStatusFieldInstructionLine,
   FRONTEND_INTERACTION_MAX_ITEMS,
   FRONTEND_INTERACTION_MAX_CHARS
-} from '../main/ets/services/ChatService';
+} from '../main/ets/services/ChatTextContract';
 import { ChatStatusEntry, ChatStatusSchemaEntry } from '../main/ets/models/ChatStatusState';
 import { LorebookEntry, LorebookPosition } from '../main/ets/models/Lorebook';
 import {

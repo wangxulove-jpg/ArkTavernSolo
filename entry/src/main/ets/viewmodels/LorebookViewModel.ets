@@ -21,7 +21,7 @@ import { AppPreferences } from '../storage/AppPreferences';
 import {
   LOREBOOK_ACTIVATION_DEFAULT_PREFS_KEY,
   LOREBOOK_INJECTION_DEPTH_PREFS_KEY
-} from '../services/ChatService';
+} from '../services/ChatTextContract';
 import { Logger } from '../utils/Logger';
 
 const LOG_TAG: string = 'LorebookViewModel';

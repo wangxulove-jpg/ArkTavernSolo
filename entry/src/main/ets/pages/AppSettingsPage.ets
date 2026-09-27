@@ -16,7 +16,7 @@ import { AppPreferences } from '../storage/AppPreferences';
 import { ThemeManager } from '../services/ThemeManager';
 import { ThemeMode } from '../models/ThemeMode';
 import { ThemePalette, ThemeColors } from '../theme/ThemePalette';
-import { GLOBAL_USER_NAME_KEY } from '../services/ChatService';
+import { GLOBAL_USER_NAME_KEY } from '../services/ChatTextContract';
 import { motion } from '@kit.MultimodalAwarenessKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 

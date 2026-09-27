@@ -13,7 +13,7 @@ import { router } from '@kit.ArkUI';
 import { promptAction } from '@kit.ArkUI';
 import { AppServices } from '../services/AppServices';
 import { AppPreferences } from '../storage/AppPreferences';
-import { IMPRES_GUIDE_KEY, CONTINUE_GUIDE_KEY } from '../services/ChatService';
+import { IMPRES_GUIDE_KEY, CONTINUE_GUIDE_KEY } from '../services/ChatTextContract';
 import { ThemePalette } from '../theme/ThemePalette';
 
 @Entry
