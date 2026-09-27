@@ -150,7 +150,7 @@ docs/handover/
 - 基线：`refactor-baseline` tag（2026-09-27 建立）
 - 已完成：全项目只读审计（286 文件 / 112,801 行）、交接文档体系重建、`tools/` 与开发截图清理
 - **P1 批次全部完成**：P1-1 死代码清理 ✅ · P1-2 ChatService 重复逻辑消除 ✅ · P1-3 ChatPage 组件抽取（5 个）✅ · P1-4 会话列表去重 ✅（共享折叠纯函数 + 共享分组弹窗 + **删除不可达的会话列表面板**，≈-1069 行）· P1-5 组件越层修复 ✅ · P1-6 不可变性 ✅
-- **P2 进行中（ChatService 瘦身，6,735 → 5,781 行）**：P2-1 完成 ✅（`ChatTextContract` 契约纯函数下沉 / `ChatRequestPlan` 请求计划 / `ChatRequestBuilder` 请求构建与注入 6 方法 615 行逐字搬出）；下一步 P2-2 `ChatOneShotGenerator`
-- P2 装配范式（后续接缝直接复用）：服务依赖构造期注入；可变状态与宿主私有能力经**函数属性**回调（`ChatRequestHost` 式）读取，类内同名 getter/方法转发 → 搬运代码零改写、读取语义不变（详见 `docs/handover/CURRENT.md` §2）
-- 后续接缝：P2-2 `ChatOneShotGenerator` → P2-3 `ChatStatusService` → P2-4 `ChatSwipeController` → P2-5 Branch 门面（流式核心不动）
+- **P2 进行中（ChatService 瘦身，6,735 → 5,273 行）**：P2-1 完成 ✅（`ChatTextContract` 契约纯函数下沉 / `ChatRequestPlan` 请求计划 / `ChatRequestBuilder` 请求构建与注入 6 方法 615 行逐字搬出）；P2-2 完成 ✅（`models/ChatServiceContract` 契约迁出 + `services/ChatOneShotGenerator` 六方法 513 行逐字搬出）；下一步 P2-3 `ChatStatusService`
+- P2 装配范式（后续接缝直接复用）：服务依赖构造期注入；可变状态与宿主私有能力经**函数属性**回调（`ChatRequestHost` 式）读写——读走 getter、写走 setter（`ChatOneShotHost` 起出现），类内同名 getter/setter/方法转发 → 搬运代码零改写、读写语义不变（详见 `docs/handover/CURRENT.md` §2）
+- 后续接缝：P2-3 `ChatStatusService` → P2-4 `ChatSwipeController` → P2-5 Branch 门面（流式核心不动）
 - 验证状态：代码改动均编译通过；真机冒烟按批次进行，清单与回滚锚点见 `docs/handover/CURRENT.md` §4；路线图见 `docs/handover/2026-09-27-audit-and-roadmap.md` §6

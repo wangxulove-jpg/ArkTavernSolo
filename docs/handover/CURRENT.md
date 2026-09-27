@@ -21,7 +21,12 @@
 - [x] **P2-1c `ChatRequestBuilder` 抽取**（commit `8e0ad06`）：`buildRequestMessages` + `autoLoadOnDemandMemories`/`injectOnDemandMemories`/`injectStickyLorebookEntries`/`applyAnchoredInserts`/`appendStickyReminder` 共 6 方法 **615 行逐字搬出**（已 byte 级比对一致），ChatService 留薄包装（3 个调用点不变）
   - 装配方式（已落地，供后续接缝复用）：服务依赖（10 个）构造期注入；可变会话状态与 5 个宿主私有能力经 `ChatRequestHost` **函数属性**回调读取（ArkTS 对象字面量要求属性而非方法签名），类内以**同名 getter/方法转发**→搬运代码零改写、读取即最新
   - 记录：仅日志 tag 由 `ChatService` 变为 `ChatRequestBuilder`；`OnDemandInsert` 接口随迁；`ChatService` **6,735 → 5,781 行**（P2-1 合计 -954）
-- [ ] **P2-2 `ChatOneShotGenerator`**（低）：impersonate / persona 提取 / autoContinue 及其 parser（~L1456-1968）
+- [x] **P2-2 `ChatOneShotGenerator`**（低，commit `bac896d` / `ad5d0aa`）：
+  1. `bac896d` 前置：`ChatState` + `ChatServiceCallbacks` 迁入新增 `models/ChatServiceContract.ets`（逐字搬出；全仓仅 2 处引用改路径：ChatService / ChatViewModel L19）
+  2. `ad5d0aa` 主步：新增 `services/ChatOneShotGenerator.ets`（724 行）——`extractUserFromCharacter` / `summarizeUserPersona` / `generateImpersonateCandidates` / `parseImpersonateCandidates` / `autoContinue` / `parseAutoContinueTurn` 共 **513 行逐字搬出**（byte 级比对一致），`AutoContinueTurn` 随迁；ChatService 留 4 个公开薄包装（两个 parser 私有，不保留包装）
+  - 装配：3 服务构造注入；宿主 `ChatOneShotHost` 21 个回调（**读 getter + 写 setter**：`messages` / `lastCallbacks` / `generationOperationId` / `currentSequenceNumber` / `currentAssistantId` 的写侧经函数属性回写宿主），类内同名 getter/setter/方法转发 → 搬运代码零改写；**装配范式自此扩展出 setter 写入面**（后续接缝沿用）
+  - 偏差记录：仅日志 tag 由 `ChatService` 变为 `ChatOneShotGenerator`；抛错文案 `'ChatService disposed'` 原样保留
+  - **ChatService 5,781 → 5,273 行**（P2 累计 6,735 → 5,273，-1,462）
 - [ ] **P2-3 `ChatStatusService`**（中）：角色状态簇（~L2736-3538）
 - [ ] **P2-4 `ChatSwipeController`**（中高）：~L5468-5858
 - [ ] **P2-5 Branch 门面**（中）：先搬纯判定与查询（~L5865-6160）
@@ -65,6 +70,12 @@
   1. 请求计划（`702d3db`）：顶栏预算指示器数值正常；长会话发送时触发历史裁剪后回复仍完整；上下文占用统计正常
   2. 请求构建与注入（`8e0ad06`，**主链路，重点**）：发送/流式/停止正常；角色绑定世界书注入（日志 tag 现为 `ChatRequestBuilder`）；按需记忆（OnDemandPinned）与粘滞世界书（StickyOnDemand）注入与尾部"当前仍生效的设定"提醒正常；重生成/代写（候选生成走 excludeMessageId 路径）正常
   - 回滚锚点：`64b0c4e` / `702d3db` / `8e0ad06`（三者为独立 commit，但 1c 依赖 1a 的 ChatTextContract，回滚需成组）
+- **P2-2 待冒烟（代写/性格/续写，"搬运不改行为"）**：
+  1. 代写（impersonate）：输入区/更多菜单代写入口 → 生成 3 条候选、点击填入输入框；用户自定义代写引导（设置内）生效；有 persona 摘要的会话候选风格贴近摘要
+  2. 性格提取（用户身份）与性格总结：两处入口执行成功并写回角色卡；无角色/未配置模型时提示不变
+  3. 续写 ⚡：生成一对"用户发言 + 角色回应"并落库（切走再回来仍在）；续写引导生效；生成中不予重复触发、失败提示不变
+  4. 旁白 / 分支 / Swipe / 主发送链路不受影响（未搬动）
+  - 回滚锚点：`ad5d0aa`（P2-2b）/ `bac896d`（P2-2a 类型迁出，回滚需成组）
 - **已作废冒烟项**（相关代码已删除）：会话列表面板（`726efec` / `958b43b` 的面板侧）——面板与 ChatViewModel 会话列表 API 已随 P1-4 ③ 删除，不必再测
 - **需回归确认**（删除相影响面）：聊天页正常打开/发送/停止/重生成；更多菜单"新建章节(切换开场白)"创建后提示与当前会话不变；从"对话记录"Tab 点会话进入聊天页仍能切到指定会话（`pendingChatId` → `selectSession` 路径未动，但 `refreshSessions` 已移除，建议确认切换后列表/消息正常）
 - `APK-reference/`（约 100MB 反编译参考资料）暂保留，未清理
@@ -81,3 +92,4 @@
 | 2026-09-27 | P1-4 低风险相 | ① `utils/SessionListCollapseState` 折叠纯函数收口三处重复 ✅（8ff588e）；② `components/SessionGroupDialogs` 四个分组弹窗共享，面板迁移 ✅（958b43b）；③ 对话记录 Tab 迁移 ✅（a1d2a5d，-380 行，2815→2435）；每步编译通过 |
 | 2026-09-27 | P1-4 收官（删除死 UI） | 核实 `ChatSessionListPanel` 不可达（入口早已收敛到"对话记录"Tab）→ 经用户确认改为删除：ChatPage 引用摘除（020dd05）→ 面板整文件（b8500bb）→ ChatViewModel T-4.5 会话列表/分组 API（7983170），合计 **≈-1069 行**；原"数据换源 + overlay + 单组件(mode)"方案作废；`SessionGroupDialogs`/`SessionListCollapseState` 保留给 Tab；每步编译通过 |
 | 2026-09-27 | P2-1 开工（ChatService 瘦身） | ① 契约常量 + 文本纯函数下沉 `ChatTextContract` ✅（64b0c4e，-285 行，5 处外部导入改路径）；② 请求计划抽离 `ChatRequestPlan` ✅（702d3db，五分支语义对齐）；③ `ChatRequestBuilder` 抽取 ✅（8e0ad06，6 方法 615 行逐字搬运 byte 级比对一致）；**ChatService 6,735 → 5,781 行（P2-1 合计 -954）**；装配范式确立：构造注入 + 函数属性宿主回调 + 同名转发（零改写） |
+| 2026-09-27 | P2-2 开工（ChatService 瘦身） | ① `ChatState` / `ChatServiceCallbacks` 迁入 `models/ChatServiceContract` ✅（bac896d，2 处引用改路径）；② `ChatOneShotGenerator` 抽取 ✅（ad5d0aa，6 方法 513 行逐字搬运 byte 级一致 + `AutoContinueTurn` 随迁，宿主回调扩展 **setter 写入面**）；**ChatService 5,781 → 5,273 行**；每步编译通过；待用户真机冒烟 |
