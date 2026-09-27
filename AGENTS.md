@@ -47,6 +47,7 @@ components/ 与 models/：无网络、无数据库、无业务副作用
 - `String.replace` 不支持回调函数（用 `RegExp.exec` 循环）；正则用 `new RegExp()`
 - 异步必须配 `.catch()`（未捕获的 Promise 会 Crash）；`aboutToDisappear` 中清理定时器与监听（`display.on` / `window.on` / mediaquery 等）
 - 回调中的 `this` 一律用箭头函数
+- **宿主契约（结构类型）仅适用于 public 成员**：把 `this` 直接传给接口的场景（如 `FrontendCardHost`）要求相关成员全为 public；成员的 `private` 会使结构赋值失败——此类抽取改用「构造注入依赖 + 调用期快照字段」
 
 ## 5. 快速命令速查
 
@@ -149,5 +150,6 @@ docs/handover/
 - 基线：`refactor-baseline` tag（2026-09-27 建立）
 - 已完成：全项目只读审计（286 文件 / 112,801 行）、交接文档体系重建、`tools/` 与开发截图清理
 - **P1 批次全部完成**：P1-1 死代码清理 ✅ · P1-2 ChatService 重复逻辑消除 ✅ · P1-3 ChatPage 组件抽取（5 个）✅ · P1-4 会话列表去重 ✅（共享折叠纯函数 + 共享分组弹窗 + **删除不可达的会话列表面板**，≈-1069 行）· P1-5 组件越层修复 ✅ · P1-6 不可变性 ✅
-- 下一步候选：P2 ChatService 瘦身（`ChatRequestBuilder` → `ChatOneShotGenerator` → `ChatStatusService` → `ChatSwipeController` → Branch 门面），启动时机以用户节奏为准
+- **P2 进行中（ChatService 瘦身，6,735 → 6,356 行）**：P2-1a 契约常量与文本纯函数下沉 `services/ChatTextContract` ✅ · P2-1b 请求计划抽离 `services/ChatRequestPlan` ✅；下一步 P2-1c `ChatRequestBuilder`（buildRequestMessages + 注入族 ≈670 行，设计要点见 `docs/handover/CURRENT.md` §2）
+- 后续接缝：P2-2 `ChatOneShotGenerator` → P2-3 `ChatStatusService` → P2-4 `ChatSwipeController` → P2-5 Branch 门面（流式核心不动）
 - 验证状态：代码改动均编译通过；真机冒烟按批次进行，清单与回滚锚点见 `docs/handover/CURRENT.md` §4；路线图见 `docs/handover/2026-09-27-audit-and-roadmap.md` §6

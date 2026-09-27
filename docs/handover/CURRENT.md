@@ -11,7 +11,23 @@
   3. 清理：删除 `tools/`（card-studio）、`启动制卡软件.bat`、根 `screenshots/`、`.tools/uitree`；旧文档归档至 `docs/handover/archive/`
 - **本次未修改任何 .ets 代码**（审计为只读）
 
-## 2. 下一步（重构 P1 批次）
+## 2. 下一步（P2 批次：ChatService 瘦身）
+
+> 目标：ChatService 从 6,735 行降到千行级门面（流式核心保持不动）；接缝见审计报告 §4.1
+> 纪律：一次一操作 → 编译验证 → 提交；每步记录冒烟点
+
+- [x] **P2-1a 契约常量与文本纯函数下沉**（commit `64b0c4e`）：新增 `services/ChatTextContract.ets`（Preferences key / 世界书默认值 / 前端交互与状态文本纯函数，300 行），ChatService **-285 行**；5 处外部导入（2 页面、LorebookViewModel、单测）改直接引用，不再经 ChatService 转出（同时解决审计 §3.2"常量经 ChatService 导入"问题）
+- [x] **P2-1b 请求计划抽离**（commit `702d3db`）：新增 `services/ChatRequestPlan.ets`（`planRequest` + makeBudget/logNormalEstimate，依赖经参数传入），`updateRequestPlan` 改薄包装回写三个字段；五分支（无统计/统计失败/裁剪失败/裁剪成功/未裁剪）语义逐一对齐
+- [ ] **P2-1c `ChatRequestBuilder`（下一步，设计已定稿待实施）**：搬 `buildRequestMessages`（L~4050-4376）+ `autoLoadOnDemandMemories`/`injectOnDemandMemories`/`injectStickyLorebookEntries`/`applyAnchoredInserts`/`appendStickyReminder`（~4376-4686）≈670 行
+  - 设计要点：ArkTS 下 ChatService 成员多为 `private`，**不能**用 P1-5 那种"结构类型传 this"的宿主契约（TS 结构性规则：源成员 private 不满足目标 public 接口）→ 采用「同类名私有字段快照」方案：新类持有与 ChatService 同名的依赖字段（构造注入）+ 调用期状态快照字段（每次 `build()` 前填充）+ 宿主回调（`resolveUserName`/`buildStatusRule`/`appendStatusValuesMessage`/`buildFrontendInteractionBlock`/`notifyMemoryChanged`），使搬运后方法体**几乎零改写**
+  - 必须先核查：`triggerMemorySummaryAsync`/`handleBackgroundMemoryResult` 等后台 fire-and-forget 是否在 build 返回后读取快照字段（若是，需在调用点捕获局部变量，避免被下一次 build 覆盖）
+- [ ] **P2-2 `ChatOneShotGenerator`**（低）：impersonate / persona 提取 / autoContinue 及其 parser（~L1456-1968）
+- [ ] **P2-3 `ChatStatusService`**（中）：角色状态簇（~L2736-3538）
+- [ ] **P2-4 `ChatSwipeController`**（中高）：~L5468-5858
+- [ ] **P2-5 Branch 门面**（中）：先搬纯判定与查询（~L5865-6160）
+- [ ] 「聊天主路径冒烟清单」：发送/流式/停止 → 重生成 → 分支切换 → Swipe → 旁白 → 代写 → 记忆生成/查看 → 世界书注入 → 会话增删切换 → 归档导出导入 → 深浅色
+
+## 2b. 已完成（P1 批次，全部收官）
 
 > 完整路线图见 [审计报告 §6](./2026-09-27-audit-and-roadmap.md)
 > 纪律：一次一操作 → 编译验证（最多 3 次）→ 提交；任一步失败立即回滚
@@ -45,6 +61,7 @@
   1. 角色卡前端界面（commit `d44797b`，P1-5）：全屏页（FrontendCardPage）与聊天页面板两种入口打开；页面内 getState/setState/getCharacter/getMessages/send/appendInteraction/close 均可用；面板收起/展开无白屏
   2. 对话记录 Tab 分组弹窗（commit `8ff588e` + `a1d2a5d`，P1-4 ①②）：分组新建（空名拒绝）/重命名/删除（仅解除关联）/移动会话（含"不分组"）/"新建文件夹并移入"（空名拒绝、操作中置灰）/左滑"分组"入口/折叠状态重启后保持
   - 回滚锚点：`d44797b`（CardFrontendWeb）/ `a1d2a5d`（Tab 弹窗迁移，依赖 `8ff588e` 与 SessionGroupDialogs，回滚需成组）
+- **P2-1a/1b 待冒烟（窄口径，均属"搬运不改行为"）**：常量与纯函数下沉（`64b0c4e`）无用户可见面；请求计划抽离（`702d3db`）建议看——顶栏预算指示器数值正常、长会话发送时历史裁剪与上下文占用统计正常、裁剪后回复仍完整
 - **已作废冒烟项**（相关代码已删除）：会话列表面板（`726efec` / `958b43b` 的面板侧）——面板与 ChatViewModel 会话列表 API 已随 P1-4 ③ 删除，不必再测
 - **需回归确认**（删除相影响面）：聊天页正常打开/发送/停止/重生成；更多菜单"新建章节(切换开场白)"创建后提示与当前会话不变；从"对话记录"Tab 点会话进入聊天页仍能切到指定会话（`pendingChatId` → `selectSession` 路径未动，但 `refreshSessions` 已移除，建议确认切换后列表/消息正常）
 - `APK-reference/`（约 100MB 反编译参考资料）暂保留，未清理
@@ -60,3 +77,4 @@
 | 2026-09-27 | P1-5 组件越层修复 | `CardFrontendWeb`/`CardFrontendBridge` 改宿主契约 `FrontendCardHost` ✅（d44797b）；`ChatSessionListPanel` 去 `ChatViewModel`/`AppServices`，改 @Prop + 回调、折叠持久化上提 ChatPage ✅（726efec）；组件层仅剩 `ChatStatusWorldPanel` 一处类型引用；每步编译通过；P1-4 已写分相建议（待对齐合并方向） |
 | 2026-09-27 | P1-4 低风险相 | ① `utils/SessionListCollapseState` 折叠纯函数收口三处重复 ✅（8ff588e）；② `components/SessionGroupDialogs` 四个分组弹窗共享，面板迁移 ✅（958b43b）；③ 对话记录 Tab 迁移 ✅（a1d2a5d，-380 行，2815→2435）；每步编译通过 |
 | 2026-09-27 | P1-4 收官（删除死 UI） | 核实 `ChatSessionListPanel` 不可达（入口早已收敛到"对话记录"Tab）→ 经用户确认改为删除：ChatPage 引用摘除（020dd05）→ 面板整文件（b8500bb）→ ChatViewModel T-4.5 会话列表/分组 API（7983170），合计 **≈-1069 行**；原"数据换源 + overlay + 单组件(mode)"方案作废；`SessionGroupDialogs`/`SessionListCollapseState` 保留给 Tab；每步编译通过 |
+| 2026-09-27 | P2-1 开工（ChatService 瘦身） | ① 契约常量 + 文本纯函数下沉 `ChatTextContract` ✅（64b0c4e，-285 行，5 处外部导入改路径）；② 请求计划抽离 `ChatRequestPlan`（planRequest/makeBudget/logNormalEstimate）✅（702d3db，五分支语义对齐）；ChatService 6,735 → **6,356 行**；①c `ChatRequestBuilder` 设计定稿（同类名快照字段方案）待实施 |
