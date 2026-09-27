@@ -1,274 +1,196 @@
 /**
- * BranchMapNode 分支树节点组件(T-6.4B-1.1 / T-6.4B-1.2 / T-6.4B-4)
+ * BranchMapNode 分支缩进树的一行(2026-09-27 改版)
  *
- * T-6.4B-1.2: 显示单个 Branch 节点的可识别信息:
- * - Branch 类型(主分支 / 第 N 轮分支 / 第 N 轮)
- * - fork User Message 短预览(非 Root)
- * - 分歧 Assistant Message 短预览
- * - 消息数
- * - Active 标识(强调色边框 + 右上角圆点 + "当前"文字)
- * - 选中态(不同背景色)
+ * 改版动机:原「176×118 方框 + 二维连线」的节点,在手机上分支一多就整张图难分辨。
+ * 现改为缩进树(graph 风格)的一行:
+ * - 去掉方框,用「拐角线 + 圆点 + 缩进」表达层级;
+ * - 主路径(Root → 当前分支)的线与圆点用强调色,形成一条可见的脊线;
+ * - 非主路径不再整体降透明度(那是"看不清"的来源),只用中性色画线;
+ * - 标题 = 兄弟序号 + 分歧首句,一眼看出两条分支哪里不一样。
  *
- * T-6.4B-4: 新增末端节点样式:
- * - isTerminal: 显示"第 N 轮"标签
- * - isCurrent: 显示"当前位置"标记 + 强调色边框
- *
- * 不依赖:
- * - Repository / Service
- * - 页面实例
- *
- * 点击通过回调通知父组件,不直接处理切换逻辑。
+ * 不依赖 Repository / Service / 页面实例;点击经回调上抛。
  */
 
-import { BranchMapDisplayInfo } from '../models/BranchMapDisplayInfo';
+import { BranchFlatRow } from '../models/BranchFlatRow';
+import { formatRowTitle, formatRowHint } from '../utils/BranchTreeFlatten';
 import { ThemePalette } from '../theme/ThemePalette';
+
+/** 每层缩进宽度(vp) */
+const INDENT_WIDTH: number = 16;
+/** 本层拐角+圆点列宽度(vp) */
+const ELBOW_WIDTH: number = 30;
+/** 行高(vp) */
+const ROW_HEIGHT: number = 52;
+/** 行中线 y(vp) */
+const ROW_CENTER: number = ROW_HEIGHT / 2;
+/** 拐角竖线 x(vp) */
+const ELBOW_LINE_X: number = 7;
+/** 拐角横线长度(vp) */
+const ELBOW_STUB_W: number = 12;
 
 @Component
 export struct BranchMapNode {
-  /** T-6.4B-1.2: Branch 展示信息(含预览) */
-  displayInfo: BranchMapDisplayInfo = createEmptyDisplayInfo();
-  /** 是否为当前 Active Branch */
-  isActive: boolean = false;
-  /** 是否为用户选中 */
-  isSelected: boolean = false;
-  /** 是否为末端显示节点(T-6.4B-4) */
-  isTerminal: boolean = false;
-  /** 是否为用户当前所在位置(T-6.4B-4) */
-  isCurrent: boolean = false;
-  /** 是否在当前活跃路径上 */
-  isOnPath: boolean = false;
   /** 当前有效主题 */
   @StorageProp('effectiveTheme') effectiveTheme: string = 'dark';
+  /** 该行数据 */
+  row: BranchFlatRow = createEmptyRow();
+  /** 是否为用户选中(选中态不写进行数据,避免与 VM 状态重复持有) */
+  @Prop isSelected: boolean = false;
   /** 点击回调 */
   onTap: (branchId: string) => void = (_: string) => {};
 
   build() {
-    Stack({ alignContent: Alignment.TopEnd }) {
-      // 节点主体
-      Column() {
-        // 标题行:标题 + 状态徽标(当前 / 已选择 / 当前活跃)
-        Row() {
-          Text(this.computeBranchLabel())
-            .fontSize(13)
-            .fontWeight(this.isCurrent ? FontWeight.Bold : FontWeight.Medium)
-            .fontColor(this.computeTitleColor())
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .layoutWeight(1)
-            .textAlign(TextAlign.Start)
-
-          if (this.isSelected) {
-            this.statusChip('已选择')
-          } else if (this.isCurrent && this.isTerminal) {
-            this.statusChip('当前位置')
-          } else if (this.isCurrent || this.isActive) {
-            this.statusChip('当前')
+    Row() {
+      // 祖先层级竖线
+      ForEach(this.row.ancestorRail, (hasRail: boolean) => {
+        Stack() {
+          if (hasRail) {
+            Column()
+              .width(1)
+              .height(ROW_HEIGHT)
+              .backgroundColor(this.railColor())
           }
         }
-        .width('100%')
-        .alignItems(VerticalAlign.Center)
+        .width(INDENT_WIDTH)
+        .height(ROW_HEIGHT)
+      }, (_item: boolean, index: number) => index.toString())
 
-        // fork User 预览(非 Root 显示,末端节点不重复显示)
-        if (!this.isTerminal && !this.displayInfo.isRoot && this.displayInfo.forkUserPreview.length > 0) {
-          Text('你:' + this.displayInfo.forkUserPreview)
-            .fontSize(11)
-            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .margin({ top: 4 })
-            .width('100%')
-            .textAlign(TextAlign.Start)
-        }
+      // 本层拐角 + 圆点
+      this.elbow()
 
-        // 最近一条消息(始终显示,保证分支消息随时可见)
-        Text(this.displayInfo.latestMessagePreview.length > 0
-          ? '最新:' + this.displayInfo.latestMessagePreview
-          : '暂无消息')
+      // 文案区:标题(序号 + 分歧首句) + 副标题(分叉轮次 · 消息数)
+      Column() {
+        Text(formatRowTitle(this.row))
+          .fontSize(14)
+          .fontWeight(this.row.isActive ? FontWeight.Medium : FontWeight.Normal)
+          .fontColor(this.titleColor())
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+          .textAlign(TextAlign.Start)
+
+        Text(formatRowHint(this.row))
           .fontSize(11)
-          .fontColor(this.displayInfo.latestMessagePreview.length === 0
-            ? ThemePalette.textTertiaryColor(this.effectiveTheme)
-            : ThemePalette.textSecondaryColor(this.effectiveTheme))
-          .maxLines(2)
+          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+          .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .margin({ top: 2 })
           .width('100%')
           .textAlign(TextAlign.Start)
-
-        // 底部:消息数
-        Row() {
-          Text(this.displayInfo.messageCount.toString() + ' 条消息')
-            .fontSize(10)
-            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-        }
-        .width('100%')
-        .margin({ top: 4 })
-        .justifyContent(FlexAlign.Start)
       }
-      .width('100%')
-      .height('100%')
-      .padding({ left: 10, right: 10, top: 10, bottom: 10 })
-      .borderRadius(12)
-      .backgroundColor(this.computeBackgroundColor())
-      .borderWidth(this.computeBorderWidth())
-      .borderColor(this.computeBorderColor())
-      .borderStyle(BorderStyle.Solid)
-      .justifyContent(FlexAlign.Center)
+      .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
-      .onClick(() => {
-        this.onTap(this.displayInfo.branchId);
-      })
 
-      // 当前位置发光指示器(右上角强调色圆点+白边框)
-      if (this.isCurrent) {
-        Stack() {
-          Circle({ width: 16, height: 16 })
-            .fill(ThemePalette.accentColor(this.effectiveTheme))
-            .opacity(0.3)
-          Circle({ width: 12, height: 12 })
-            .fill(ThemePalette.accentColor(this.effectiveTheme))
-            .border({ width: 2, color: Color.White })
-        }
-        .width(20)
-        .height(20)
-        .markAnchor({ x: 10, y: 10 })
-        .position({ x: '100%', y: 0 })
-        .translate({ x: -8, y: 8 })
-      } else if (this.isActive) {
-        // Active 非末端:小圆点
-        Circle({ width: 10, height: 10 })
-          .fill(ThemePalette.accentColor(this.effectiveTheme))
-          .markAnchor({ x: 5, y: 5 })
-          .position({ x: '100%', y: 0 })
-          .translate({ x: -8, y: 8 })
+      // 状态徽标
+      if (this.row.isActive) {
+        this.statusChip('当前')
+      } else if (this.isSelected) {
+        this.statusChip('已选择')
       }
     }
     .width('100%')
-    .height('100%')
+    .height(ROW_HEIGHT)
+    .padding({ right: 12 })
+    .borderRadius($r('app.float.app_radius_md'))
+    .backgroundColor(this.row.isActive
+      ? $r('app.color.app_accent_surface')
+      : Color.Transparent)
+    .alignItems(VerticalAlign.Center)
+    .onClick(() => {
+      this.onTap(this.row.branchId);
+    })
   }
 
-  /** 状态徽标(当前 / 已选择 / 当前活跃) */
+  /** 本层拐角线 + 节点圆点 */
+  @Builder
+  elbow() {
+    Stack() {
+      if (this.row.depth > 0) {
+        // 竖线:非最后子节点贯穿整行(├),最后子节点只到中线(└)
+        Column()
+          .width(1)
+          .height(this.row.isLastChild ? ROW_CENTER : ROW_HEIGHT)
+          .backgroundColor(this.railColor())
+          .position({ x: ELBOW_LINE_X, y: 0 })
+
+        // 横线
+        Column()
+          .width(ELBOW_STUB_W)
+          .height(1)
+          .backgroundColor(this.railColor())
+          .position({ x: ELBOW_LINE_X, y: ROW_CENTER - 1 })
+      }
+
+      // 节点圆点(主路径实心强调色,其余空心中性色)
+      Column()
+        .width(this.dotSize())
+        .height(this.dotSize())
+        .borderRadius(this.dotSize())
+        .border({ width: 2, color: this.dotColor() })
+        .backgroundColor(this.row.isOnPath ? this.dotColor() : Color.Transparent)
+        .position({
+          x: this.row.depth > 0 ? ELBOW_LINE_X + ELBOW_STUB_W - 1 : 6,
+          y: ROW_CENTER - this.dotSize() / 2
+        })
+    }
+    .width(ELBOW_WIDTH)
+    .height(ROW_HEIGHT)
+  }
+
+  /** 状态徽标(当前 / 已选择) */
   @Builder
   statusChip(label: string) {
     Text(label)
-      .fontSize(9)
+      .fontSize(10)
       .fontColor($r('app.color.app_on_accent'))
       .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
       .borderRadius(4)
-      .padding({ left: 4, right: 4, top: 1, bottom: 1 })
-      .margin({ left: 4 })
+      .padding({ left: 5, right: 5, top: 1, bottom: 1 })
+      .margin({ left: 6 })
   }
 
-  /**
-   * 计算节点标题文本:
-   * - isCurrent + isTerminal: "第 N 轮"
-   * - isRoot: "对话开始"
-   * - 非 Root: "第 N 轮分支"
-   */
-  private computeBranchLabel(): string {
-    if (this.isTerminal && this.displayInfo.currentMaxTurn > 0) {
-      return '第 ' + this.displayInfo.currentMaxTurn.toString() + ' 轮';
-    }
-    if (this.displayInfo.isRoot) {
-      return '对话开始';
-    }
-    if (this.displayInfo.forkTurnNumber > 0) {
-      return '第 ' + this.displayInfo.forkTurnNumber.toString() + ' 轮分支';
-    }
-    return '分支';
-  }
-
-  /**
-   * 计算标题颜色:
-   * - isCurrent: 强调色
-   * - 默认: app_text_primary
-   */
-  private computeTitleColor(): ResourceColor {
-    if (this.isCurrent) {
+  private titleColor(): ResourceColor {
+    if (this.row.isActive) {
       return ThemePalette.accentColor(this.effectiveTheme);
+    }
+    if (this.row.isEmpty) {
+      return ThemePalette.textTertiaryColor(this.effectiveTheme);
     }
     return ThemePalette.textPrimaryColor(this.effectiveTheme);
   }
 
-  /**
-   * 计算节点背景色:
-   * - isCurrent: 强调色表面
-   * - isSelected: 强调色表面(配合"已选择"徽标区分)
-   * - Normal: 普通表面色
-   */
-  private computeBackgroundColor(): ResourceColor {
-    if (this.isCurrent) {
-      return ThemePalette.surface2Color(this.effectiveTheme);
-    }
-    if (this.isSelected) {
-      return ThemePalette.surface2Color(this.effectiveTheme);
-    }
-    return ThemePalette.surface1Color(this.effectiveTheme);
+  /** 主路径用强调色,其余用分割线色(不再整体降透明度) */
+  private railColor(): ResourceColor {
+    return this.row.isOnPath
+      ? ThemePalette.accentColor(this.effectiveTheme)
+      : ThemePalette.dividerColor(this.effectiveTheme);
   }
 
-  /**
-   * 计算边框宽度:
-   * - isCurrent: 2.5
-   * - isSelected: 2
-   * - Normal: 1
-   */
-  private computeBorderWidth(): number {
-    if (this.isCurrent) {
-      return 2.5;
-    }
-    if (this.isSelected) {
-      return 2;
-    }
-    return 1;
+  private dotColor(): ResourceColor {
+    return this.railColor();
   }
 
-  /**
-   * 计算边框颜色:
-   * - isCurrent: 强调色
-   * - isSelected: 强调色
-   * - Normal: 分割线色
-   */
-  private computeBorderColor(): ResourceColor {
-    if (this.isCurrent) {
-      return ThemePalette.accentColor(this.effectiveTheme);
-    }
-    if (this.isSelected) {
-      return ThemePalette.accentColor(this.effectiveTheme);
-    }
-    return ThemePalette.dividerColor(this.effectiveTheme);
+  private dotSize(): number {
+    return this.row.isOnPath ? 11 : 9;
   }
 }
 
 /**
- * 创建空 BranchMapDisplayInfo(组件 @Prop 初始值占位)。
+ * 空行占位(@Prop 初始值用)。
  */
-function createEmptyDisplayInfo(): BranchMapDisplayInfo {
+function createEmptyRow(): BranchFlatRow {
   return {
-    summary: {
-      id: '',
-      parentBranchId: undefined,
-      forkMessageId: undefined,
-      name: '',
-      isRoot: true,
-      messageCount: 0,
-      createdAt: 0,
-      updatedAt: 0,
-      lastMessageAt: 0,
-      isActive: false
-    },
     branchId: '',
-    parentBranchId: undefined,
-    forkMessageId: undefined,
-    forkTurnNumber: 0,
-    currentMaxTurn: 0,
-    forkUserPreview: '',
-    firstDivergentAssistantPreview: '',
-    latestMessagePreview: '',
+    depth: 0,
+    isLastChild: true,
+    ancestorRail: [],
+    ordinalText: '',
+    title: '',
+    forkHint: '',
     messageCount: 0,
-    isRoot: true,
+    isRoot: false,
     isActive: false,
-    createdAt: 0,
-    nodeId: '',
-    isTerminal: false,
-    isCurrent: false
+    isEmpty: false,
+    isOnPath: false
   };
 }

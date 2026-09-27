@@ -33,7 +33,8 @@ bridge/：仅承载「页面 ↔ 组件」的宿主契约（例：FrontendCardHo
 | 代写 / 性格提取与总结 / 续写 ⚡ | `services/ChatOneShotGenerator.ets` | `services/ChatService`（薄包装） | S |
 | 角色状态（面板 / AI 生成字段 / 状态块合并） | `services/ChatStatusService.ets` | `models/ChatStatusState` / `parser/ChatStatusBlockParser` | S→parser |
 | 消息 Swipe（候选切换 / 重新生成候选） | `services/ChatSwipeController.ets` | `components/MessageSwipeControls` / `services/MessageSwipePersistenceService` | UI→S→Repo |
-| 对话分支（判定 / 切换 / 生成族 / fork） | `services/ConversationBranchService.ets` | `services/ForkChatService` / `repo:ConversationBranchRepository` / `components/BranchMapNode` | S→Repo |
+| 对话分支（判定 / 切换 / 生成族 / fork） | `services/ConversationBranchService.ets` | `services/ForkChatService` / `repo:ConversationBranchRepository` | S→Repo |
+| 分支地图页（缩进树，无画布/缩放） | `pages/BranchMapPage.ets` | `viewmodels/BranchMapViewModel` → `services/ConversationBranchPersistenceService`；行文案 `utils/BranchTreeFlatten` | UI→VM→S |
 | 会话生命周期（新建/切换/删除/新建章节） | `services/ChatSessionService.ets` | `services/ChatPersistenceService` / `services/WorldGroupService` | S |
 | 消息删除 / 编辑 | `services/ChatMessageService.ets` | — | S |
 | 上下文维护（记忆总结触发 / 记忆失效 / 世界书激活刷新） | `services/ChatContextMaintenanceService.ets` | `services/MemoryService` / `services/LorebookPinService` | S |

@@ -1,13 +1,17 @@
 /**
- * BranchMapViewModel 分支树页面状态管理(T-6.4B-1.1 / T-6.4B-1.2)
+ * BranchMapViewModel 分支树页面状态管理(2026-09-27 改版:缩进树)
  *
  * 职责:
  * - 加载指定 Chat 的 BranchMapDisplayInfo 列表(含 fork User 预览 + 分歧 Assistant 预览)
  * - 加载 Active Branch、RecordCounts
- * - 计算 Branch 树布局(BranchTreeLayout)
+ * - 把分支树拍平成缩进树行序列(见 utils/BranchTreeFlatten)
  * - 处理节点选中
  * - 调用 ConversationBranchPersistenceService.switchActiveBranch 切换 Branch
- * - 切换成功后刷新布局和 Active 状态
+ * - 切换成功后刷新行序列和 Active 状态
+ *
+ * 改版说明:
+ * - 原「二维画布布局(computeBranchTreeLayout + 末端节点追加)」已移除,
+ *   现由 BranchTreeFlatten 直接拍平成 List 行;缩放/平移随之删除。
  *
  * 不依赖:
  * - ArkUI / 页面
@@ -22,31 +26,26 @@
  */
 
 import { ConversationBranchPersistenceService } from '../services/ConversationBranchPersistenceService';
-import {
-  ConversationBranchSummary,
-  ConversationRecordCounts
-} from '../models/ConversationBranch';
+import { ConversationRecordCounts } from '../models/ConversationBranch';
 import { BranchMapDisplayInfo } from '../models/BranchMapDisplayInfo';
-import { BranchMapNodeLayout, BranchTreeLayoutResult, BranchTreeEdge } from '../models/BranchMapNodeLayout';
-import { computeBranchTreeLayout, getNodeWidth, getNodeHeight, getTerminalNodeHeight, getVerticalGap, getCanvasPadding } from '../utils/BranchTreeLayout';
+import { BranchFlatRow } from '../models/BranchFlatRow';
+import { flattenBranchTree, formatRowTitle, formatRowHint } from '../utils/BranchTreeFlatten';
 import { Logger } from '../utils/Logger';
 
 const LOG_TAG: string = 'BranchMapViewModel';
 
 @Observed
 export class BranchMapViewModel {
-  /** Branch 摘要列表(向后兼容,从 displayInfos 派生) */
-  branches: ConversationBranchSummary[] = [];
-  /** T-6.4B-1.2: BranchMap 展示信息列表(含预览) */
+  /** BranchMap 展示信息列表(含预览,用于派生 rows) */
   displayInfos: BranchMapDisplayInfo[] = [];
+  /** 缩进树行序列(DFS 顺序,页面直接渲染) */
+  rows: BranchFlatRow[] = [];
   /** 当前活动 Branch ID */
   activeBranchId: string = '';
   /** Branch 记录数量统计 */
   recordCounts: ConversationRecordCounts | undefined = undefined;
   /** 用户选中的 Branch ID(不等于 Active Branch) */
   selectedBranchId: string = '';
-  /** 树布局结果 */
-  layout: BranchTreeLayoutResult | undefined = undefined;
   /** Branch 切换操作进行中 */
   isBranchOperating: boolean = false;
   /** 加载中 */
@@ -65,7 +64,7 @@ export class BranchMapViewModel {
   }
 
   /**
-   * 初始化:加载指定 Chat 的 Branch 数据并计算布局。
+   * 初始化:加载指定 Chat 的 Branch 数据并生成行序列。
    * 默认选中当前 Active Branch。
    */
   async initialize(chatId: string): Promise<void> {
@@ -88,8 +87,7 @@ export class BranchMapViewModel {
   }
 
   /**
-   * 重新加载 Branch 数据并重算布局。
-   * T-6.4B-1.2: 使用 loadBranchMapDisplayInfos 获取含预览的展示信息。
+   * 重新加载 Branch 数据并重建行序列。
    */
   private async reload(): Promise<void> {
     if (this.chatId.length === 0) {
@@ -97,22 +95,22 @@ export class BranchMapViewModel {
     }
     const displayInfos: BranchMapDisplayInfo[] =
       await this.branchPersistenceService.loadBranchMapDisplayInfos(this.chatId);
-    const branches: ConversationBranchSummary[] = displayInfos.map(
-      (info: BranchMapDisplayInfo): ConversationBranchSummary => info.summary
-    );
-    const activeBranch: ConversationBranchSummary | undefined =
-      branches.find((b: ConversationBranchSummary): boolean => b.isActive);
     const counts: ConversationRecordCounts =
       await this.branchPersistenceService.getRecordCounts(this.chatId);
 
     this.displayInfos = displayInfos;
-    this.branches = branches;
-    this.activeBranchId = activeBranch !== undefined ? activeBranch.id : '';
+    let activeId: string = '';
+    for (let i = 0; i < displayInfos.length; i++) {
+      if (displayInfos[i].isActive) {
+        activeId = displayInfos[i].branchId;
+        break;
+      }
+    }
+    this.activeBranchId = activeId;
     this.recordCounts = counts;
-    let layout: BranchTreeLayoutResult = computeBranchTreeLayout(branches, displayInfos);
-    layout = this.appendCurrentHeadNode(displayInfos, layout);
-    this.layout = layout;
+    // 先算活跃路径,再拍平(行需要 isOnPath)
     this.computeActivePath();
+    this.rows = flattenBranchTree(this.displayInfos, this.activeBranchId, this.activePathBranchIds);
   }
 
   /**
@@ -127,7 +125,7 @@ export class BranchMapViewModel {
 
   /**
    * 切换 Active Branch 到当前选中的 Branch。
-   * 成功后刷新布局和 Active 状态。
+   * 成功后刷新行序列和 Active 状态。
    */
   async switchToSelected(): Promise<void> {
     if (this.disposed || this.isBranchOperating) {
@@ -187,176 +185,29 @@ export class BranchMapViewModel {
   }
 
   /**
-   * T-6.4B-1.2: 获取指定 Branch 的展示信息。
+   * 取选中分支对应的行(供底部栏展示;未选中/未找到返回 undefined)。
    */
-  getDisplayInfo(branchId: string): BranchMapDisplayInfo | undefined {
-    for (let i = 0; i < this.displayInfos.length; i++) {
-      if (this.displayInfos[i].branchId === branchId) {
-        return this.displayInfos[i];
-      }
-    }
-    return undefined;
-  }
-
-  /**
-   * T-6.4B-1.2: 获取选中 Branch 的显示名称。
-   * Root: "主分支"
-   * 非 Root: "第 N 轮分支"(N = forkTurnNumber)
-   */
-  getSelectedDisplayName(): string {
+  getSelectedRow(): BranchFlatRow | undefined {
     if (this.selectedBranchId.length === 0) {
-      return '';
+      return undefined;
     }
-    const info: BranchMapDisplayInfo | undefined =
-      this.getDisplayInfo(this.selectedBranchId);
-    if (info === undefined) {
-      return '';
-    }
-    if (info.isRoot) {
-      return '主分支';
-    }
-    if (info.forkTurnNumber > 0) {
-      return '第 ' + info.forkTurnNumber.toString() + ' 轮分支';
-    }
-    return '分支';
+    return this.rows.find((row: BranchFlatRow): boolean => row.branchId === this.selectedBranchId);
   }
 
   /**
-   * T-6.4B-1.2: 获取选中 Branch 的 fork User 预览。
+   * 底部摘要标题(序号 + 分歧首句;未选中返回空字符串)。
    */
-  getSelectedForkUserPreview(): string {
-    if (this.selectedBranchId.length === 0) {
-      return '';
-    }
-    const info: BranchMapDisplayInfo | undefined =
-      this.getDisplayInfo(this.selectedBranchId);
-    return info !== undefined ? info.forkUserPreview : '';
+  getSelectedTitle(): string {
+    const row: BranchFlatRow | undefined = this.getSelectedRow();
+    return row !== undefined ? formatRowTitle(row) : '';
   }
 
   /**
-   * T-6.4B-1.2: 获取选中 Branch 的分歧 Assistant 预览。
+   * 底部摘要副标题(分叉轮次 + 消息数;未选中返回空字符串)。
    */
-  getSelectedAssistantPreview(): string {
-    if (this.selectedBranchId.length === 0) {
-      return '';
-    }
-    const info: BranchMapDisplayInfo | undefined =
-      this.getDisplayInfo(this.selectedBranchId);
-    return info !== undefined ? info.firstDivergentAssistantPreview : '';
-  }
-
-  /**
-   * 获取选中 Branch 的消息数。
-   */
-  getSelectedMessageCount(): number {
-    if (this.selectedBranchId.length === 0) {
-      return 0;
-    }
-    const info: BranchMapDisplayInfo | undefined =
-      this.getDisplayInfo(this.selectedBranchId);
-    return info !== undefined ? info.messageCount : 0;
-  }
-
-  /**
-   * 为当前对话的 Active Branch 追加末端显示节点。
-   * 解决"不创建分支就不显示当前对话位置"的问题。
-   *
-   * 逻辑:
-   * - 查找 Active Branch 在布局中的最后一个真实节点
-   * - 在其下方追加一个 isTerminal=true, isCurrent=true 的末端节点
-   * - 添加连接线从最后一个真实节点到末端节点
-   * - 更新画布高度
-   */
-  private appendCurrentHeadNode(
-    displayInfos: BranchMapDisplayInfo[],
-    layout: BranchTreeLayoutResult
-  ): BranchTreeLayoutResult {
-    if (this.activeBranchId.length === 0) {
-      return layout;
-    }
-
-    // 查找 Active Branch 的展示信息
-    const activeInfo: BranchMapDisplayInfo | undefined = displayInfos.find(
-      (info: BranchMapDisplayInfo): boolean => info.branchId === this.activeBranchId
-    );
-    if (activeInfo === undefined) {
-      return layout;
-    }
-
-    // Active Branch 还有下级子分支时,用子分支链路展示"当前位置",
-    // 不再追加末端节点:否则末端节点会占据与下层子节点相同的槽位导致重叠。
-    const hasDescendant: boolean = layout.nodes.some(
-      (n: BranchMapNodeLayout): boolean =>
-        !n.isTerminal && n.parentBranchId === this.activeBranchId
-    );
-    if (hasDescendant) {
-      return layout;
-    }
-
-    // 查找 Active Branch 在布局中的最后一个真实节点
-    const branchNodes: BranchMapNodeLayout[] = layout.nodes.filter(
-      (n: BranchMapNodeLayout): boolean => n.branchId === this.activeBranchId && !n.isTerminal
-    );
-    if (branchNodes.length === 0) {
-      return layout;
-    }
-    // 按 Y 坐标排序找到最后的节点
-    branchNodes.sort((a: BranchMapNodeLayout, b: BranchMapNodeLayout): number => a.y - b.y);
-    const lastNode: BranchMapNodeLayout = branchNodes[branchNodes.length - 1];
-
-    // 计算末端节点 nodeId
-    const terminalNodeId: string = 'head:' + this.activeBranchId + ':' + activeInfo.currentMaxTurn;
-
-    // 计算末端节点的 Y 坐标(在最后一个节点下方一层)
-    const NODE_HEIGHT_VALUE: number = getNodeHeight();
-    const TERMINAL_HEIGHT: number = getTerminalNodeHeight();
-    const VERTICAL_GAP: number = getVerticalGap();
-    const NODE_WIDTH: number = getNodeWidth();
-    const CANVAS_PADDING: number = getCanvasPadding();
-
-    const terminalY: number = lastNode.y + lastNode.height + VERTICAL_GAP;
-
-    // 创建末端节点布局
-    const terminalNode: BranchMapNodeLayout = {
-      nodeId: terminalNodeId,
-      branchId: this.activeBranchId,
-      parentBranchId: lastNode.parentBranchId,
-      depth: lastNode.depth + 1,
-      forkTurnNumber: activeInfo.currentMaxTurn,
-      currentMaxTurn: activeInfo.currentMaxTurn,
-      x: lastNode.x,
-      y: terminalY,
-      width: NODE_WIDTH,
-      height: TERMINAL_HEIGHT,
-      siblingIndex: 0,
-      siblingCount: 0,
-      isTerminal: true,
-      isCurrent: true
-    };
-
-    // 创建连接线(最后一个真实节点 → 末端节点)
-    const terminalEdge: BranchTreeEdge = {
-      parentBranchId: lastNode.branchId,
-      childBranchId: terminalNode.branchId,
-      childNodeId: terminalNode.nodeId,
-      startX: lastNode.x + lastNode.width / 2,
-      startY: lastNode.y + lastNode.height,
-      endX: terminalNode.x + terminalNode.width / 2,
-      endY: terminalNode.y
-    };
-
-    // 更新画布高度
-    const newCanvasHeight: number = Math.max(
-      layout.canvasHeight,
-      terminalY + TERMINAL_HEIGHT + CANVAS_PADDING
-    );
-
-    return {
-      nodes: [...layout.nodes, terminalNode],
-      canvasWidth: layout.canvasWidth,
-      canvasHeight: newCanvasHeight,
-      edges: [...layout.edges, terminalEdge]
-    };
+  getSelectedHint(): string {
+    const row: BranchFlatRow | undefined = this.getSelectedRow();
+    return row !== undefined ? formatRowHint(row) : '';
   }
 
   /**

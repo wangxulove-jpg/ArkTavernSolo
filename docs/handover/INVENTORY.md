@@ -51,7 +51,7 @@
 
 | 组件 | 用途 |
 |---|---|
-| `BranchMapNode` | 分支树节点（配合 `utils/BranchTreeLayout` 计算布局） |
+| `BranchMapNode` | 分支缩进树的一行（缩进 + 拐角线 + 圆点，无方框） |
 | `MarketCharacterCard` / `MarketCharacterAvatar` | 市场角色卡列表项 / 头像 |
 
 ## 2. 工具层 —— `entry/src/main/ets/utils/`（纯函数，无副作用）
@@ -63,7 +63,7 @@
 | `Time` | `nowMillis` / `nowIso` / `millisToIso` | **不要手写 `Date.now()` 之外的格式化** |
 | `Uuid` | `generateUuid`（v4） | 生成 id；**不要自己拼随机串** |
 | `SessionListCollapseState` | 会话列表折叠状态 key + parse/serialize + 判定纯函数 | 折叠态持久化（P1-4 收口了三处重复） |
-| `BranchTreeLayout` | 分支树布局计算 | 画分支图/地图时 |
+| `BranchTreeFlatten` | 分支树拍平成缩进树行序列（含 `formatRowTitle/formatRowHint` 文案口径） | 画分支地图时；**行文案只在这一处格式化** |
 | `ChatTextColorTheme` | 字体配色主题（浅/深、校验/归一 hex） | 聊天气泡文字配色 |
 | `ChatTextStyleSettings` | 聊天文本样式设置（含 `DEFAULT_CHAT_TEXT_STYLE`） | 字号/行距类设置 |
 | `ChatBubbleAppearance` | 气泡外观（透明度归一 + 气泡底色计算） | 气泡配色；**不要在页面里重算** |

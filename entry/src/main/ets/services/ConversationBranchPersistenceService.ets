@@ -317,8 +317,8 @@ export class ConversationBranchPersistenceService {
    * 背景:Branch 创建时会复制 parent 的 0..forkPosition 消息前缀,因此当前
    * Active Branch 中包含其所有祖先的前缀消息。当用户"回到以前的对话"从更早
    * 的消息 fork 时,新 Branch 语义上是从祖先分支的对话线分出,而非当前分支
-   * 的子级。若仍挂到当前分支,BranchTreeLayout 的"子节点至少低一层"约束会
-   * 把它压到当前分支下方,导致 Y 位置与 fork 轮次错位。
+   * 的子级。若仍挂到当前分支,分支地图会把这条分支错排到当前分支下方,
+   * 与它实际的分叉位置不一致。
    *
    * 规则(沿祖先链自下而上):
    * - fork 消息 position > 当前分支自身 forkMessageId 的 position
