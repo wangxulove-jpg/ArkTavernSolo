@@ -279,6 +279,9 @@ struct ChatPage {
   @State frontendPanelCurWidth: number = 360;
   /** 前端面板当前高度(vp,打开时由建议值初始化,角落拖动可实时调整) */
   @State frontendPanelCurHeight: number = 0;
+  /** 前端面板相对右上角锚点的位移(vp,拖标题栏移动;收起后保留,换卡/离开页面重置) */
+  @State frontendPanelOffsetX: number = 0;
+  @State frontendPanelOffsetY: number = 0;
   /**
    * 前端面板是否已挂载(ArkWeb 保活):
    * 首次点击「界面」后保持挂载,收起只做位移隐藏,不销毁节点 → 再展开不再白屏重载。
@@ -297,6 +300,9 @@ struct ChatPage {
   private frontendResizeStartW: number = 360;
   /** 角落拖动起始高度(vp) */
   private frontendResizeStartH: number = 0;
+  /** 标题栏拖动起始位移(vp) */
+  private frontendDragStartX: number = 0;
+  private frontendDragStartY: number = 0;
   /** 窗口宽度缓存(vp,首次布局时取) */
   private cachedScreenW: number = -1;
   /** 窗口高度缓存(vp,首次布局时取) */
@@ -1167,14 +1173,12 @@ struct ChatPage {
         .padding({ left: 12, right: 12, bottom: this.keyboardHeight > 0 ? 40 : this.navigationBarHeight + 40 })
         .hitTestBehavior(HitTestMode.Transparent)
 
-        // ===== 角色状态侧边栏(右侧折叠标签,点击展开,不遮挡画面) =====
-        if (this.statusEntries.length > 0) {
-          this.statusFloatingControl()
-        }
+        // ===== 右上角入口标签列(状态 / 界面,流式堆叠;对应面板展开时该标签移出) =====
+        this.rightRail()
 
-        // ===== 前端页面入口(角色卡带前端界面时显示,位于状态标签下方) =====
-        if (this.hasFrontend) {
-          this.frontendFloatingControl()
+        // ===== 角色状态浮层面板(展开态;点面板以外收起) =====
+        if (this.statusPanelExpanded) {
+          this.statusPanelLayer()
         }
 
         // ===== 前端界面浮层面板(mode=panel,聊天页内展开,对话仍可继续) =====
@@ -1474,6 +1478,8 @@ struct ChatPage {
     this.frontendMountedCardId = '';
     this.frontendPanelPinned = false;
     this.frontendPanelResized = false;
+    this.frontendPanelOffsetX = 0;
+    this.frontendPanelOffsetY = 0;
     this.persistedPanelW = 0;
     this.persistedPanelH = 0;
   }
@@ -1535,7 +1541,8 @@ struct ChatPage {
 
   /** 面板隐藏时的横向位移(vp):足以把面板整体移出右边界(不改变布局尺寸) */
   private panelHideOffset(): number {
-    return this.frontendPanelCurWidth + 120;
+    // 面板可能已被拖到偏左位置,位移需再补上这段距离才能完全移出屏幕
+    return this.frontendPanelCurWidth + 120 - this.frontendPanelOffsetX;
   }
 
   /** 读取该角色卡上次调整过的面板尺寸(vp);无记录/解析失败则保持 0 */
@@ -1656,44 +1663,54 @@ struct ChatPage {
     return Math.min(Math.max(h, 180), max);
   }
 
-  /** 前端页面折叠标签(贴屏幕右缘,按顺序排列:有角色状态时排在状态标签下方,无状态时排右上角) */
+  /** 拖动位移限幅:面板锚定右上角,向左最多留 8vp 边距,向右不越过屏幕右缘 */
+  private clampPanelOffsetX(x: number): number {
+    const min: number = Math.min(0, 8 + this.frontendPanelCurWidth - this.screenWidthVp());
+    return Math.min(Math.max(x, min), 0);
+  }
+
+  /** 拖动位移限幅:不高于展开默认位置,底部不越过手势条 */
+  private clampPanelOffsetY(y: number): number {
+    const nav: number = (AppStorage.get<number>('navigationBarHeight') ?? 0) as number;
+    const maxTop: number = this.screenHeightVp() - nav - 8;
+    const max: number = maxTop - this.statusBarHeight - 54 - this.frontendPanelCurHeight;
+    return Math.min(Math.max(y, 0), Math.max(0, max));
+  }
+
+  /** 折叠态:贴屏右缘的「界面」标签(与「状态」标签同规格;由 rightRail 统一排布与定位) */
   @Builder
-  frontendFloatingControl() {
-    Stack({ alignContent: Alignment.TopEnd }) {
-      Column() {
-        Text('界')
-          .fontSize(12)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-        Text('面')
-          .fontSize(12)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-          .margin({ top: 2 })
-        Text('')
-          .width(6)
-          .height(6)
-          .borderRadius(3)
-          .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
-          .margin({ top: 6 })
-      }
-      .width(30)
-      .height(96)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
-      // 有角色状态 → 排在状态标签(状态栏+54,高96)下方;无状态 → 直接右上角
-      .margin({ top: this.statusEntries.length > 0 ? this.statusBarHeight + 54 + 104 : this.statusBarHeight + 54 })
-      .borderRadius({ topLeft: 14, topRight: 0, bottomLeft: 14, bottomRight: 0 })
-      .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-      .shadow({ radius: 6, color: 'rgba(0,0,0,0.12)' })
-      .onClick(() => {
-        this.openFrontendCard();
-      })
+  frontendFloatingTab() {
+    Column() {
+      Text('界')
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+      Text('面')
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        .margin({ top: 2 })
+      Text('')
+        .width(6)
+        .height(6)
+        .borderRadius(3)
+        .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
+        .margin({ top: 6 })
     }
-    .width('100%')
-    .height('100%')
-    // 外层透明:空白处点击穿透到下层,仅标签自身可点
-    .hitTestBehavior(HitTestMode.Transparent)
+    .width(30)
+    .height(96)
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+    .borderRadius({ topLeft: 14, topRight: 0, bottomLeft: 14, bottomRight: 0 })
+    .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+    .shadow({ radius: 6, color: 'rgba(0,0,0,0.12)' })
+    .transition(
+      TransitionEffect.opacity(0).combine(TransitionEffect.translate({ x: 40 }))
+        .animation({ duration: 200, curve: Curve.EaseOut })
+    )
+    .onClick(() => {
+      this.openFrontendCard();
+    })
   }
 
   /** 前端界面浮层面板(仅 mode=panel):右上展开 ArkWeb,对话仍可在下方继续 */
@@ -1713,7 +1730,7 @@ struct ChatPage {
           })
       }
 
-      // 面板:标题栏 + ArkWeb 内容(四角把手可拖动调整大小)
+      // 面板:标题栏 + ArkWeb 内容(右下角把手可调整大小,标题栏可拖动移动)
       // 保活:收起只做位移+透明(布局尺寸不变,ArkWeb 节点不重建),再展开即刻显示,无白屏
       Stack({ alignContent: Alignment.TopStart }) {
         Column() {
@@ -1728,26 +1745,31 @@ struct ChatPage {
               .textOverflow({ overflow: TextOverflow.Ellipsis })
               .layoutWeight(1)
 
-            // 固定开关:固定后点面板外不收起
+            // 固定开关:与「✕」同规格的热区,不固定时也保留底色,避免按钮时有时无
             Text(this.frontendPanelPinned ? '已固定' : '固定')
               .fontSize(12)
               .fontWeight(this.frontendPanelPinned ? FontWeight.Medium : FontWeight.Normal)
               .fontColor(this.frontendPanelPinned
                 ? ThemePalette.accentColor(this.effectiveTheme)
                 : ThemePalette.textSecondaryColor(this.effectiveTheme))
-              .backgroundColor(this.frontendPanelPinned
-                ? ThemePalette.surface2Color(this.effectiveTheme)
-                : Color.Transparent)
-              .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-              .borderRadius(9)
+              .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+              .height(26)
+              .padding({ left: 10, right: 10 })
+              .borderRadius(13)
+              .textAlign(TextAlign.Center)
               .onClick(() => {
                 this.frontendPanelPinned = !this.frontendPanelPinned;
               })
 
-            Text('收起')
-              .fontSize(13)
-              .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-              .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+            Text('✕')
+              .fontSize(12)
+              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+              .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+              .width(26)
+              .height(26)
+              .borderRadius(13)
+              .textAlign(TextAlign.Center)
+              .margin({ left: 6 })
               .onClick(() => {
                 this.closeFrontendPanel();
               })
@@ -1755,6 +1777,27 @@ struct ChatPage {
           .width('100%')
           .height(44)
           .padding({ left: 12, right: 8 })
+          // 拖动标题栏移动面板(按下后拖拽即可;左右上下位移受限幅保护,不会跑出屏幕)
+          .gesture(
+            PanGesture({ direction: PanDirection.All })
+              .onActionStart(() => {
+                this.frontendDragStartX = this.frontendPanelOffsetX;
+                this.frontendDragStartY = this.frontendPanelOffsetY;
+              })
+              .onActionUpdate((event: GestureEvent | undefined) => {
+                if (event === undefined) {
+                  return;
+                }
+                this.frontendPanelOffsetX =
+                  this.clampPanelOffsetX(this.frontendDragStartX + event.offsetX);
+                this.frontendPanelOffsetY =
+                  this.clampPanelOffsetY(this.frontendDragStartY + event.offsetY);
+              })
+          )
+
+          // 标题栏与网页内容之间的分隔,避免标题和页面黏在一起
+          Divider()
+            .color(ThemePalette.dividerColor(this.effectiveTheme))
 
           CardFrontendWeb({
             vm: this.viewModel,
@@ -1770,21 +1813,20 @@ struct ChatPage {
         .width('100%')
         .height('100%')
 
-        // 四角调整大小把手(放在内容区四角,避开标题栏按钮;锚定右上角:左/下边缘随拖动伸缩)
-        this.frontendCornerHandle(0, 44, 0)
-        this.frontendCornerHandle(this.frontendPanelCurWidth - 26, 44, 90)
-        this.frontendCornerHandle(0, this.frontendPanelCurHeight - 26, 270)
-        this.frontendCornerHandle(this.frontendPanelCurWidth - 26,
-          this.frontendPanelCurHeight - 26, 180)
+        // 右下角调整大小把手(四个角行为完全一致,只保留一个可视图标,避免四个 L 括号压在网页上)
+        this.frontendResizeHandle()
       }
       .width(this.frontendPanelCurWidth)
       .height(this.frontendPanelCurHeight)
       .margin({ top: this.statusBarHeight + 54 })
-      .borderRadius({ topLeft: 16, topRight: 0, bottomLeft: 16, bottomRight: 0 })
+      .borderRadius({ topLeft: 18, topRight: 0, bottomLeft: 18, bottomRight: 0 })
       .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
       .clip(true)
       .shadow({ radius: 10, color: 'rgba(0,0,0,0.18)' })
-      .translate({ x: this.frontendPanelVisible ? 0 : this.panelHideOffset() })
+      .translate({
+        x: this.frontendPanelVisible ? this.frontendPanelOffsetX : this.panelHideOffset(),
+        y: this.frontendPanelOffsetY
+      })
       .opacity(this.frontendPanelVisible ? 1 : 0)
     }
     .width('100%')
@@ -1792,34 +1834,38 @@ struct ChatPage {
     .hitTestBehavior(this.frontendPanelVisible ? HitTestMode.Transparent : HitTestMode.None)
   }
 
-  /** 角落调整大小把手:x/y 为把手左上角(面板内锚点),angle 为角标旋转角 */
+  /**
+   * 右下角调整大小把手。
+   * 面板锚定右上角,四个角的拖动行为完全一致(收窄宽度 + 加高),因此只保留一个可视图标,
+   * 避免四个 L 形括号常显压在网页内容上。
+   */
   @Builder
-  frontendCornerHandle(x: number, y: number, angle: number) {
+  frontendResizeHandle() {
     Column() {
-      // 角标视觉提示:L 形括号,旋转复用四个角
+      // 角标视觉提示:L 形括号
       Stack({ alignContent: Alignment.TopStart }) {
         Text('')
           .width(8)
           .height(1.5)
           .position({ x: 0, y: 0 })
           .backgroundColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-          .opacity(0.9)
+          .opacity(0.55)
         Text('')
           .width(1.5)
           .height(8)
           .position({ x: 0, y: 0 })
           .backgroundColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-          .opacity(0.9)
+          .opacity(0.55)
       }
       .width(12)
       .height(12)
-      .rotate({ angle: angle })
+      .rotate({ angle: 180 })
     }
     .width(26)
     .height(26)
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
-    .position({ x: x, y: y })
+    .position({ x: this.frontendPanelCurWidth - 26, y: this.frontendPanelCurHeight - 26 })
     .hitTestBehavior(HitTestMode.Block)
     .gesture(
       PanGesture({ direction: PanDirection.All })
@@ -1847,28 +1893,46 @@ struct ChatPage {
 
   // ===== 角色状态侧边栏(CHAT-STATUS-1B) =====
 
-  /** 角色状态浮层容器:右上角;折叠为小标签,点击展开面板(带动画) */
+  /**
+   * 右上角入口标签列:「状态」「界面」按顺序流式堆叠(谁有谁排上)。
+   * 位置由整个 Column 一次给定,不再为第二个标签手算偏移;
+   * 对应面板展开时该标签移出(带过渡,与面板滑入同时发生)。
+   */
   @Builder
-  statusFloatingControl() {
+  rightRail() {
     Stack({ alignContent: Alignment.TopEnd }) {
-      // 展开时:全屏透明点击捕获层 —— 点面板以外任意位置即收起
-      if (this.statusPanelExpanded) {
-        Column()
-          .width('100%')
-          .height('100%')
-          .backgroundColor(Color.Transparent)
-          .onClick(() => {
-            this.toggleStatusPanel(false);
-          })
-      }
-
-      // 内容层:右上角标签 / 展开面板(空白区域点击穿透,标签/面板自身可点击)
-      Column() {
-        if (this.statusPanelExpanded) {
-          this.statusFloatingPanel()
-        } else {
+      Column({ space: 8 }) {
+        if (this.statusEntries.length > 0 && !this.statusPanelExpanded) {
           this.statusFloatingTab()
         }
+        if (this.hasFrontend && !this.frontendPanelVisible) {
+          this.frontendFloatingTab()
+        }
+      }
+      .margin({ top: this.statusBarHeight + 54 })
+      .alignItems(HorizontalAlign.End)
+      .hitTestBehavior(HitTestMode.Transparent)
+    }
+    .width('100%')
+    .height('100%')
+    // 外层透明:空白处点击穿透到下层(消息列表/顶栏/输入区),仅标签自身可点
+    .hitTestBehavior(HitTestMode.Transparent)
+  }
+
+  /** 展开态:角色状态面板 + 点面板以外任意位置收起 */
+  @Builder
+  statusPanelLayer() {
+    Stack({ alignContent: Alignment.TopEnd }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(Color.Transparent)
+        .onClick(() => {
+          this.toggleStatusPanel(false);
+        })
+
+      Column() {
+        this.statusFloatingPanel()
       }
       .width('100%')
       .height('100%')
@@ -1878,11 +1942,10 @@ struct ChatPage {
     }
     .width('100%')
     .height('100%')
-    // 外层透明:折叠时全屏点击穿透到下层(消息列表/顶栏/输入区),仅标签/面板自身可点
     .hitTestBehavior(HitTestMode.Transparent)
   }
 
-  /** 折叠态:右上角小标签(竖排“状态” + 有状态时的小圆点) */
+  /** 折叠态:右上角小标签(竖排“状态” + 有状态时的小圆点;由 rightRail 统一排布与定位) */
   @Builder
   statusFloatingTab() {
     Column() {
@@ -1906,7 +1969,6 @@ struct ChatPage {
     .height(96)
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
-    .margin({ top: this.statusBarHeight + 54 })
     .borderRadius({ topLeft: 14, topRight: 0, bottomLeft: 14, bottomRight: 0 })
     .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
     .shadow({ radius: 6, color: 'rgba(0,0,0,0.12)' })
@@ -1931,7 +1993,7 @@ struct ChatPage {
           .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
         Blank()
 
-        // AI 依据角色卡重新生成字段
+        // AI 依据角色卡重新生成字段(无底色纯文字,与字段列表保持同一视觉语言)
         Row() {
           if (this.statusGenBusy) {
             Text('生成中…')
@@ -1944,9 +2006,7 @@ struct ChatPage {
           }
         }
         .height(26)
-        .padding({ left: 10, right: 10 })
-        .borderRadius(13)
-        .backgroundColor('rgba(255,255,255,0.08)')
+        .padding({ left: 4, right: 4 })
         .onClick(() => {
           this.requestStatusGeneration();
         })
@@ -1975,7 +2035,7 @@ struct ChatPage {
           .textAlign(TextAlign.Center)
           .margin({ top: 24 })
       } else {
-        List({ space: 8 }) {
+        List() {
           ForEach(this.statusEntries,
             (entry: ChatStatusEntry, index: number) => {
               ListItem() {
@@ -1985,6 +2045,12 @@ struct ChatPage {
             (entry: ChatStatusEntry, index: number) => entry.name + '_' + index.toString()
           )
         }
+        .divider({
+          strokeWidth: 1,
+          color: ThemePalette.dividerColor(this.effectiveTheme),
+          startMargin: 0,
+          endMargin: 0
+        })
         .layoutWeight(1)
         .width('100%')
         .scrollBar(BarState.Off)
@@ -2003,26 +2069,34 @@ struct ChatPage {
     )
   }
 
-  /** 单个状态字段行:名称[:值] */
+  /** 单个状态字段行:emoji + 字段名(次要小字,固定列宽) + 值(主色中黑);不用方框,靠行距与分隔线分组 */
   @Builder
   statusEntryRow(entry: ChatStatusEntry) {
     Row() {
       Text(this.statusEmoji(entry.name))
+        .fontSize(13)
+        .width(18)
+        .textAlign(TextAlign.Center)
+      Text(entry.name)
+        .fontSize(12)
+        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width(76)
+        .margin({ left: 6 })
+      Text(this.statusEntryValueText(entry))
         .fontSize(14)
-      Text(this.statusEntryDisplayText(entry))
-        .fontSize(14)
+        .fontWeight(FontWeight.Medium)
         .lineHeight(19)
         .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
         .maxLines(2)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .margin({ left: 6 })
+        .margin({ left: 8 })
         .layoutWeight(1)
     }
     .width('100%')
-    .constraintSize({ minHeight: 40 })
-    .padding({ left: 10, right: 8, top: 8, bottom: 8 })
-    .borderRadius($r('app.float.app_radius_sm'))
-    .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+    .alignItems(VerticalAlign.Top)
+    .padding({ left: 2, right: 2, top: 9, bottom: 9 })
   }
 
   // ===== CHAT-STATUS-1A / T-7.x: 状态/世界书滑动面板 =====
@@ -2493,20 +2567,12 @@ struct ChatPage {
 
   // ===== T-7.x: 世界书面板逻辑 =====
 
-  // ===== 角色状态胶囊栏逻辑(CHAT-STATUS-1B) =====
+  // ===== 角色状态管理面板逻辑(CHAT-STATUS-1B) =====
 
-  /** 胶囊文案:字段名[:值],值为空时只显示字段名 */
-  private statusChipText(entry: ChatStatusEntry): string {
+  /** 管理面板行的值文案;无值时显示占位符(字段名已单独成列) */
+  private statusEntryValueText(entry: ChatStatusEntry): string {
     const v: string = entry.value.trim();
-    if (v.length === 0) {
-      return entry.name;
-    }
-    return entry.name + ':' + v;
-  }
-
-  /** 管理面板行文案:复用胶囊文案 */
-  private statusEntryDisplayText(entry: ChatStatusEntry): string {
-    return this.statusChipText(entry);
+    return v.length === 0 ? '—' : v;
   }
 
   /** 字段名 → emoji(关键词匹配,兜底 ✨) */
