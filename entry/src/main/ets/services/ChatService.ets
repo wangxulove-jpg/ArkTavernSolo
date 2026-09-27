@@ -88,9 +88,8 @@ import { Character, buildCharacterSystemContent, resolveCharacterDisplayName } f
 import { Lorebook, LorebookEntry, LorebookActivationMode } from '../models/Lorebook';
 import { MacroContext } from '../models/MacroContext';
 import { ProviderConfig } from '../models/ProviderConfig';
-import { TokenBudget, DEFAULT_CONTEXT_WINDOW, DEFAULT_RESERVED_OUTPUT_TOKENS } from '../models/TokenBudget';
+import { TokenBudget } from '../models/TokenBudget';
 import {
-  calculateSafetyMargin,
   DEFAULT_RECENT_WINDOW_TARGET,
   MIN_COMPLETE_TURNS,
   ContextBudgetConfig
@@ -125,6 +124,7 @@ import { WorldGroupService } from './WorldGroupService';
 import { WorldGroup } from '../models/WorldGroup';
 import { generateUuid } from '../utils/Uuid';
 import { Logger } from '../utils/Logger';
+import { planRequest, RequestPlanDeps, RequestPlanResult } from './ChatRequestPlan';
 import {
   GLOBAL_USER_NAME_KEY,
   STATUS_INSTRUCTION_PREFS_KEY,
@@ -4527,134 +4527,20 @@ export class ChatService {
     requestMessages: ChatMessage[],
     effectiveSettings: EffectiveGenerationSettings
   ): Promise<void> {
-    if (this.tokenCounter === null) {
-      // 无 TokenCounter:跳过,使用原始请求消息
-      this.lastTokenBudget = undefined;
-      this.lastHistoryTrimResult = undefined;
-      return;
-    }
-
-    let contextWindow: number = DEFAULT_CONTEXT_WINDOW;
-    let reserved: number = DEFAULT_RESERVED_OUTPUT_TOKENS;
-
-    // 从 effectiveSettings 获取 contextWindow
-    if (effectiveSettings.contextWindow !== undefined) {
-      contextWindow = effectiveSettings.contextWindow;
-    }
-
-    // 从 effectiveSettings 获取 maxOutputTokens(预留输出)
-    if (effectiveSettings.maxOutputTokens !== undefined &&
-      effectiveSettings.maxOutputTokens > 0) {
-      reserved = effectiveSettings.maxOutputTokens;
-    }
-
-    // v8.1: per-chat 上下文预算覆盖(由 ContextBudgetService 提供)
-    // followModel=false 时,使用用户自定义值覆盖 effectiveSettings
-    if (this.contextBudgetService !== null && this.currentChatId !== undefined) {
-      try {
-        const budget = await this.contextBudgetService.getBudget(this.currentChatId);
-        if (!budget.followModel) {
-          // 自定义值已在 Service 内部 clamp 到合法范围
-          if (budget.customContextWindow > 0) {
-            contextWindow = budget.customContextWindow;
-          }
-          if (budget.customReservedOutputTokens > 0) {
-            reserved = budget.customReservedOutputTokens;
-          }
-        }
-      } catch (e) {
-        Logger.warn(LOG_TAG, 'contextBudgetService.getBudget failed: '
-          + (e instanceof Error ? e.message : String(e)));
-      }
-    }
-
-    // v8.3 Phase 2: 输入可用预算 = contextWindow - reserved - safetyMargin
-    // 安全余量动态计算:
-    // - 至少 MIN_SAFETY_MARGIN(1024)Token,避免小上下文窗口时余量不足
-    // - 按 contextWindow 的 3% 计算,大上下文窗口时余量按比例增大
-    // - 上限 MAX_SAFETY_MARGIN(8192)Token,避免超大上下文窗口(1M)时余量浪费
-    // 安全余量用于 Token 估算误差和 Provider 包装(系统消息、JSON 序列化等附加 Token)
-    const safetyMargin: number = calculateSafetyMargin(contextWindow);
-    let available: number = contextWindow - reserved - safetyMargin;
-    if (available < 0) {
-      available = 0;
-    }
-
-    // 1) 首次预算估算(原始 Prompt)
-    let currentMessages: ChatMessage[] = requestMessages;
-    let originalTokens: number = 0;
-    try {
-      originalTokens = this.tokenCounter.estimateMessages(currentMessages);
-    } catch (e) {
-      Logger.warn(LOG_TAG, 'token estimate failed: ' + (e instanceof Error ? e.message : String(e)));
-      this.lastTokenBudget = undefined;
-      this.lastHistoryTrimResult = undefined;
-      return;
-    }
-    const exceedsBefore: boolean = originalTokens > available;
-
-    // 2) 必要时调用 HistoryTrimmer
-    if (exceedsBefore && this.historyTrimmer !== null) {
-      let trimResult: HistoryTrimResult | undefined = undefined;
-      try {
-        trimResult = this.historyTrimmer.trim(currentMessages, { availableInputTokens: available });
-      } catch (e) {
-        Logger.warn(LOG_TAG, 'history trim failed: ' + (e instanceof Error ? e.message : String(e)));
-        this.lastHistoryTrimResult = undefined;
-        this.lastTokenBudget = this.makeBudget(originalTokens, contextWindow, reserved, available);
-        return;
-      }
-      this.lastHistoryTrimResult = trimResult;
-      currentMessages = trimResult.messages;
+    const deps: RequestPlanDeps = {
+      tokenCounter: this.tokenCounter,
+      historyTrimmer: this.historyTrimmer,
+      contextBudgetService: this.contextBudgetService
+    };
+    const result: RequestPlanResult =
+      await planRequest(requestMessages, effectiveSettings, this.currentChatId, deps);
+    this.lastTokenBudget = result.budget;
+    this.lastHistoryTrimResult = result.trimResult;
+    if (result.trimmed) {
       // 更新 lastBuiltRequestMessages 为裁剪后的最终消息,
       // 让 UI 上下文占用统计反映实际发送给模型的内容。
-      this.lastBuiltRequestMessages = currentMessages;
-
-      // 3) 重算 TokenBudget
-      let finalTokens: number = trimResult.finalTokenCount;
-      try {
-        finalTokens = this.tokenCounter.estimateMessages(currentMessages);
-      } catch (e) {
-        // 异常时使用 trimResult 的值
-        Logger.warn(LOG_TAG, 'token re-estimate failed: ' + (e instanceof Error ? e.message : String(e)));
-      }
-      this.lastTokenBudget = this.makeBudget(finalTokens, contextWindow, reserved, available);
-
-      if (this.lastTokenBudget.exceedsBudget) {
-        Logger.warn(LOG_TAG,
-          'token budget exceeded after trim: inputTokens=' + finalTokens.toString()
-            + ' availableTokens=' + available.toString());
-      }
-    } else {
-      // 不超预算或无 HistoryTrimmer:不裁剪
-      this.lastHistoryTrimResult = undefined;
-      this.lastTokenBudget = this.makeBudget(originalTokens, contextWindow, reserved, available);
-      this.logNormalEstimate(requestMessages.length, originalTokens, available);
+      this.lastBuiltRequestMessages = result.finalMessages;
     }
-  }
-
-  private logNormalEstimate(messages: number, inputTokens: number, available: number): void {
-    if (inputTokens > available) {
-      Logger.warn(LOG_TAG,
-        'token budget exceeded: messages=' + messages.toString()
-          + ' inputTokens=' + inputTokens.toString()
-          + ' availableTokens=' + available.toString()
-          + ' remainingTokens=' + (available - inputTokens).toString()
-          + ' exceedsBudget=true');
-    }
-  }
-
-  private makeBudget(inputTokens: number, contextWindow: number, reserved: number, available: number): TokenBudget {
-    const remaining: number = available - inputTokens;
-    const exceeds: boolean = inputTokens > available;
-    return {
-      contextWindow: contextWindow,
-      reservedOutputTokens: reserved,
-      availableInputTokens: available,
-      estimatedInputTokens: inputTokens,
-      remainingInputTokens: remaining,
-      exceedsBudget: exceeds
-    };
   }
 
   /**
