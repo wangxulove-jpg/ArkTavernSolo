@@ -2960,43 +2960,21 @@ export class ChatService {
         responseFormatJson: true
       };
 
-      return await new Promise<ChatStatusState | null>((resolve: Function): void => {
-        let settled: boolean = false;
-        const finish = (result: ChatStatusState | null): void => {
-          if (!settled) {
-            settled = true;
-            resolve(result);
-          }
-        };
-        const callbacks: ChatStreamCallbacks = {
-          onDelta: (_delta: ChatDelta): void => {
-            // 用 onComplete 的 result.content 做最终解析,忽略中间 delta
-          },
-          onComplete: (result: ChatStreamResult): void => {
-            const extraction = extractStatusBlock(result.content);
-            if (extraction.parsedEntries.length === 0) {
-              Logger.warn(LOG_TAG, 'generateStatusFieldsNow: no valid status block parsed, content=' +
-                result.content.substring(0, 200));
-              finish(null);
-              return;
-            }
-            this.currentStatusState = this.computeMergedStatus(extraction.parsedEntries);
-            this.statusFieldGenerationRequested = false;
-            this.persistStatusConfig();
-            finish(this.currentStatusState);
-          },
-          onError: (e: NetworkError): void => {
-            Logger.warn(LOG_TAG, 'generateStatusFieldsNow: stream error=' +
-              (e.message !== undefined ? e.message : String(e)));
-            finish(null);
-          }
-        };
-        try {
-          this.modelService!.streamCurrentChat(messages, options, callbacks);
-        } catch (e) {
-          finish(null);
+      const parseContent = (content: string): ChatStatusState | null => {
+        const extraction = extractStatusBlock(content);
+        if (extraction.parsedEntries.length === 0) {
+          Logger.warn(LOG_TAG, 'generateStatusFieldsNow: no valid status block parsed, content=' +
+            content.substring(0, 200));
+          return null;
         }
-      });
+        this.currentStatusState = this.computeMergedStatus(extraction.parsedEntries);
+        this.statusFieldGenerationRequested = false;
+        this.persistStatusConfig();
+        return this.currentStatusState;
+      };
+      return await this.runStatusOneShotStream(
+        messages, options, 'generateStatusFieldsNow', parseContent
+      );
     } finally {
       this.statusGenerationInProgress = false;
     }
@@ -3065,51 +3043,68 @@ export class ChatService {
         stream: true
       };
 
-      return await new Promise<ChatStatusState | null>((resolve: Function): void => {
-        let settled: boolean = false;
-        const finish = (result: ChatStatusState | null): void => {
-          if (!settled) {
-            settled = true;
-            resolve(result);
-          }
-        };
-        const callbacks: ChatStreamCallbacks = {
-          onDelta: (_delta: ChatDelta): void => {
-            // 用 onComplete 的 result.content 做最终解析,忽略中间 delta
-          },
-          onComplete: (result: ChatStreamResult): void => {
-            const extraction = extractStatusBlock(result.content);
-            if (extraction.parsedEntries.length === 0) {
-              // 兜底:若标记块/围栏/裸 JSON 均未解析出字段,尝试把整段响应作为 JSON 对象解析
-              const fallbackEntries: ChatStatusEntry[] = parseStatusJsonWhole(result.content);
-              if (fallbackEntries.length > 0) {
-                this.currentStatusState = this.computeMergedStatus(fallbackEntries);
-                this.persistStatusConfig();
-                finish(this.currentStatusState);
-                return;
-              }
-              Logger.warn(LOG_TAG, 'modifyStatusWithPrompt: no valid status block parsed');
-              finish(null);
-              return;
-            }
-            this.currentStatusState = this.computeMergedStatus(extraction.parsedEntries);
+      const parseContent = (content: string): ChatStatusState | null => {
+        const extraction = extractStatusBlock(content);
+        if (extraction.parsedEntries.length === 0) {
+          // 兜底:若标记块/围栏/裸 JSON 均未解析出字段,尝试把整段响应作为 JSON 对象解析
+          const fallbackEntries: ChatStatusEntry[] = parseStatusJsonWhole(content);
+          if (fallbackEntries.length > 0) {
+            this.currentStatusState = this.computeMergedStatus(fallbackEntries);
             this.persistStatusConfig();
-            finish(this.currentStatusState);
-          },
-          onError: (e: NetworkError): void => {
-            Logger.warn(LOG_TAG, 'modifyStatusWithPrompt: stream error=' + String(e.message));
-            finish(null);
+            return this.currentStatusState;
           }
-        };
-        try {
-          this.modelService!.streamCurrentChat(messages, options, callbacks);
-        } catch (e) {
-          finish(null);
+          Logger.warn(LOG_TAG, 'modifyStatusWithPrompt: no valid status block parsed');
+          return null;
         }
-      });
+        this.currentStatusState = this.computeMergedStatus(extraction.parsedEntries);
+        this.persistStatusConfig();
+        return this.currentStatusState;
+      };
+      return await this.runStatusOneShotStream(
+        messages, options, 'modifyStatusWithPrompt', parseContent
+      );
     } finally {
       this.statusGenerationInProgress = false;
     }
+  }
+
+  /**
+   * 状态一次性请求公共骨架:Promise/settled 封装 + 流式调用与异常兜底。
+   * onComplete 的解析逻辑由调用方以 parseContent 提供(返回合并后的状态或 null)。
+   */
+  private runStatusOneShotStream(
+    messages: ChatMessage[],
+    options: ChatRequestOptions,
+    logPrefix: string,
+    parseContent: (content: string) => ChatStatusState | null
+  ): Promise<ChatStatusState | null> {
+    return new Promise<ChatStatusState | null>((resolve: Function): void => {
+      let settled: boolean = false;
+      const finish = (result: ChatStatusState | null): void => {
+        if (!settled) {
+          settled = true;
+          resolve(result);
+        }
+      };
+      const callbacks: ChatStreamCallbacks = {
+        onDelta: (_delta: ChatDelta): void => {
+          // 用 onComplete 的 result.content 做最终解析,忽略中间 delta
+        },
+        onComplete: (result: ChatStreamResult): void => {
+          finish(parseContent(result.content));
+        },
+        onError: (e: NetworkError): void => {
+          Logger.warn(LOG_TAG, logPrefix + ': stream error=' +
+            (e.message !== undefined ? e.message : String(e)));
+          finish(null);
+        }
+      };
+      try {
+        this.modelService!.streamCurrentChat(messages, options, callbacks);
+      } catch (e) {
+        finish(null);
+      }
+    });
   }
 
   /**

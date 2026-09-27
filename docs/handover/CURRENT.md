@@ -17,7 +17,7 @@
 > 纪律：一次一操作 → 编译验证（最多 3 次）→ 提交；任一步失败立即回滚
 
 - [x] **P1-1 死代码清理**（2026-09-27 完成）：删除 `findLastAssistantIndex`（ChatService）；删除 `getEffectiveMemory` / `getInjectionContext` 及 `MemoryInjectionContext` 类型（MemoryService）；`trySummarize` 复核为 rolling 回退路径（被 `tryGenerateMultiLayerMemory` 调用）保留；关联注释 2 处同步修正；编译 BUILD SUCCESSFUL
-- [ ] **P1-2 ChatService 重复逻辑消除**：✅ Swipe 三方法已合并（`doActivateCandidate`）；✅ 失败收尾 4 处已合并（`persistFinalAndCleanup`，2026-09-27）；⬜ 锚点插入两处合并；⬜ 状态一次性请求两处合并
+- [x] **P1-2 ChatService 重复逻辑消除**（2026-09-27 完成）：Swipe 三方法 → `doActivateCandidate`；失败收尾 4 处 → `persistFinalAndCleanup`；锚点插入两处 → `applyAnchoredInserts`；状态一次性请求两处 → `runStatusOneShotStream`；每步编译通过
 - [ ] **P1-3 ChatPage 组件抽取**（逐个，纯搬运不改行为）：`ChatMessageList`（messageList, L3456, ≈160 行）/ `ChatInputArea`（inputArea, L3808, ≈160 行）/ `ChatAppearancePanel`（appearanceSheetContent, L2732, ≈360 行）/ `ChatStatusWorldPanel`（L2104-2453）/ `ChatForkPicker`（L5623, ≈80 行）
 - [ ] **P1-4 会话列表去重**：`ChatSessionRootView` ↔ `ChatSessionListPanel` 近乎全量重复，合并为单组件 + 布局参数
 - [ ] **P1-5 组件越层修复**：`CardFrontendWeb`（L23）、`ChatSessionListPanel`（L25/L30）对 ChatViewModel / AppServices 的直接依赖
@@ -42,4 +42,4 @@
 | 日期 | 会话主题 | 产出 / 决策 |
 |---|---|---|
 | 2026-09-27 | 审计 + 文档体系重建 | 审计报告与路线图；`AGENTS.md` + `docs/handover/` 建立；`tools/`、开发截图、旧文档归档清理；决策：交接文档进版本库 |
-| 2026-09-27 | P1 批次执行 | P1-1 死代码清理 ✅；P1-2a Swipe 合并 ✅；P1-2b 失败收尾 4 处合并 ✅；编译均 BUILD SUCCESSFUL |
+| 2026-09-27 | P1 批次执行 | P1-1 死代码清理 ✅；P1-2 重复逻辑消除完成（Swipe 合并 / 失败收尾 4 处 / 锚点插入 / 状态请求，4 组）✅；每步编译通过 |
