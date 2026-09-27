@@ -87,6 +87,26 @@
   - 说明：原计划的"数据换源 + overlay 精简 + 单组件（mode 参数）"因面板不可达而**不再执行**；`SessionGroupDialogs` / `SessionListCollapseState` 保留（Tab 使用），将来若恢复"聊天页内切会话"即以此二者为基座
 - [x] **P1-6 不可变性修复**（2026-09-27 完成）：`deleteMessage` / `editNarratorMessage` / `editAssistantMessage` 改为新数组整体替换；复核后**未补 `emitMessages`**——刷新契约由 ChatViewModel 承担（`[...getMessages()]` + `onMessagesUpdate`），补发会改变通知行为、超范围
 
+## 2c. P3 批次（进行中）
+
+> 目标：ChatViewModel / MemoryService / DatabaseSchema 三处中风险拆分 + 两项治理口径（P3-4 只出方案）
+> 纪律：只读测绘 → 方案入档 → 逐接缝「搬运 + 编译 + 提交」；真机冒烟统一末期一次性进行
+> 约束：**ChatService 不再动**（P2 已收官，2,413 行）；`ChatPage`（4,884 行）为约束方，行为不动
+> 开工基线（2026-09-27）：`git status` 干净；编译 BUILD SUCCESSFUL；单测 **96/96**（0 失败）
+
+### P3-1 ChatViewModel 拆分（起点 1,698 行）
+
+**只读测绘**：L1-56 import；L61-73 世界书面板类型（导出）；L75-140 状态字段；L180-190 构造（4 依赖：chatService / modelService / characterService / promptPresetService）；方法约 110 个
+
+- [x] **① `ChatErrorMapper`（纯函数收口）** ✅：`toUserError`（40 行）+ `toSessionOpError`（16 行）均为纯函数，调用点仅本文件（`toUserError` × 17、`toSessionOpError` × 2），**0 外部引用** → 新增 `viewmodels/ChatErrorMapper.ets`（两函数逐字搬出，函数名不变）；ChatViewModel 删除两私有方法、19 处调用点改直连（`this.x(` → `x(`）；映射分支零改动
+  - 校验：搬运体**逐行等价（归一空白后 DIFF=0）**；公开 API 面 **131 → 131，零差异**；编译 BUILD SUCCESSFUL；**ChatViewModel 1,698 → 1,660 行**（-38）
+- [ ] **② `LorebookPanelVM`（世界书面板逻辑抽离）**：面板逻辑 = `loadLorebookPanelData` / `buildPanelBook`(private) / `aiProposeWorldbookChanges` / `applyLorebookChangeSet` / `toggleLorebookEntryEnabled` / `getAiLorebookService`(private) + `aiLorebookService` 字段
+  - 类型 `LorebookPanelBook` / `LorebookPanelData` 迁入 **新增 `models/LorebookPanel.ets`**（引用方 ChatViewModel / ChatPage / ChatStatusWorldPanel 改路径；**顺带消除 `ChatStatusWorldPanel` 对 viewmodels 的类型引用偏差**）
+  - 装配：宿主契约 `LorebookPanelHost`（函数属性：`isDisposed` / `getCharacter` / `getRecentMessages` / `setPanelData`），ChatViewModel 构造期用箭头填充；服务取用沿用 `AppServices.getXxx()` 静态（与现状一致）
+  - **保留 `lorebookPanelData` 字段**（ArkUI 绑定）+ 4 个公开薄包装 → 公开 API 面零差异；`refreshLorebookPinNow` / `aiModifyStatus` 非面板逻辑，留原处
+- [ ] **③ 会话分组桥：已核实无重复，无需动作** —— P1-4 ③ 已随死 UI 删除 ChatViewModel 的世界分组 API；全仓 `getWorldName/getChapterLabel/createWorldGroup/renameWorldGroup/deleteWorldGroup/moveChatToWorld` 现仅存于 `ChatSessionListViewModel`（+ `ChatSessionRootView` 调用），ChatViewModel **0 命中**
+- **机械校验**：公开 API 面 diff（抽取全部非 private 声明行，`Compare-Object` HEAD 前后）；**唯一预期差异 = 2 个类型声明行迁出**（其余类成员零差异，含 `async` 修饰符）
+
 ## 3. 环境事实（防重复踩坑）
 
 - SDK：`D:\DevEco_studio\DevEco Studio\sdk`（6.1.1；`D:\DevEco_studio\Sdk` 是旧版 6.0.2，会报 00303312）
