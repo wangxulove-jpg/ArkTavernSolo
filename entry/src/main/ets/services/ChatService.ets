@@ -445,7 +445,7 @@ export class ChatService {
       },
       getCurrentChatId: (): string | undefined => this.currentChatId,
       getLastCallbacks: (): ChatServiceCallbacks | null => this.lastCallbacks,
-      reloadCurrentSession: (): Promise<void> => this.reloadCurrentSession(),
+      reloadCurrentSession: (): Promise<void> => this.sessionService.reloadCurrentSession(),
       updateLastAssistantMessageId: (): void => this.updateLastAssistantMessageId(),
       persistChatTimestamp: (): void => this.persistChatTimestamp(),
       invalidateMemoryFromMessagePosition: (assistantMessageId: string): void => {
@@ -520,7 +520,7 @@ export class ChatService {
       setSwipeSummaries: (summaries: MessageSwipeSummary[]): void => {
         this.swipeSummaries = summaries;
       },
-      reloadCurrentSession: (): Promise<void> => this.reloadCurrentSession(),
+      reloadCurrentSession: (): Promise<void> => this.sessionService.reloadCurrentSession(),
       updateLastAssistantMessageId: (): void => this.updateLastAssistantMessageId(),
       getLastCallbacks: (): ChatServiceCallbacks | null => this.lastCallbacks,
       setLastCallbacks: (callbacks: ChatServiceCallbacks | null): void => {
@@ -2296,22 +2296,6 @@ export class ChatService {
         return s;
       }
     );
-  }
-
-  /**
-   * 从数据库重新加载当前会话的全部消息。
-   */
-  private async reloadCurrentSession(): Promise<void> {
-    if (this.persistenceService === null || this.currentChatId === undefined) {
-      return;
-    }
-    const session: PersistedChatSession | null =
-      await this.persistenceService.loadSession(this.currentChatId);
-    if (session !== null) {
-      this.messages = session.messages.slice();
-      this.currentChat = session.chat;
-      this.currentSequenceNumber = session.maxSequenceNumber;
-    }
   }
 
   // ===== T-6.4B-1 Branch 公开方法(查询与判定已抽至 services/ConversationBranchService,P2-5) =====

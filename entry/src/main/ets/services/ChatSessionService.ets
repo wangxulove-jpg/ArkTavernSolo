@@ -979,4 +979,20 @@ export class ChatSessionService {
     this.updateLastAssistantMessageId();
   }
 
+
+  /**
+   * 从数据库重新加载当前会话的全部消息。
+   */
+  async reloadCurrentSession(): Promise<void> {
+    if (this.persistenceService === null || this.currentChatId === undefined) {
+      return;
+    }
+    const session: PersistedChatSession | null =
+      await this.persistenceService.loadSession(this.currentChatId);
+    if (session !== null) {
+      this.messages = session.messages.slice();
+      this.currentChat = session.chat;
+      this.currentSequenceNumber = session.maxSequenceNumber;
+    }
+  }
 }
