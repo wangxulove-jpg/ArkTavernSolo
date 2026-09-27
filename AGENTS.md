@@ -38,7 +38,15 @@ components/ 与 models/：无网络、无数据库、无业务副作用
 - `ChatService` **不是单例**：每次进入 ChatPage 由 `AppServices.createChatService()` 新建，只被 `ChatViewModel` 独占使用
 - `ModelService` 是**所有 AI 请求的唯一出口**（页面/服务不得直接碰 Provider/KeyStore）
 - **红线**：pages 不得直接 import 具体 services / repositories / network / database；components 不得 import viewmodels / services / database
-- 已知偏差（**勿扩散**，治理清单见审计报告 §3 · **分级口径见 `CURRENT.md` §"P3-4"**）：`ChatPage.ets` 直连约 8 个具体服务（TTS / MacroReplacer / 预算等，T3 冻结）；`LorebookPage.ets` 直连 `CharacterRepository`（T3 冻结）；其余 14 个页面直连具体服务（T2，待逐个补 VM）。**新增页面一律走 VM**，不得新增同类偏差
+- **pages 直连服务：分级口径**（2026-09-27 固化，**具体页面清单见 `CURRENT.md` P3-4，此处不重复**）
+  - **T1 允许**：仅 `AppServices.getXxx()`（组合根）、`ThemeManager` / `ThemePalette`（全局主题权威）、`utils/*` 纯工具、以及**纯常量 / 纯函数 / 仅作类型**的服务导入（如 `ChatTextContract` 常量、`ChapterMemoryIndexer` 纯函数、`models/*`、`ChatMemoryMode` / `AiLorebookMode` / `SyncResult` 等类型）
+  - **T2 待治理**：直接 import **具体业务服务类**并实例化 / 调用 → **改到哪个页面就顺带补 / 并 VM**，不专门开批次
+  - **T3 冻结（勿扩散）**：`ChatPage`、`LorebookPage` 的直连现状；仅在触碰相关功能时顺带上提
+  - **新增页面一律走 VM**；不得新增 T2 / T3 同类偏差
+- **services → DbHelper：引用白名单口径**（2026-09-27 固化，采"止血"方案）
+  - **允许** import `DbHelper` 的仅三类：`repositories/*`（数据访问本职）、`services/AppServices`（组合根）、`*PersistenceService`（跨表事务编排层）
+  - **禁止新增**：其余业务服务不得 import `DbHelper`；**新跨表事务放入对应 `*PersistenceService`**（该层用 `dbHelper.runInTransaction`，Repository 方法接收 `store`）
+  - **现有偏差（冻结，可择机回收，清单见 `CURRENT.md` P3-4）**：`ChatArchiveImportService` / `ForkChatService` / `sync/*` 三个
 - ✅ 组件越层已清零（2026-09-27，P3-1②）：`LorebookPanelBook/Data` 迁至 `models/LorebookPanel.ets`，`ChatStatusWorldPanel` 不再引用 `viewmodels/`
 - 组件越层已修复（2026-09-27，P1-5）：`CardFrontendWeb`/`CardFrontendBridge` 依赖 `bridge/CardFrontendBridge.ets` 导出的 `FrontendCardHost` 契约（页面直接传 `host: this.viewModel`）
 - 会话列表面板已删除（2026-09-27，P1-4）：原 `components/ChatSessionListPanel.ets` 为不可达死 UI（`ChatViewModel.openSessionList()` 无调用者），连同 ChatViewModel 的会话列表/分组 API 一并移除；**会话切换统一走首页"对话记录"Tab**（`pages/tabs/ChatSessionRootView.ets` + `components/SessionGroupDialogs`）
@@ -192,8 +200,8 @@ docs/handover/
 - **已完成批次**（逐接缝清单、commit 锚点、冒烟项见 CURRENT.md §2 / §2b / §2c / §5）：
   1. **P1**：死代码清理 · ChatService 重复逻辑消除 · ChatPage 组件抽取 5 个 · 会话列表去重（删不可达死 UI ≈ -1069 行）· 组件越层修复 · 不可变性
   2. **P2**：ChatService 瘦身 **6,735 → 2,413 行（-64%）**（14 个接缝，搬运块全部 byte 级一致，公开 API 面 89 项零差异）
-  3. **P3**：ChatViewModel **1,698 → 1,479** / MemoryService **1,953 → 1,451** / DatabaseSchema **2,879 → 1,443**（DatabaseSchema 逐版 DDL 逐字节一致）；P3-4 治理口径已出方案（未落地）
+  3. **P3**：ChatViewModel **1,698 → 1,479** / MemoryService **1,953 → 1,451** / DatabaseSchema **2,879 → 1,443**（DatabaseSchema 逐版 DDL 逐字节一致）；**P3-4 治理口径已固化进 §3**（口径 C：pages 分级 T1/T2/T3 + `DbHelper` 白名单；A 留 P4）
 - **P2 装配范式**（抽离逻辑的默认做法，后续接缝直接复用）：服务依赖**构造期注入**（字段同名）；跨类可变状态与宿主私有能力经 **`XxxHost` 函数属性**回调（读 getter / 写 setter，含 `doStream` 委托）；类内**同名 getter/setter/方法转发** ⇒ 搬运代码**零改写**。参考实现：`services/ChatRequestBuilder.ets` / `ChatOneShotGenerator.ets` / `ChatStatusService.ets` / `ChatSwipeController.ets` / `ConversationBranchService.ets` / `viewmodels/LorebookPanelVM.ets`
 - **剩余高风险区**（改前必读）：① `ChatService` 流式核心簇（≈900 行：`doStream` / `finalizeAssistantTurn` / 句柄与定时器 / delta 持久化）——**不授权勿动**；② `ChatPage`（4,884 行、80+ @State）；③ `ChatSessionRootView`（2,786 行，拖拽重排 / 归档导入导出，无测试覆盖）；④ `ChatService` 构造装配（≈450 行宿主装配）；⑤ 数据库迁移链（只增不改，任何 DDL 差异按 bug 处理）
-- **下一步候选**：① 治理落地（P3-4 口径 **C** 即刻生效 + **A** `TransactionCoordinator`）；② T2 页面逐个补 / 并 VM（每页独立 commit）；③ P4 观察项（`State V1→V2` / `router→Navigation` / `@ObjectLink` 告警 / `EdgeTtsTestPage` 路由 / 自动化测试基建）
+- **下一步候选**：① **口径 C 已固化进 §3**（无需再做）；剩余治理 = **A** 抽 `TransactionCoordinator` 收口 5 处 `DbHelper` 业务服务偏差（P4 候选）；② T2 页面逐个补 / 并 VM（**改到哪页就顺带做**，清单见 `CURRENT.md` P3-4）；③ P4 观察项（`State V1→V2` / `router→Navigation` / `@ObjectLink` 告警 / `EdgeTtsTestPage` 路由 / 自动化测试基建）
 - **验证状态**：本轮编译 BUILD SUCCESSFUL + 本地单测 `hvigorw test` **96/96**（16 类）；机械校验手法与结论见 CURRENT.md §4 与 [PITFALLS.md](./docs/handover/PITFALLS.md) §4；**真机冒烟统一在 P3 末期一次性进行**（清单 CURRENT.md §4b）

@@ -151,39 +151,41 @@
 - **P3-3 收官**：DatabaseSchema **2,879 → 1,443 行（-1,436，-49.9%）**；新增 `database/schema/` 7 个域文件（1,744 行）；①②③ 各自独立 commit；三个接缝均以「逐版 DDL 逐字节一致」为准入
   - **① 的 39/40/41 版本映射潜伏不一致已按"最小修正"落地**（用户拍板；仅 v39/40/41 输出变化，属预期）；迁移与 `DATABASE_VERSION` 未动
 
-### P3-4 治理口径（**只出方案，本批次未落地**，待拍板）
+### P3-4 治理口径（**已固化进 `AGENTS.md` §3**，2026-09-27 用户拍板）
 
-> 依据：本轮只读统计（`pages/` × `services/` 导入扫描、`DbHelper` 调用点扫描）。
-> 结论：**主干分层成立**，偏差集中在两类边界；建议**先定口径、分批治理**，不整体重构。
+> 依据：只读统计（`pages/` × `services/` 导入扫描、`DbHelper` 导入扫描）——**已按代码复核并修正计数**。
+> 结论：**主干分层成立**，偏差集中在两类边界。规则本身写在 **AGENTS.md §3**（权威）；本处只保留**清单与统计**，不重复规则。
 
-#### (a) pages → services 分级治理
+#### (a) pages → services 分级（清单）
 
-现状（27 个页面文件）：**仅 11 个**只依赖 `AppServices`（组合根，架构允许）；其余 16 个直接 import 具体服务；另有若干仅 import **常量/纯函数/类型**（`ChatTextContract`、`ChapterMemoryIndexer`、`MemoryService` 常量、`ChatMemoryMode`/`AiLorebookMode`/`ChatBackgroundConfig`/`DeepSeekBalanceInfo`/`SyncResult`/`ReasoningEffort`/`CharacterBookRef`）。
+页面共 **34 个**；其中 **27 个**存在 `services/repositories/network/database` 导入，另 7 个（4 个 Tab RootView + `EdgeTtsTestPage` / `FrontendCardPage` / `ModelConfigEditPage`）无此类导入。
 
-| 级别 | 判定 | 页面 | 处置建议 |
-|---|---|---|---|
-| **T1 允许** | 仅 `AppServices.getXxx()` + 纯常量/纯函数/纯类型 | AddCharacter / BranchMap / CharacterList / Index / LorebookSourceEditor / ModelSettings / PersonaList / PromptPresetEdit / PromptPresetList / WorldMemory / ContinueGuide（仅常量） | **冻结为规范**（写入 AGENTS §3 白名单） |
-| **T2 应治理** | 直接 import 具体服务类并调用 | AiCardRevise / AiCharacterMaker / AiCharacterPreview（ModelService、AiCharacterGenerationService）；CharacterEdit / PersonaEdit（PersonaService）；TtsSettings（Tts/EdgeTts）；SyncSettings（WebDavSyncService）；MarketDetail（MarketImportService）；ChatBackgroundSettings（ChatBackgroundService）；ContextBudget（ContextBudgetSnapshotStore/Estimator）；MemoryManagement / WorldChapterList / WorldMemoryDetail（MemoryService） | **按页面逐个补/并 VM**（一次一页，行为等价）；优先「已有 VM 或逻辑较重」者：MemoryManagement、ContextBudget、WorldMemory*、Persona/CharacterEdit |
-| **T3 已登记偏差（冻结）** | `ChatPage`（~8 服务）、`LorebookPage`（LorebookService/CharacterService/CharacterRepository） | — | **不动**；仅在触碰相关功能时顺带上提，禁止扩散 |
+| 级别 | 页面（按代码扫描，2026-09-27 复核） |
+|---|---|
+| **T1 允许（14）** | AddCharacter / BranchMap / CharacterList / Index / LorebookSourceEditor / ModelSettings / PersonaList / PromptPresetEdit / PromptPresetList / WorldMemory（以上仅 `AppServices`）；**AppSettings**（`ThemeManager` + 常量，属 T1 白名单）；**ContinueGuideSettings**（仅常量）；**MemoryManagement**（仅 `ChapterMemoryIndexer` 纯函数 + 3 个常量） |
+| **T2 待治理（11）** | AiCardRevise / AiCharacterMaker / AiCharacterPreview（`ModelService` / `AiCharacterGenerationService` / `CharacterService`）；CharacterEdit / PersonaEdit（`PersonaService`）；TtsSettings（`TtsService` / `EdgeTtsService`）；SyncSettings（`WebDavSyncService`）；ChatBackgroundSettings（`ChatBackgroundService`）；ContextBudget（`ContextBudgetSnapshotStore`）；WorldChapterList / WorldMemoryDetail（`MemoryService`） |
+| **T3 冻结（2）** | `ChatPage`（约 8 个服务：`ContextBudgetSnapshotStore` / `MacroReplacer` / `TtsService` / `EdgeTtsService` 等）；`LorebookPage`（`LorebookService` / `CharacterService` / `CharacterRepository`） |
 
-**口径建议**：T1 白名单化；T2 作为 P4 候选（每页独立 commit + 冒烟）；T3 保持登记、不新增同类偏差（**新增页面一律走 VM**）。
+**处置**：T2 **不专门开批次**——改到哪个页面就在该次提交里顺带补/并 VM（一次一页、行为等价、独立冒烟）；优先级建议：MemoryManagement / ContextBudget / WorldMemory* / Persona·CharacterEdit。
+> 修正记录：上版清单有三处不准（`MarketDetailPage` 实为仅 `AppServices`；`MemoryManagementPage` 实为仅常量/纯函数；"仅 11 个只依赖 AppServices" 应为 14 个 T1），**已按代码更正**。
 
-#### (b) services → DbHelper / persistence 口径
+#### (b) services → DbHelper 口径（清单）
 
-现状：**已存在事实上的两层持久化**——
-1. **Repository 层**（21 文件）：单表 CRUD + 行映射，多数方法接受可选 `store`（事务内复用，如 `...WithStore(store, ...)`）
-2. **PersistenceService 层**：跨表事务编排，统一经 `dbHelper.runInTransaction(fn)`
+`DbHelper` 对外面 = `initialize` / `getStore` / `getVersion` / `runInTransaction` / `getTransactionDepth` / `isInTransaction` / `isInitialized` / `close`。
+事实上的两层持久化：**Repository 层**（14 个文件直接持有 `DbHelper`，单表 CRUD + 行映射，方法可接 `store`）+ **PersistenceService 层**（跨表事务编排，`dbHelper.runInTransaction`）。
 
-`DbHelper` 真实对外面 = `initialize` / `getStore` / `getVersion` / `runInTransaction` / `getTransactionDepth` / `isInTransaction` / `isInitialized` / `close`。
-直接引用 `DbHelper` 的**服务**共 6 个：`ForkChatService`、`ChatArchiveImportService`、`ChatPersistenceService`、`sync/SyncDataExporter`、`sync/SyncDataImporter`、`sync/WebDavSyncService`（+ 组合根 `AppServices`，属允许）。另 `ConversationBranchPersistenceService`/`MemoryPersistenceService`/`MessageSwipePersistenceService` 会 `getStore()` 取裸 store 传给 Repository。
+**直接 import `DbHelper` 的服务共 10 个**（2026-09-27 复核，修正上版"6 个"）：
 
-| 选项 | 做法 | 收益 | 成本/风险 | 建议 |
-|---|---|---|---|---|
-| **A 正式化现状** | 承认「Repository + PersistenceService」为正式口径；抽 `TransactionCoordinator`（只暴露 `runInTransaction` / `runWithStore`，不泄露 `RdbStore`），服务不再直连 `DbHelper` | 口径清晰、边界可测、DbHelper 仅 2 处引用 | 中（6 处 import + 1 接口；事务语义须逐处核对） | **推荐（P4）** |
-| **B 补 Repository** | 把跨表事务完全下沉 Repository（每表补 `WithStore` + 组合方法） | services 完全不碰 store | 高（fork/归档/同步等事务编排与业务强耦合，易过度设计） | 不推荐 |
-| **C 仅止血** | 不改造，规定「services 不得新增 `DbHelper` 引用；新跨表事务一律走现有 PersistenceService」 | 零成本、立即生效 | 现状偏差保留 | **可接受的最小方案** |
+| 分类 | 服务 |
+|---|---|
+| 组合根（允许） | `AppServices` |
+| 事务编排层（允许，本职） | `ChatPersistenceService` / `ConversationBranchPersistenceService` / `MemoryPersistenceService` / `MessageSwipePersistenceService` |
+| **业务服务偏差（冻结，可择机回收）** | `ChatArchiveImportService` / `ForkChatService` / `sync/SyncDataExporter` / `sync/SyncDataImporter` / `sync/WebDavSyncService` |
 
-**口径建议**：先落 **C**（即刻生效的约束）+ 将 **A** 列入 P4（ROI 最高、可一次性收口）；**B 不做**。
+**已采纳方案（口径 C 止血 + A 入 P4）**：
+- **C（已固化进 AGENTS §3）**：`DbHelper` 引用白名单 = `repositories/*` + `AppServices` + `*PersistenceService`；其余服务**不得新增**；新跨表事务放入对应 `*PersistenceService`
+- **A（P4 候选）**：抽 `TransactionCoordinator`（只暴露 `runInTransaction` / `runWithStore`，不泄露 `RdbStore`），把上述 5 处业务服务偏差一次性收口——**未落地**
+- **B（补 Repository 下沉事务）：不做**（与业务强耦合，易过度设计）
 
 ## 3. 环境事实（防重复踩坑）
 
@@ -314,6 +316,6 @@
 | 2026-09-27 | P2-9（会话生命周期） | `ChatSessionService` 三段抽取：工具/查询族（cc32bfc，6 碎片 144 行）→ 初始化族（1f09346，四块 214 行）→ 操作族（891de45，五块 248 行）——合计 **606 行逐字搬出**（均 byte 级一致），清理 4 个死包装；宿主 38 项回调；`dispose` 有意留 ChatService 并已记录；**ChatService 3,315 → 2,780 行（累计 6,735 → 2,780，-3,955，-59%）**；每步编译通过；待真机冒烟 |
 | 2026-09-27 | P2-10..P2-14（收官） | ① `ChatMessageSender` 消息发起入口（fa44f58，四块 231 行，`stopGeneration` 有意留 ChatService）；② `ChatUserIdentityService` 用户称呼与 Persona（f0ee661，124 行）；③ Preset 快照迁入 `ChatRequestBuilder`（1ab7a8c，77 行 + 2 依赖，编译修正 1 处）；④ 消息记忆标记迁入 `ChatMessageService`（9f13ce4，31 行 + 宿主项收口）；⑤ `reloadCurrentSession` 迁入 `ChatSessionService`（29f8f45，15 行）——合计 **478 行逐字搬出**（均 byte 级一致）；**ChatService 2,780 → 2,413 行（累计 6,735 → 2,413，-4,322，-64%）**；**主动停止**：现实下限 ≈2,350~2,400（剩余仅 `updateRequestPlan`+估算 ≈77 行，因核心共享缓存 ROI 为负）；千行级需突破"流式核心不动"约束（待用户授权）；每步编译通过；待真机冒烟 |
 | 2026-09-27 | P2 验证（host 侧附加） | 本地单测套件执行通过：**16 类 / 96 用例全 Success，0 失败**（`hvigorw test` BUILD SUCCESSFUL；结果落盘 `entry/.test/.../coverage_data/test_result.txt`）——含 P2-1/P2-3 搬运过的 ChatTextContract 纯函数（前端交互缓冲 / 粘滞提醒 / 状态段拆分）；为 P2 搬运补一层 host 侧回归证据；会话 / Swipe / 分支 / 流式簇仍需真机冒烟（本机当前无设备连接，`hdc list targets` 为空） |
-| 2026-09-27 | **文档治理与 AI 约束体系** | 新增 3 份单一职责文档：`FEATURE_MAP.md`（功能→文件→约束，权威定位表，替代过期 archive 表）· `INVENTORY.md`（可复用资产清单，解决"重复造轮子/轮子不统一"）· `PITFALLS.md`（踩坑与硬约束累积，编号一条一行）；`README.md` 文档地图与使用规则重写。`AGENTS.md`：新增 **§3B 给 AI 的工作约束**（设计/验证/诚实/文档四组，共 15 条）· §2 接手流程改为"按任务类型选读" · §9 定位表改为指针 · §10 补文档职责与"同一事实只出现一次/不建 changelog" · §11 瘦身为骨架 + 指针。决策：**不建 changelog**（变更历史以 git 为准，`git log --grep` 可按功能检索） |
+| 2026-09-27 | **文档治理与 AI 约束体系** | 新增 3 份单一职责文档：`FEATURE_MAP.md`（功能→文件→约束，权威定位表，替代过期 archive 表）· `INVENTORY.md`（可复用资产清单，解决"重复造轮子/轮子不统一"）· `PITFALLS.md`（踩坑与硬约束累积，编号一条一行）；`README.md` 文档地图与使用规则重写。`AGENTS.md`：新增 **§3B 给 AI 的工作约束**（设计/验证/诚实/文档四组，共 15 条）· §2 接手流程改为"按任务类型选读" · §9 定位表改为指针 · §10 补文档职责与"同一事实只出现一次/不建 changelog" · §11 瘦身为骨架 + 指针。决策：**不建 changelog**（变更历史以 git 为准，`git log --grep` 可按功能检索）。同日**固化 P3-4 治理口径进 AGENTS §3**（pages 三级 T1/T2/T3 + `DbHelper` 引用白名单；口径 C 生效、A 留 P4、B 不做），并按代码复核更正清单计数（`DbHelper` 服务 **10** 个非 6；页面 **34** 个、T1 14/T2 11/T3 2）；新增踩坑 P-75（统计类清单必须扫描代码得出） |
 | 2026-09-27 | **P3 批次（ChatViewModel / MemoryService / DatabaseSchema + 治理口径）** | 开工基线编译通过 + 单测 96/96。**P3-1**：`ChatErrorMapper`（a1c0478，-38 行）+ `LorebookPanelVM`（38dc6a3，-181；类型迁 `models/LorebookPanel`，顺带消除组件层 viewmodels 类型引用偏差）+ ③ 会话分组桥核实无重复 → **ChatViewModel 1,698 → 1,479 行**。**P3-2**：`MemoryPromptBuilder`（7ebc2e1，-289；`ChapterTriggerConfig` 下沉 models/ChatMemory——ArkTS 禁结构类型的教训）+ `WorldMemoryStore`（bfb1114，-84）+ `MemoryTriggerPolicy` 与死代码删除（bf18dbe，-99；删 3 个 0 调用公开方法）→ **MemoryService 1,953 → 1,451 行**。**P3-3**：① V38→39/39→40 只读核查（迁移完整；39/40/41→V42 快照映射潜伏不一致、生产不可达，**未改**）+ ② DDL 分域 7 文件（2ad376d；DatabaseSchema 2,879 → 1,516）+ ③ Registry（71dd42a；→ 1,443）→ 逐版 DDL **逐字节 DIFF=0**。**P3-4**：治理口径方案（只出方案）。每接缝均编译通过 + 机械校验（byte / API 面 / 逐版 DDL）；真机冒烟统一末期（清单见 §4b） |
 | 2026-09-27 | P2 验证（API 面等价） | ChatService 公开 API 面与基线 `refactor-baseline` 机械对比：**89 项签名完全一致**；发现并修复 1 处搬运残留——`refreshLorebookPinNow` 丢 `async` 修饰符（`36d809c`，编译通过）；新模块（`ChatSessionService`/`ChatMessageSender`/`ChatUserIdentityService`）无越层导入 |
