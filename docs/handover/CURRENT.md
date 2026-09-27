@@ -41,7 +41,14 @@
   - 装配：Swipe 会话状态**仍由 ChatService 持有**（与流式核心强耦合，不随迁）；宿主 `ChatSwipeHost` 29 个回调（读 getter + 写 setter + `doStream` 委托，流式核心未动）；类内同名 getter/setter/方法转发 → 搬运代码零改写；ChatService 留 7 个薄包装（6 公开 + 1 私有），调用点不变
   - 偏差记录：`getSummaryForMessage` 因跨类调用改为 public（方法体未动）；日志 tag 改为 `ChatSwipeController`；`MAX_SWIPE_CANDIDATES` / `MessageSwipeState` 导入随迁
   - **ChatService 4,740 → 4,484 行**（P2 累计 6,735 → 4,484，-2,251）
-- [ ] **P2-5 Branch 门面**（中）：先搬纯判定与查询（~L5865-6160）
+- [x] **P2-5 `ConversationBranchService` 门面（查询与判定）**（中，commit `d798259`）：新增 `services/ConversationBranchService.ets`（388 行）——Branch 簇查询/判定 **252 行逐字搬出**（三区：Q1 106 行 getBranches/getActiveBranchId/getRecordCounts/isBranchOperating/canContinueFromAssistant/refreshBranchState；Q2 99 行 canGenerateFromUserMessage/canRegenerateAssistantMessage；Q3 47 行 canEditUserMessage）
+  - **暂留 ChatService（P3 候选）**：fork+stream 族（continueFromAssistant / regenerateFromAssistant / continueFromUserMessage / editUserMessageAndGenerate / switchBranch / reloadAfterExternalBranchChange），与流式核心共享可变状态
+  - 装配：Branch 状态仍由 ChatService 持有；宿主 `ConversationBranchHost` 13 个回调（含 `findMessageById` 辅助）；类内同名 getter/setter/方法转发 → 搬运代码零改写；9 个公开薄包装，调用点不变；**无需可见性调整**
+  - 偏差记录：仅日志 tag 改为 `ConversationBranchService`
+  - **ChatService 4,484 → 4,305 行**
+- **P2 批次收官**：ChatService **6,735 → 4,305 行（-2,430，-36%）**；5 个模块落位：`ChatRequestBuilder` / `ChatOneShotGenerator` / `ChatStatusService` / `ChatSwipeController` / `ConversationBranchService` + 3 个契约/类型文件（`ChatTextContract` / `ChatServiceContract` / `ChatGenerationContext`）
+  - **距"千行级门面"仍有差距的存量（审计范围内"暂留"，须用户拍板才可动）**：① 流式核心（doStream / handle / delta 持久化 / finalize，审计 §8 明示不提前动）；② 会话生命周期（initializeSession / createNewSession / switchSession / deleteSession / 归档导入导出）；③ 消息 CRUD（deleteMessage / editNarrator / editAssistant / regenerate 入口）；④ 记忆触发与世界书刷新的胶水段
+  - **下一步候选（P3，见审计 §6）**：ChatViewModel（LorebookPanelVM / ChatErrorMapper / 会话分组桥）→ MemoryService（MemoryPromptBuilder / WorldMemoryTriggerPolicy）→ DatabaseSchema 分域；ChatService 继续瘦身属"审计外/需授权"项
 - [ ] 「聊天主路径冒烟清单」：发送/流式/停止 → 重生成 → 分支切换 → Swipe → 旁白 → 代写 → 记忆生成/查看 → 世界书注入 → 会话增删切换 → 归档导出导入 → 深浅色
 
 ## 2b. 已完成（P1 批次，全部收官）
@@ -100,6 +107,11 @@
   3. 多开场白（alternate_greetings）：新建章节后首条消息可切换候选
   4. 生成完成后摘要箭头状态复位（isGeneratingCandidate）；候选切换后记忆失效逻辑不报错
   - 回滚锚点：`5ac6bb8`（P2-4b-2）/ `9c21aa1`（类型迁出）/ `4bd6998`（P2-4a）
+- **P2-5 待冒烟（Branch 查询/判定，"搬运不改行为"）**：
+  1. 消息操作菜单可用性判定不变：历史 Assistant"从此处继续"/"重新生成此回复"、历史 User"生成新回复"/"编辑"（不可用时入口隐藏/禁用）
+  2. 分支面板/分支映射页：分支列表、活动分支、记录数量统计显示正确
+  3. 外部（BranchMapPage）切换分支后回聊天页，消息与分支状态刷新正常（`reloadAfterExternalBranchChange` 未搬，走原路径）
+  - 回滚锚点：`d798259`
 - **已作废冒烟项**（相关代码已删除）：会话列表面板（`726efec` / `958b43b` 的面板侧）——面板与 ChatViewModel 会话列表 API 已随 P1-4 ③ 删除，不必再测
 - **需回归确认**（删除相影响面）：聊天页正常打开/发送/停止/重生成；更多菜单"新建章节(切换开场白)"创建后提示与当前会话不变；从"对话记录"Tab 点会话进入聊天页仍能切到指定会话（`pendingChatId` → `selectSession` 路径未动，但 `refreshSessions` 已移除，建议确认切换后列表/消息正常）
 - `APK-reference/`（约 100MB 反编译参考资料）暂保留，未清理
@@ -119,3 +131,4 @@
 | 2026-09-27 | P2-2 开工（ChatService 瘦身） | ① `ChatState` / `ChatServiceCallbacks` 迁入 `models/ChatServiceContract` ✅（bac896d，2 处引用改路径）；② `ChatOneShotGenerator` 抽取 ✅（ad5d0aa，6 方法 513 行逐字搬运 byte 级一致 + `AutoContinueTurn` 随迁，宿主回调扩展 **setter 写入面**）；**ChatService 5,781 → 5,273 行**；每步编译通过；待用户真机冒烟 |
 | 2026-09-27 | P2-3 开工（ChatService 瘦身） | `ChatStatusService` 抽取 ✅（56e559f，5 状态字段 + 6 纯函数 + 597 行逐字搬运 byte 级一致；6 处可见性调整、1 处调用点改写（flag 复位走 `resetFieldGenerationRequest`）已记录）；**ChatService 5,273 → 4,740 行**；编译通过；待用户真机冒烟 |
 | 2026-09-27 | P2-4 开工（ChatService 瘦身） | ① `ChatGenerationKind`/`ActiveGenerationContext` 迁入 `models/ChatGenerationContext` ✅（9c21aa1）；② `ChatSwipeController` 浏览/切换族 ✅（4bd6998，151 行逐字一致）；③ 生成族迁入 ✅（5ac6bb8，176 行逐字一致，宿主含 `doStream` 委托；流式核心未动）；**ChatService 4,740 → 4,484 行**；每步编译通过；待用户真机冒烟 |
+| 2026-09-27 | P2-5 开工 + P2 批次收官 | `ConversationBranchService` 查询/判定 ✅（d798259，三区 252 行逐字一致；fork+stream 族暂留 P3）；**ChatService 4,484 → 4,305 行，P2 合计 6,735 → 4,305（-2,430）**；P2 路线（P2-1..P2-5）全部完成；编译通过；待用户真机冒烟 + 决定 P3 走向 |
