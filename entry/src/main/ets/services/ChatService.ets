@@ -43,9 +43,9 @@ import { ChatBackgroundService } from './ChatBackgroundService';
 import { PromptPresetService } from './PromptPresetService';
 import { MessageSwipePersistenceService } from './MessageSwipePersistenceService';
 import { ConversationBranchPersistenceService, EditedBranchGenerationTarget } from './ConversationBranchPersistenceService';
-import { MemoryService, MemorySummaryResult } from './MemoryService';
+import { MemoryService } from './MemoryService';
 import { ContextBudgetService } from './ContextBudgetService';
-import { ChatMemoryModeService, ChatMemoryMode } from './ChatMemoryModeService';
+import { ChatMemoryModeService } from './ChatMemoryModeService';
 import {
   MemoryLoadRefService,
   MemoryLoadRef
@@ -117,12 +117,12 @@ import { ChatStatusService, ChatStatusDeps, ChatStatusHost } from './ChatStatusS
 import { ChatSwipeController, ChatSwipeDeps, ChatSwipeHost } from './ChatSwipeController';
 import { ConversationBranchService, ConversationBranchDeps, ConversationBranchHost } from './ConversationBranchService';
 import { ChatMessageService, ChatMessageDeps, ChatMessageHost } from './ChatMessageService';
+import { ChatContextMaintenanceService, ChatContextDeps, ChatContextHost } from './ChatContextMaintenanceService';
 import {
   GLOBAL_USER_NAME_KEY,
   LOREBOOK_ACTIVATION_DEFAULT_PREFS_KEY,
   LOREBOOK_INJECTION_DEPTH_PREFS_KEY,
   MEMORY_KEYWORD_RETRIEVAL_PREFS_KEY,
-  MEMORY_AUTO_SUMMARY_PREFS_KEY,
   STICKY_REMINDER_MAX_ITEMS,
   DEFAULT_LOREBOOK_ACTIVATION_MODE,
   DEFAULT_LOREBOOK_INJECTION_DEPTH,
@@ -197,12 +197,6 @@ export class ChatService {
   private lorebookInjectionDepth: number = DEFAULT_LOREBOOK_INJECTION_DEPTH;
   /** v44: 记忆关键词检索开关(默认关,保持缓存命中率) */
   private memoryKeywordRetrievalEnabled: boolean = false;
-  /**
-   * Prompt Cache 优化:是否启用自动记忆总结。
-   * 默认 false(关闭自动总结,保持 Memory 段稳定)。
-   * 用户可手动触发记忆总结(手动触发时立即执行一次,然后冻结)。
-   */
-  private memoryAutoSummaryEnabled: boolean = false;
   /** 最近一次使用的回调(用于 stopGeneration/clearConversation 通知状态) */
   private lastCallbacks: ChatServiceCallbacks | null = null;
   /** 最近一次 Prompt 构建后的 Token 预算(只读,用于页面查询) */
@@ -296,6 +290,8 @@ export class ChatService {
   private readonly branchService: ConversationBranchService;
   /** 消息级操作(删除/编辑)(P2-6:自本类抽离,状态仍在本类,经宿主回调读写) */
   private readonly messageService: ChatMessageService;
+  /** 上下文维护(记忆总结/失效/世界书激活)(P2-7:自本类抽离,自带开关状态,经宿主回调读取) */
+  private readonly contextMaintenance: ChatContextMaintenanceService;
 
   constructor(
     modelService: ModelService,
@@ -542,6 +538,23 @@ export class ChatService {
       }
     };
     this.messageService = new ChatMessageService(messageDeps, messageHost);
+
+    const contextDeps: ChatContextDeps = {
+      memoryService: this.memoryService,
+      chatMemoryModeService: this.chatMemoryModeService,
+      lorebookService: this.lorebookService,
+      lorebookPinService: this.lorebookPinService,
+      lorebookStickyService: this.lorebookStickyService,
+      appPreferences: this.appPreferences
+    };
+    const contextHost: ChatContextHost = {
+      getCurrentChatId: (): string | undefined => this.currentChatId,
+      getActiveBranchId: (): string => this.activeBranchId,
+      getMessages: (): ChatMessage[] => this.messages,
+      getCharacter: (): Character | null => this.character,
+      getLorebookActivationDefault: (): LorebookActivationMode => this.lorebookActivationDefault
+    };
+    this.contextMaintenance = new ChatContextMaintenanceService(contextDeps, contextHost);
   }
 
   /**
@@ -2143,171 +2156,26 @@ export class ChatService {
     return this.lorebookInjectionDepth;
   }
 
-  /**
-   * Prompt Cache:手动触发记忆总结。
-   * 无论 memoryAutoSummaryEnabled 是否开启,都强制生成一个详细章节并同步更新核心记忆。
-   * 总结完成后 Memory 段内容更新,但后续请求中 Memory 段将保持稳定直到下次手动触发。
-   */
+  // ===== 上下文维护(记忆总结 / 记忆失效 / 世界书激活刷新,实现已抽至 services/ChatContextMaintenanceService,P2-7) =====
+
+  /** Prompt Cache:手动触发记忆总结(强制生成章节并刷新世界书激活;委托 ChatContextMaintenanceService)。 */
   triggerManualMemorySummary(): void {
-    if (this.memoryService === null) {
-      return;
-    }
-    if (this.currentChatId === undefined || this.currentChatId.length === 0) {
-      return;
-    }
-    if (this.activeBranchId.length === 0) {
-      return;
-    }
-    const chatId: string = this.currentChatId;
-    const branchId: string = this.activeBranchId;
-    const branchMessages: ChatMessage[] = this.messages.slice();
-    // 不 await:后台执行,失败仅记录日志
-    this.memoryService.forceGenerateChapterMemory(chatId, branchId, branchMessages)
-      .then((result: MemorySummaryResult): void => {
-        if (!result.success) {
-          Logger.warn(LOG_TAG, 'ManualMemorySummary | forced chapter failed'
-            + (result.error !== undefined ? ' err=' + result.error : ''));
-        } else {
-          this.notifyMemoryChanged();
-          // v8.4: 窗口锚点由章节边界与保留条数动态派生,总结成功后无需额外持久化
-          // v45: 手动总结成功后刷新 OnDemandPinned 会话钉选(记忆段与世界书段一起变化)
-          this.refreshLorebookPinAsync(chatId, branchMessages);
-          // v46: 手动总结成功后刷新 StickyOnDemand 会话粘滞命中(重算全量对话匹配)
-          this.refreshLorebookStickyAsync(chatId, branchMessages);
-        }
-      })
-      .catch((e: Object): void => {
-        Logger.warn(LOG_TAG, 'ManualMemorySummary | forced chapter exception: '
-          + (e instanceof Error ? e.message : String(e)));
-      });
+    this.contextMaintenance.triggerManualMemorySummary();
   }
 
-  /**
-   * v45: 手动记忆总结成功后刷新 OnDemandPinned(按需锁定)会话钉选。
-   * 按当前角色绑定世界书 + 全部对话消息重新全量关键词匹配,替换原钉选。
-   * 后台执行,失败仅记录日志。
-   */
-  private refreshLorebookPinAsync(chatId: string, messages: ChatMessage[]): void {
-    if (this.lorebookPinService === null || this.lorebookService === null) {
-      return;
-    }
-    if (this.character === null || this.character.characterBookId.length === 0) {
-      return;
-    }
-    const bookId: string = this.character.characterBookId;
-    this.lorebookService.getById(bookId)
-      .then((book: Lorebook | null): Promise<void> => {
-        if (book === null || !book.enabled) {
-          return Promise.resolve();
-        }
-        return this.lorebookPinService!.refreshPinnedEntries(chatId, book, messages);
-      })
-      .catch((e: Object): void => {
-        Logger.warn(LOG_TAG, 'ManualMemorySummary | lorebook pin refresh failed: '
-          + (e instanceof Error ? e.message : String(e)));
-      });
+  /** 手动刷新世界书激活内容(按模式分派 Pin/Sticky;委托 ChatContextMaintenanceService)。 */
+  refreshLorebookPinNow(): Promise<boolean> {
+    return this.contextMaintenance.refreshLorebookPinNow();
   }
 
-  /**
-   * v46: 手动记忆总结成功后刷新 StickyOnDemand(粘滞按需)会话命中。
-   * 按当前角色绑定世界书 + 全部对话消息重新全量关键词匹配,整体替换原集合。
-   * 后台执行,失败仅记录日志。
-   */
-  private refreshLorebookStickyAsync(chatId: string, messages: ChatMessage[]): void {
-    if (this.lorebookStickyService === null || this.lorebookService === null) {
-      return;
-    }
-    if (this.character === null || this.character.characterBookId.length === 0) {
-      return;
-    }
-    const bookId: string = this.character.characterBookId;
-    this.lorebookService.getById(bookId)
-      .then((book: Lorebook | null): Promise<void> => {
-        if (book === null || !book.enabled) {
-          return Promise.resolve();
-        }
-        return this.lorebookStickyService!.refreshStickyEntries(chatId, book, messages);
-      })
-      .catch((e: Object): void => {
-        Logger.warn(LOG_TAG, 'ManualMemorySummary | lorebook sticky refresh failed: '
-          + (e instanceof Error ? e.message : String(e)));
-      });
-  }
-
-  /**
-   * v45.1: 手动刷新世界书激活内容(OnDemandPinned 按需锁定模式)。
-   * 用户切换开场白/生成新章节后调用:按当前会话全部消息重新关键词匹配,
-   * 替换 chat_lorebook_pins 钉选记录并落库(刷新后即锁定)。
-   * v46: StickyOnDemand 粘滞模式同样支持,按模式分派刷新。
-   * @return true=已刷新; false=无可刷新(会话未初始化/无角色书/书未启用/服务不可用/异常)
-   */
-  async refreshLorebookPinNow(): Promise<boolean> {
-    if (this.currentChatId === undefined || this.currentChatId.length === 0
-      || this.lorebookService === null
-      || (this.lorebookPinService === null && this.lorebookStickyService === null)) {
-      return false;
-    }
-    if (this.character === null || this.character.characterBookId.length === 0) {
-      return false;
-    }
-    try {
-      const book: Lorebook | null = await this.lorebookService.getById(this.character.characterBookId);
-      if (book === null || !book.enabled) {
-        return false;
-      }
-      const effectiveMode: LorebookActivationMode =
-        book.activationMode !== LorebookActivationMode.FollowGlobal
-          ? book.activationMode : this.lorebookActivationDefault;
-      const messages: ChatMessage[] = this.messages.slice();
-      if (effectiveMode === LorebookActivationMode.StickyOnDemand) {
-        if (this.lorebookStickyService === null) {
-          return false;
-        }
-        await this.lorebookStickyService.refreshStickyEntries(this.currentChatId, book, messages);
-        Logger.info(LOG_TAG, 'ManuallyRefreshLorebookSticky | refreshed chatId=' + this.currentChatId
-          + ' book=' + book.id);
-        return true;
-      }
-      if (this.lorebookPinService === null) {
-        return false;
-      }
-      await this.lorebookPinService.refreshPinnedEntries(this.currentChatId, book, messages);
-      Logger.info(LOG_TAG, 'ManuallyRefreshLorebookPin | refreshed chatId=' + this.currentChatId
-        + ' book=' + book.id);
-      return true;
-    } catch (e) {
-      Logger.warn(LOG_TAG, 'ManuallyRefreshLorebookPin | failed: ' + String(e));
-      return false;
-    }
-  }
-
-  /**
-   * Prompt Cache:设置自动记忆总结开关。
-   * @param enabled true=每次 AI 回复后自动触发记忆总结(默认行为,不利于缓存)
-   *                false=关闭自动总结,用户需手动触发(推荐,有利于缓存)
-   */
+  /** Prompt Cache:设置自动记忆总结开关(委托 ChatContextMaintenanceService)。 */
   setMemoryAutoSummaryEnabled(enabled: boolean): void {
-    this.memoryAutoSummaryEnabled = enabled;
-    if (this.appPreferences !== null) {
-      this.appPreferences.putString(MEMORY_AUTO_SUMMARY_PREFS_KEY, enabled ? 'true' : 'false')
-        .then((): void => {}).catch((_e: Object): void => {});
-    }
+    this.contextMaintenance.setMemoryAutoSummaryEnabled(enabled);
   }
 
+  /** 自动记忆总结开关状态(委托 ChatContextMaintenanceService)。 */
   isMemoryAutoSummaryEnabled(): boolean {
-    return this.memoryAutoSummaryEnabled;
-  }
-
-  private async loadMemoryAutoSummaryPref(): Promise<void> {
-    if (this.appPreferences === null) {
-      return;
-    }
-    try {
-      const val: string = await this.appPreferences.getString(MEMORY_AUTO_SUMMARY_PREFS_KEY, 'false');
-      this.memoryAutoSummaryEnabled = val === 'true';
-    } catch (_e) {
-      this.memoryAutoSummaryEnabled = false;
-    }
+    return this.contextMaintenance.isMemoryAutoSummaryEnabled();
   }
 
   /** CHAT-STATUS-1A: 追加角色状态**当前值** system message(委托 ChatStatusService)。 */
@@ -2371,15 +2239,6 @@ export class ChatService {
    */
   invalidateEstimateCache(): void {
     this.lastBuiltRequestMessages = undefined;
-  }
-
-  /**
-   * 通知记忆变更,触发 ChatPage 重新计算上下文占用。
-   * 记忆生成/更新/删除后调用,递增 chatMemoryVersion 让 ChatPage @Watch 响应。
-   */
-  private notifyMemoryChanged(): void {
-    const v: number = AppStorage.get<number>('chatMemoryVersion') ?? 0;
-    AppStorage.setOrCreate<number>('chatMemoryVersion', v + 1);
   }
 
   /**
@@ -2872,116 +2731,19 @@ export class ChatService {
 
 
 
-  /**
-   * 异步触发长期记忆增量总结。
-   *
-   * v50: 会话级记忆模式(优先):
-   * - 'auto'(自动章节归档): 达章节阈值时调用 tryAutoChapterMemory
-   *   只追加章节,**不回退 rolling 覆盖更新**(保缓存前缀)
-   * - 'manual'(手动): 不自动总结
-   * - 会话未设置时由 ChatMemoryModeService 回退全局 memoryAutoSummaryEnabled 开关
-   *
-   * 兼容:chatMemoryModeService 为 null(旧测试构造)时走旧全局开关
-   * + tryGenerateMultiLayerMemory(章节优先,回退 rolling)。
-   *
-   * - 失败不抛出,不阻塞已完成状态
-   * - 不调用 await,在后台执行
-   * - 仅记录触发阶段,不记录消息内容
-   */
+  /** 异步触发长期记忆增量总结(委托 ChatContextMaintenanceService)。 */
   private triggerMemorySummaryAsync(): void {
-    if (this.memoryService === null) {
-      return;
-    }
-    if (this.currentChatId === undefined || this.currentChatId.length === 0) {
-      return;
-    }
-    if (this.activeBranchId.length === 0) {
-      return;
-    }
-    const chatId: string = this.currentChatId;
-    const branchId: string = this.activeBranchId;
-    const branchMessages: ChatMessage[] = this.messages.slice();
-    const memoryService: MemoryService = this.memoryService;
-    if (this.chatMemoryModeService !== null) {
-      // v50: 会话级记忆模式——'auto' 自动章节归档(不回退 rolling 覆盖,保缓存)
-      const modeService: ChatMemoryModeService = this.chatMemoryModeService;
-      modeService.getMemoryMode(chatId)
-        .then((mode: ChatMemoryMode): Promise<void> => {
-          if (mode !== 'auto') {
-            return Promise.resolve();
-          }
-          return memoryService.tryAutoChapterMemory(chatId, branchId, branchMessages)
-            .then((result): void => {
-              this.handleBackgroundMemoryResult(result);
-            });
-        })
-        .catch((e: Object): void => {
-          Logger.warn(LOG_TAG, 'MemorySummary | triggered kind=exception: '
-            + (e instanceof Error ? e.message : String(e)));
-        });
-      return;
-    }
-    // 兼容:无会话模式服务时走旧全局开关 + 多层回退(章节优先,回退 rolling)
-    if (!this.memoryAutoSummaryEnabled) {
-      return;
-    }
-    memoryService.tryGenerateMultiLayerMemory(chatId, branchId, branchMessages)
-      .then((result): void => {
-        this.handleBackgroundMemoryResult(result);
-      })
-      .catch((e: Object): void => {
-        Logger.warn(LOG_TAG, 'MemorySummary | triggered kind=exception: '
-          + (e instanceof Error ? e.message : String(e)));
-      });
+    this.contextMaintenance.triggerMemorySummaryAsync();
   }
 
-  /** 后台记忆总结结果处理:失败仅记日志,成功通知记忆变更。 */
-  private handleBackgroundMemoryResult(result: MemorySummaryResult): void {
-    if (!result.success) {
-      Logger.warn(LOG_TAG, 'MemorySummary | triggered kind=failed'
-        + (result.error !== undefined ? ' err=' + result.error : ''));
-    } else {
-      this.notifyMemoryChanged();
-    }
-  }
-
-  /**
-   * v12: 失效指定消息 position 之后的记忆(软失效)。
-   * v12: 失效"覆盖了指定消息位置"的记忆(软失效)。
-   * 用于 Swipe 切换、Swipe 候选生成完成、重新生成等场景。
-   * - 找到 messageId 在 this.messages 中的索引作为 position
-   * - 调用 memoryService.softInvalidateCoveringPosition(branchId, position)
-   * - 只失效该消息落在记忆覆盖范围内的记忆,不误伤独立的章节历史快照
-   * - 失败不阻塞,只记录 warn
-   * - 不记录消息内容
-   *
-   * @param messageId 触发失效的消息 ID(该消息位置所在的记忆范围会被失效)
-   */
+  /** 失效覆盖指定消息位置的记忆(软失效;委托 ChatContextMaintenanceService)。 */
   private invalidateMemoryFromMessagePosition(messageId: string): void {
-    if (this.memoryService === null) {
-      return;
-    }
-    if (this.activeBranchId.length === 0) {
-      return;
-    }
-    // 查找消息 position(在 this.messages 中的索引)
-    let position: number = -1;
-    for (let i = 0; i < this.messages.length; i++) {
-      if (this.messages[i].id === messageId) {
-        position = i;
-        break;
-      }
-    }
-    if (position < 0) {
-      return;
-    }
-    const branchId: string = this.activeBranchId;
-    // 不 await:后台执行,失败仅记录日志
-    this.memoryService.softInvalidateCoveringPosition(branchId, position)
-      .catch((e: Object): void => {
-        Logger.warn(LOG_TAG, 'MemoryInvalidate | failed: '
-          + (e instanceof Error ? e.message : String(e)));
-      });
+    this.contextMaintenance.invalidateMemoryFromMessagePosition(messageId);
+  }
+
+  /** 加载自动记忆总结开关(全局偏好;委托 ChatContextMaintenanceService)。 */
+  private async loadMemoryAutoSummaryPref(): Promise<void> {
+    return this.contextMaintenance.loadMemoryAutoSummaryPref();
   }
 
   /**
