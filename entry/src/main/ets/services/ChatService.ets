@@ -98,6 +98,7 @@ import { HistoryTrimResult } from '../models/HistoryTrimResult';
 import { PersistedChatSession } from '../models/PersistedChatSession';
 import { Chat } from '../models/Chat';
 import { ChatStatusState, ChatStatusEntry } from '../models/ChatStatusState';
+import { ChatGenerationKind, ActiveGenerationContext } from '../models/ChatGenerationContext';
 import { ChatState, ChatServiceCallbacks } from '../models/ChatServiceContract';
 import { extractStatusBlock } from '../parser/ChatStatusBlockParser';
 import {
@@ -161,36 +162,6 @@ const DEFAULT_OPTIONS: ChatRequestOptions = {
  * 聊天服务。
  * 生命周期跟随 ChatPage,dispose 后不可复用。
  */
-
-/**
- * 生成类型(T-6.3 / T-6.4B-1.2):
- * - NormalResponse: 普通生成,持久化走 ChatPersistenceService.updateMessage
- * - SwipeCandidate: 候选生成,持久化走 MessageSwipePersistenceService.updateCandidate
- * - BranchRegeneration: 重新生成新分支,持久化走 ChatPersistenceService.updateMessage(新 Assistant 在新 Branch 中)
- */
-export enum ChatGenerationKind {
-  NormalResponse = 'NormalResponse',
-  SwipeCandidate = 'SwipeCandidate',
-  BranchRegeneration = 'BranchRegeneration',
-  AutoContinue = 'AutoContinue',
-  Narrator = 'Narrator'
-}
-
-/**
- * 活动生成上下文(T-6.3 / T-6.4B-1.2)。
- * 一次请求生命周期内不可变。所有异步回调通过 operationId + 关键字段联合判断迟到。
- * 不持久化,不记录完整 ID。
- */
-interface ActiveGenerationContext {
-  readonly operationId: number;
-  readonly kind: ChatGenerationKind;
-  readonly chatId: string;
-  readonly assistantMessageId: string;
-  readonly swipeCandidateIndex?: number;
-  readonly branchId?: string;
-  readonly forkMessageId?: string;
-  readonly autoContinueStep?: 'impersonate' | 'response'; // legacy, kept for DB compat
-}
 
 export class ChatService {
   private messages: ChatMessage[] = [];
