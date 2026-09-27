@@ -118,6 +118,7 @@ import { ChatSwipeController, ChatSwipeDeps, ChatSwipeHost } from './ChatSwipeCo
 import { ConversationBranchService, ConversationBranchDeps, ConversationBranchHost } from './ConversationBranchService';
 import { ChatMessageService, ChatMessageDeps, ChatMessageHost } from './ChatMessageService';
 import { ChatContextMaintenanceService, ChatContextDeps, ChatContextHost } from './ChatContextMaintenanceService';
+import { ChatSessionService, ChatSessionDeps, ChatSessionHost } from './ChatSessionService';
 import {
   GLOBAL_USER_NAME_KEY,
   LOREBOOK_ACTIVATION_DEFAULT_PREFS_KEY,
@@ -292,6 +293,8 @@ export class ChatService {
   private readonly messageService: ChatMessageService;
   /** 上下文维护(记忆总结/失效/世界书激活)(P2-7:自本类抽离,自带开关状态,经宿主回调读取) */
   private readonly contextMaintenance: ChatContextMaintenanceService;
+  /** 会话生命周期工具/查询族(P2-9a:自本类抽离,状态仍在本类,经宿主回调读写) */
+  private readonly sessionService: ChatSessionService;
 
   constructor(
     modelService: ModelService,
@@ -608,6 +611,29 @@ export class ChatService {
       getLorebookActivationDefault: (): LorebookActivationMode => this.lorebookActivationDefault
     };
     this.contextMaintenance = new ChatContextMaintenanceService(contextDeps, contextHost);
+    const sessionDeps: ChatSessionDeps = {
+      persistenceService: this.persistenceService,
+      swipePersistenceService: this.swipePersistenceService,
+      appPreferences: this.appPreferences
+    };
+    const sessionHost: ChatSessionHost = {
+      getCharacter: (): Character | null => this.character,
+      getCurrentChatId: (): string | undefined => this.currentChatId,
+      setSwipeSummaries: (summaries: MessageSwipeSummary[]): void => {
+        this.swipeSummaries = summaries;
+      },
+      setLastAssistantMessageId: (assistantMessageId: string): void => {
+        this.lastAssistantMessageId = assistantMessageId;
+      },
+      updateLastAssistantMessageId: (): void => this.updateLastAssistantMessageId(),
+      setLorebookActivationDefault: (mode: LorebookActivationMode): void => {
+        this.lorebookActivationDefault = mode;
+      },
+      setLorebookInjectionDepth: (depth: number): void => {
+        this.lorebookInjectionDepth = depth;
+      }
+    };
+    this.sessionService = new ChatSessionService(sessionDeps, sessionHost);
   }
 
   /**
@@ -828,74 +854,17 @@ export class ChatService {
     this.syncStatusStateFromCurrentChat();
   }
 
-  /**
-   * 构建开场白池:[firstMessage(非空时)] + alternateGreetings(trim 过滤空项)。
-   */
+  /** 构建开场白池(委托 ChatSessionService)。 */
   private buildGreetingPool(): string[] {
-    if (this.character === null) {
-      return [];
-    }
-    const pool: string[] = [];
-    if (this.character.firstMessage.trim().length > 0) {
-      pool.push(this.character.firstMessage.trim());
-    }
-    for (let i = 0; i < this.character.alternateGreetings.length; i++) {
-      const greeting: string = this.character.alternateGreetings[i].trim();
-      if (greeting.length > 0) {
-        pool.push(greeting);
-      }
-    }
-    return pool;
+    return this.sessionService.buildGreetingPool();
   }
 
-  /**
-   * 将开场白候选列表初始化为首条消息的 Swipe 候选。
-   * - 调用 ensureSwipeState 创建 Group + Candidate 0(默认池[0]已是消息内容)
-   * - 对 candidates[i] 调用 appendCandidate(activate=false)作为 Candidate 1..N
-   * - 失败不阻塞会话创建,仅记录 warning
-   *
-   * @param firstMessageId 首条开场白消息的 ID
-   * @param candidates 除池[0]外的其余候选内容
-   */
+  /** 开场白候选初始化为首条消息的 Swipe 候选(委托 ChatSessionService)。 */
   private async initializeGreetingSwipeCandidates(
     firstMessageId: string,
     candidates: string[]
   ): Promise<void> {
-    if (this.swipePersistenceService === null) {
-      return;
-    }
-    if (candidates.length === 0) {
-      return;
-    }
-    try {
-      // ensureSwipeState 创建 Group + Candidate 0(默认池[0]已是消息内容)
-      await this.swipePersistenceService.ensureSwipeState(firstMessageId);
-      // 逐个追加候选作为 Candidate 1..N,不 activate(默认显示池[0])
-      for (let i = 0; i < candidates.length; i++) {
-        const candidate: string = candidates[i];
-        if (candidate.trim().length === 0) {
-          continue;
-        }
-        try {
-          await this.swipePersistenceService.appendCandidate(
-            firstMessageId,
-            {
-              content: candidate,
-              status: ChatMessageStatus.Completed,
-              isStreaming: false
-            },
-            false // activate=false,保持池[0]为当前显示
-          );
-        } catch (e) {
-          // 单条追加失败不阻塞其他条目
-          Logger.warn(LOG_TAG, 'init greeting candidate failed idx=' + String(i)
-            + ': ' + (e instanceof Error ? e.message : String(e)));
-        }
-      }
-    } catch (e) {
-      Logger.warn(LOG_TAG, 'initializeGreetingSwipeCandidates failed: '
-        + (e instanceof Error ? e.message : String(e)));
-    }
+    return this.sessionService.initializeGreetingSwipeCandidates(firstMessageId, candidates);
   }
 
   /**
@@ -1006,15 +975,9 @@ export class ChatService {
     return newChatId;
   }
 
-  /**
-   * 章节标题开场白预览:前 20 字符,超长追加省略号。
-   */
+  /** 章节标题开场白预览(委托 ChatSessionService)。 */
   private buildChapterTitlePreview(greeting: string): string {
-    const trimmed: string = greeting.trim();
-    if (trimmed.length <= 20) {
-      return trimmed;
-    }
-    return trimmed.substring(0, 20) + '…';
+    return this.sessionService.buildChapterTitlePreview(greeting);
   }
 
   /**
@@ -1517,23 +1480,9 @@ export class ChatService {
   /** 会话操作进行中(防止并发新建/切换/删除) */
   private sessionOperationInProgress: boolean = false;
 
-  /**
-   * 列出当前聊天上下文下的会话。
-   * - 有角色:使用 character.id 精确查询
-   * - 无角色:查询 character_id IS NULL(仅普通助手会话)
-   * - 始终排除 archived
-   * - 排序:last_message_at DESC → updated_at DESC → id ASC
-   * - 默认最多 50 条
-   *
-   * @returns 会话列表(可能为空)。无 persistenceService 时返回空数组。
-   */
+  /** 列出当前聊天上下文下的会话(委托 ChatSessionService)。 */
   async listSessions(): Promise<Chat[]> {
-    if (this.persistenceService === null) {
-      return [];
-    }
-    const characterId: string | undefined =
-      this.character !== null ? this.character.id : undefined;
-    return await this.persistenceService.listSessionsForContext(characterId);
+    return this.sessionService.listSessions();
   }
 
   /**
@@ -1870,36 +1819,9 @@ export class ChatService {
     return this.statusService.loadStatusInstructionPref();
   }
 
-  /**
-   * 加载世界书全局默认激活方式与深度注入偏好。
-   * 在会话初始化时调用(全局,跨会话)。
-   */
+  /** 加载世界书全局默认激活方式与深度注入偏好(委托 ChatSessionService)。 */
   private async loadLorebookPrefs(): Promise<void> {
-    if (this.appPreferences === null) {
-      return;
-    }
-    try {
-      const modeVal: string = await this.appPreferences.getString(
-        LOREBOOK_ACTIVATION_DEFAULT_PREFS_KEY, '');
-      if (modeVal === LorebookActivationMode.FullInject
-        || modeVal === LorebookActivationMode.OnDemand
-        || modeVal === LorebookActivationMode.OnDemandPinned) {
-        this.lorebookActivationDefault = modeVal as LorebookActivationMode;
-      } else {
-        this.lorebookActivationDefault = DEFAULT_LOREBOOK_ACTIVATION_MODE;
-      }
-    } catch (_e) {
-      this.lorebookActivationDefault = DEFAULT_LOREBOOK_ACTIVATION_MODE;
-    }
-    try {
-      const depthStr: string = await this.appPreferences.getString(
-        LOREBOOK_INJECTION_DEPTH_PREFS_KEY, '');
-      const parsed: number = Number(depthStr);
-      this.lorebookInjectionDepth = Number.isFinite(parsed) && parsed >= 0 && parsed <= 8
-        ? Math.floor(parsed) : DEFAULT_LOREBOOK_INJECTION_DEPTH;
-    } catch (_e) {
-      this.lorebookInjectionDepth = DEFAULT_LOREBOOK_INJECTION_DEPTH;
-    }
+    return this.sessionService.loadLorebookPrefs();
   }
 
   /**
@@ -3094,22 +3016,9 @@ export class ChatService {
     }
   }
 
-  /**
-   * createNewSession 之后重新加载 Swipe 状态。
-   *
-   * createNewSession 只把 alternate_greetings 持久化为首条开场白消息的
-   * Swipe 候选 1..N,不会同步 this.swipeSummaries / this.lastAssistantMessageId。
-   * 会话列表"新建对话"与"删除当前会话后回退新建"两条路径必须调用本方法,
-   * 否则首条消息候选数读不到(开场白选择箭头不出现)且无法 Swipe。
-   */
+  /** 新建会话后重新加载 Swipe 状态(委托 ChatSessionService)。 */
   private async reloadSwipeStateAfterNewSession(): Promise<void> {
-    this.swipeSummaries = [];
-    this.lastAssistantMessageId = '';
-    if (this.swipePersistenceService !== null && this.currentChatId !== undefined) {
-      this.swipeSummaries =
-        await this.swipePersistenceService.listSwipeSummariesByChatId(this.currentChatId);
-    }
-    this.updateLastAssistantMessageId();
+    return this.sessionService.reloadSwipeStateAfterNewSession();
   }
 
   // ===== Swipe 公开方法(实现已抽至 services/ChatSwipeController,P2-4a) =====
