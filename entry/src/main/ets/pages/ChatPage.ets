@@ -3811,10 +3811,6 @@ struct ChatPage {
   }
 
   @Builder
-  budgetIndicator() {
-  }
-
-  @Builder
   inputArea() {
     Column() {
       // AI 操作按钮行(仅空闲时显示)
