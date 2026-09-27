@@ -16,7 +16,8 @@
  * - messages 始终以新引用赋值,确保 ArkUI 检测到变化
  */
 
-import { ChatService, ChatState, ChatServiceCallbacks } from '../services/ChatService';
+import { ChatService } from '../services/ChatService';
+import { ChatState, ChatServiceCallbacks } from '../models/ChatServiceContract';
 import { ModelService } from '../services/ModelService';
 import { ChatMessage, ChatMessageStatus } from '../models/ChatMessage';
 import { ChatRole } from '../models/ChatRole';

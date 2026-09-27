@@ -109,6 +109,7 @@ import {
   extractStatusSchema,
   findStatusSchemaByName
 } from '../models/ChatStatusState';
+import { ChatState, ChatServiceCallbacks } from '../models/ChatServiceContract';
 import { extractStatusBlock } from '../parser/ChatStatusBlockParser';
 import {
   PromptPresetRequestSnapshot,
@@ -167,62 +168,6 @@ interface AutoContinueTurn {
 
 /** delta 持久化触发的最小字符增量 */
 const PERSISTENCE_MIN_CHARS: number = 64;
-
-/**
- * 聊天状态枚举。
- */
-export enum ChatState {
-  Idle = 'Idle',
-  Sending = 'Sending',
-  Streaming = 'Streaming',
-  Completed = 'Completed',
-  Cancelled = 'Cancelled',
-  Failed = 'Failed'
-}
-
-/**
- * 聊天服务回调。
- */
-export interface ChatServiceCallbacks {
-  /** 消息列表变更 */
-  onMessagesChanged: (messages: ChatMessage[]) => void;
-  /** 状态变更 */
-  onStateChanged: (state: ChatState) => void;
-  /** 错误消息 */
-  onError: (message: string) => void;
-  /**
-   * 助手最终消息完成回调 (可选)。
-   *
-   * @param assistantMessageId 真实助手消息 ID
-   * @param performanceHintJson 可选 Hint JSON (无则空字符串)
-   */
-  onAssistantMessageFinalized?: (
-    assistantMessageId: string,
-    performanceHintJson: string
-  ) => void;
-  /**
-   * 角色状态变更回调(CHAT-STATUS-1A,可选)。
-   *
-   * 触发时机:
-   * - 会话初始化 / 切换 / 新建后加载到状态
-   * - AI 回复完成后合并更新状态
-   * - 用户通过 updateStatusState 增删改锁字段后
-   *
-   * 用途: ChatViewModel 实现此回调,把最新状态同步到 ChatPage 顶部状态卡片。
-   */
-  onStatusChanged?: (state: ChatStatusState) => void;
-  /**
-   * 缓存命中率更新回调(可选)。
-   *
-   * 触发时机:AI 回复完成后,从 Provider 响应中提取缓存统计。
-   *
-   * @param cachedTokens 缓存命中的 token 数
-   * @param promptTokens 总输入 prompt token 数
-   * @param hitRatio 缓存命中率 (cachedTokens / promptTokens, 0~1)
-   */
-  onCacheStatsUpdate?: (cachedTokens: number, promptTokens: number, hitRatio: number) => void;
-}
-
 
 /** 默认流式请求选项 */
 const DEFAULT_OPTIONS: ChatRequestOptions = {
