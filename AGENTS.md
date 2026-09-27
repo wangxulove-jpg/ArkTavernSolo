@@ -34,7 +34,8 @@ components/ 与 models/：无网络、无数据库、无业务副作用
 - `ChatService` **不是单例**：每次进入 ChatPage 由 `AppServices.createChatService()` 新建，只被 `ChatViewModel` 独占使用
 - `ModelService` 是**所有 AI 请求的唯一出口**（页面/服务不得直接碰 Provider/KeyStore）
 - **红线**：pages 不得直接 import 具体 services / repositories / network / database；components 不得 import viewmodels / services / database
-- 已知偏差（**勿扩散**，治理清单见审计报告 §3）：`CardFrontendWeb.ets`、`ChatSessionListPanel.ets` 直连 ChatViewModel / AppServices；`ChatPage.ets` 直连约 8 个具体服务（TTS / MacroReplacer / 预算等）；`LorebookPage.ets` 直连 CharacterRepository
+- 已知偏差（**勿扩散**，治理清单见审计报告 §3）：`ChatPage.ets` 直连约 8 个具体服务（TTS / MacroReplacer / 预算等）；`LorebookPage.ets` 直连 CharacterRepository；`ChatStatusWorldPanel.ets` 仅**类型引用** `ChatViewModel` 的 `LorebookPanelBook/Data`（不持有 VM 实例）
+- 组件越层已修复（2026-09-27，P1-5）：`CardFrontendWeb`/`CardFrontendBridge` 依赖 `bridge/CardFrontendBridge.ets` 导出的 `FrontendCardHost` 契约（页面直接传 `host: this.viewModel`）；`ChatSessionListPanel` 为纯展示 + 回调（数据/动作由 ChatPage 注入）
 
 ## 4. 编码规则（ArkTS 红线）
 
@@ -145,4 +146,5 @@ docs/handover/
 
 - 基线：`refactor-baseline` tag（2026-09-27 建立）
 - 已完成：全项目只读审计（286 文件 / 112,801 行）、交接文档体系重建、`tools/` 与开发截图清理
-- **下一步：重构 P1 批次（死代码清理 → 重复逻辑消除 → ChatPage 组件抽取 → 会话列表去重）**，详见 `docs/handover/CURRENT.md` 与 `docs/handover/2026-09-27-audit-and-roadmap.md` §6
+- P1 进度：P1-1 死代码清理 ✅ · P1-2 ChatService 重复逻辑消除 ✅ · P1-3 ChatPage 组件抽取（5 个）✅ · P1-5 组件越层修复 ✅ · P1-6 不可变性 ✅；**下一步：P1-4 会话列表去重**（分相执行，合并方向需先对齐）
+- 验证状态：代码改动均编译通过；真机冒烟按批次进行，清单与回滚锚点见 `docs/handover/CURRENT.md` §4；路线图见 `docs/handover/2026-09-27-audit-and-roadmap.md` §6
