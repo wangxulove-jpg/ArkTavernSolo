@@ -109,6 +109,18 @@
 - **P3-1 收官**：ChatViewModel **1,698 → 1,479 行（-219，-12.9%）**；新增 `viewmodels/ChatErrorMapper.ets` + `viewmodels/LorebookPanelVM.ets` + `models/LorebookPanel.ets`；两接缝公开 API 面均 131 → 131 零差异；附加收益：组件层 `ChatStatusWorldPanel` 的 viewmodels 类型引用偏差已消除
 - **机械校验**：公开 API 面 diff（抽取全部非 private 类成员声明行，`Compare-Object` HEAD 前后）→ 两接缝均 **零差异**（含 `async` 修饰符）
 
+### P3-2 MemoryService 拆分（起点 1,953 行）
+
+**只读测绘**：L67-148 类型/常量（导出）；L150-185 字段 + 构造函数（8 依赖，后 3 个可空）；职责簇 = 加载 / 触发检查 / rolling 旧 API / v12 多层生成 / v46 会话记忆 / v44 世界级 CRUD + 关键词召回 / 过期标记 / 手动操作；`formatMessages` 被构建器与 `generateSessionMemory` 双处使用
+
+- [x] **① `MemoryPromptBuilder`（纯 prompt 文本构建）** ✅：新增 `services/MemoryPromptBuilder.ets`，6 方法**逐字搬出**（`buildSummaryPrompt` 41 行 / `buildSessionPrompt` 53 / `buildChapterPrompt` 52 / `buildCorePrompt` 51 / `buildJailbreakInstruction` 10 / `formatMessages` 21）；构造期注入 `summaryPoints` + `chapterConfig`（字段与 MemoryService 同名 → 搬运体**逐行等价 DIFF=0**）
+  - 5 处调用点改走 `this.promptBuilder.xxx(`；6 个原 private 因跨类调用改 public；`formatMessages` 被 `generateSessionMemory` 直用（L1279）保持可达
+  - **教训（ArkTS 红线）**：ArkTS **禁止结构类型**（`arkts-no-structural-typing`）—— 首次尝试用「局部窄接口 `ChapterPromptConfig` 接收 `ChapterTriggerConfig`」编译失败 → 改为把 `ChapterTriggerConfig` + `DEFAULT_CHAPTER_TRIGGER` 下沉 `models/ChatMemory.ets`（与既有 `MemoryTriggerConfig` 同域），`AppServices` 改从 models 导入；**接口参数必须精确类型匹配，不可依赖结构兼容**
+  - 校验：搬运体逐行等价（**6/6 DIFF=0**）；MemoryService 公开 API 面 **63 → 63 零差异**；编译 BUILD SUCCESSFUL；单测 **96/96**；**MemoryService 1,953 → 1,664 行**（-289）；`ChatMemory` 类型下沉零行为影响
+- [ ] **② `WorldMemoryStore`**（v44 世界级手工记忆与关键词召回）
+- [ ] **③ `MemoryTriggerPolicy`**（触发检查：shouldTriggerSummary / shouldGenerateChapter / resolveArchivedPosition / 阈值配置）
+- [ ] **旧兼容 API 死代码核实**（审计 L249/273/657 附近，行号已过期；P1-1 已删 `getEffectiveMemory`/`getInjectionContext`，`trySummarize` 已复核保留）
+
 ## 3. 环境事实（防重复踩坑）
 
 - SDK：`D:\DevEco_studio\DevEco Studio\sdk`（6.1.1；`D:\DevEco_studio\Sdk` 是旧版 6.0.2，会报 00303312）

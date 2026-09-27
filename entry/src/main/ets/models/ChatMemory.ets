@@ -127,6 +127,37 @@ export const DEFAULT_MEMORY_TRIGGER: MemoryTriggerConfig = {
   enableContextBudgetCheck: true
 };
 
+/**
+ * v12 章节生成触发配置。
+ */
+export interface ChapterTriggerConfig {
+  /** 未归档消息数阈值(达到即触发章节生成) */
+  messageCountThreshold: number;
+  /** 未归档字符数阈值 */
+  charLengthThreshold: number;
+  /** 章节摘要目标长度(中文字符) */
+  chapterTargetLength: number;
+  /** 章节摘要最大长度 */
+  chapterMaxLength: number;
+  /** 注入时保留的最近章节数 */
+  recentChapterInjectCount: number;
+  /** v45: 分段总结每段源文本目标字符数(达到即切一段,每段独立成章) */
+  chunkSourceChars: number;
+  /** v45: 分段总结每段消息数上限(防止超短消息凑不出字符数时单段过长) */
+  chunkMaxMessages: number;
+}
+
+/** 默认章节触发配置:50 条对话或 20000 字符触发;v45 分段:每段 50 条对话/约 20000 字符 */
+export const DEFAULT_CHAPTER_TRIGGER: ChapterTriggerConfig = {
+  messageCountThreshold: 50,
+  charLengthThreshold: 20000,
+  chapterTargetLength: 2000,
+  chapterMaxLength: 3000,
+  recentChapterInjectCount: 4,
+  chunkSourceChars: 20000,
+  chunkMaxMessages: 50
+};
+
 /** 默认 Memory 摘要要项(全选) */
 export const DEFAULT_SUMMARY_POINTS: MemorySummaryPoints = {
   relationships: true,
