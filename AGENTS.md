@@ -35,7 +35,8 @@ components/ 与 models/：无网络、无数据库、无业务副作用
 - `ModelService` 是**所有 AI 请求的唯一出口**（页面/服务不得直接碰 Provider/KeyStore）
 - **红线**：pages 不得直接 import 具体 services / repositories / network / database；components 不得 import viewmodels / services / database
 - 已知偏差（**勿扩散**，治理清单见审计报告 §3）：`ChatPage.ets` 直连约 8 个具体服务（TTS / MacroReplacer / 预算等）；`LorebookPage.ets` 直连 CharacterRepository；`ChatStatusWorldPanel.ets` 仅**类型引用** `ChatViewModel` 的 `LorebookPanelBook/Data`（不持有 VM 实例）
-- 组件越层已修复（2026-09-27，P1-5）：`CardFrontendWeb`/`CardFrontendBridge` 依赖 `bridge/CardFrontendBridge.ets` 导出的 `FrontendCardHost` 契约（页面直接传 `host: this.viewModel`）；`ChatSessionListPanel` 为纯展示 + 回调（数据/动作由 ChatPage 注入）
+- 组件越层已修复（2026-09-27，P1-5）：`CardFrontendWeb`/`CardFrontendBridge` 依赖 `bridge/CardFrontendBridge.ets` 导出的 `FrontendCardHost` 契约（页面直接传 `host: this.viewModel`）
+- 会话列表面板已删除（2026-09-27，P1-4）：原 `components/ChatSessionListPanel.ets` 为不可达死 UI（`ChatViewModel.openSessionList()` 无调用者），连同 ChatViewModel 的会话列表/分组 API 一并移除；**会话切换统一走首页"对话记录"Tab**（`pages/tabs/ChatSessionRootView.ets` + `components/SessionGroupDialogs`）
 
 ## 4. 编码规则（ArkTS 红线）
 
@@ -110,6 +111,7 @@ $env:DEVECO_SDK_HOME = "D:\DevEco_studio\DevEco Studio\sdk"
 | 想改… | 第一定位 |
 |---|---|
 | 首页 4 Tab | `pages/Index.ets` → `pages/tabs/*RootView.ets` |
+| 会话列表（切换/重命名/分组/拖拽/归档） | `pages/tabs/ChatSessionRootView.ets` + `components/SessionGroupDialogs.ets` |
 | 聊天主界面 | `pages/ChatPage.ets` → `viewmodels/ChatViewModel.ets` |
 | AI 对话 / 流式 / 分支 / Swipe | `services/ChatService.ets` → `services/ModelService.ets` → `network/providers/` |
 | Prompt 组装 / 宏替换 | `services/PromptBuilder.ets`、`services/MacroReplacer.ets` |
@@ -146,5 +148,6 @@ docs/handover/
 
 - 基线：`refactor-baseline` tag（2026-09-27 建立）
 - 已完成：全项目只读审计（286 文件 / 112,801 行）、交接文档体系重建、`tools/` 与开发截图清理
-- P1 进度：P1-1 死代码清理 ✅ · P1-2 ChatService 重复逻辑消除 ✅ · P1-3 ChatPage 组件抽取（5 个）✅ · P1-5 组件越层修复 ✅ · P1-6 不可变性 ✅ · P1-4 会话列表去重：低风险相 ✅（`utils/SessionListCollapseState` 折叠纯函数 + `components/SessionGroupDialogs` 共享弹窗，"单组件 + 布局参数"的合并方向待与用户对齐后动工）
+- **P1 批次全部完成**：P1-1 死代码清理 ✅ · P1-2 ChatService 重复逻辑消除 ✅ · P1-3 ChatPage 组件抽取（5 个）✅ · P1-4 会话列表去重 ✅（共享折叠纯函数 + 共享分组弹窗 + **删除不可达的会话列表面板**，≈-1069 行）· P1-5 组件越层修复 ✅ · P1-6 不可变性 ✅
+- 下一步候选：P2 ChatService 瘦身（`ChatRequestBuilder` → `ChatOneShotGenerator` → `ChatStatusService` → `ChatSwipeController` → Branch 门面），启动时机以用户节奏为准
 - 验证状态：代码改动均编译通过；真机冒烟按批次进行，清单与回滚锚点见 `docs/handover/CURRENT.md` §4；路线图见 `docs/handover/2026-09-27-audit-and-roadmap.md` §6

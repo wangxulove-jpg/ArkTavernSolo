@@ -21,12 +21,13 @@
 - [x] **P1-3 ChatPage 组件抽取**（2026-09-27 完成，逐个纯搬运不改行为）：`ChatForkPicker` / `ChatMessageList` / `ChatInputArea` / `ChatAppearancePanel`（appearanceSheetContent + colorSwatchRow + fontColorPreviewArea + 7 个私有辅助方法，683 行搬出；8 个语义色经 @Prop、色盘请求经 `ColorPickerRequest` 上抛，全屏色盘覆盖层留在页面）/ `ChatStatusWorldPanel`（statusWorldSheetContent + 世界书/AI 预览族 10 个 @Builder，465 行搬出；AI 区/输入/面板可见性经 @Link，AI 模式切换与条目启停回调上抛，展开态降为组件内 @State）。**ChatPage 5949 → 4898 行（-1051）**；组件均不持有 VM/服务（`ChatStatusWorldPanel` 仅类型引用 `LorebookPanelBook/Data` 自 ChatViewModel）
 - [x] **P1-5 组件越层修复**（2026-09-27 完成，两个组件，各一次编译 + 提交）：
   1. `CardFrontendWeb` + `CardFrontendBridge` → bridge 层新增 **`FrontendCardHost` 契约**（`CardFrontendBridge.ets` 内导出）；组件/Bridge 不再 import viewmodels，ChatViewModel 结构上满足契约（无需适配器），页面直接传 `host: this.viewModel`（commit `d44797b`）
-  2. `ChatSessionListPanel` 去掉 `ChatViewModel` / `AppServices` 依赖 → 7 个 @Prop 数据 + 5 个查询回调（isCurrentSession / getSessionTitle / getSessionSubtitle / getChapterLabel / getWorldName）+ 11 个动作/持久化回调；折叠状态持久化上提到 ChatPage（key 与读写逻辑不变，分组操作 Toast 时长/错误消息来源保持旧行为）（commit `726efec`）
+  2. `ChatSessionListPanel` 去掉 `ChatViewModel` / `AppServices` 依赖 → 7 个 @Prop 数据 + 5 个查询回调 + 11 个动作/持久化回调（commit `726efec`）；**该组件随后核实为不可达死 UI 并被整体删除，本条改造随之作废**（见 P1-4 ③）
   - 组件层现状：仅剩 `ChatStatusWorldPanel` 对 `LorebookPanelBook/Data` 的**类型引用**（不持有 VM 实例，暂留）；旧 `@ObjectLink` 赋值告警随 P1-5 消失
-- [ ] **P1-4 会话列表去重**（低风险相已完成，剩余项待对齐后动工）：
-  - [x] **① 共享纯函数与常量**（commit `8ff588e`）：新增 `utils/SessionListCollapseState`（key + parse/serialize + 折叠判定/切换纯函数），ChatPage / Panel / RootView 三处重复实现收口为单一来源
-  - [x] **② 共享分组弹窗**（commit `958b43b` 面板迁移 / `a1d2a5d` Tab 迁移）：新增 `components/SessionGroupDialogs`（新建 / 重命名+删除入口 / 删除确认 / 移动四个弹窗，文案差异经 @Prop，"新建文件夹并移入"按 `enableNewFolder` 开关）；Panel **-325 行**、RootView **-380 行**（2815→2435），弹窗输入/选中/展开态下沉组件（挂载即重置，等价旧"打开前清空"）
-  - [ ] **③ 合并方向对齐（设计决策，动工前须与用户确认）**：两侧数据源不同（`Chat[]` vs `ChatSessionListItem[]`），且 RootView 独有拖拽重排/左滑操作/归档导入导出；「单组件 + 布局模式参数」需先定数据源归属与这些能力的去留
+- [x] **P1-4 会话列表去重**（2026-09-27 完成，以"删除死 UI"收官）：
+  - [x] **① 共享纯函数与常量**（commit `8ff588e`）：新增 `utils/SessionListCollapseState`（key + parse/serialize + 折叠判定/切换纯函数），原先三处重复实现收口
+  - [x] **② 共享分组弹窗**（commit `958b43b` / `a1d2a5d`）：新增 `components/SessionGroupDialogs`（四个分组弹窗），RootView 迁移后 **-380 行**（2815→2435）
+  - [x] **③ 覆盖层面板删除**（commit `020dd05` / `b8500bb` / `7983170`）：核实 `ChatSessionListPanel` 为**不可达死 UI**（`showSessionList` 仅由无调用者的 `openSessionList()` 置真；顶栏无汉堡、更多菜单无入口，旧注释与实现脱节）→ 删除面板整文件 + ChatPage 引用/折叠持久化 + ChatViewModel 的 T-4.5 会话列表与分组 API（含 `refreshSessions`/`createNewSession`/删除确认三方法/`canOperateSessions` 等），**合计 ≈ -1069 行**；会话切换统一走首页"对话记录"Tab
+  - 说明：原计划的"数据换源 + overlay 精简 + 单组件（mode 参数）"因面板不可达而**不再执行**；`SessionGroupDialogs` / `SessionListCollapseState` 保留（Tab 使用），将来若恢复"聊天页内切会话"即以此二者为基座
 - [x] **P1-6 不可变性修复**（2026-09-27 完成）：`deleteMessage` / `editNarratorMessage` / `editAssistantMessage` 改为新数组整体替换；复核后**未补 `emitMessages`**——刷新契约由 ChatViewModel 承担（`[...getMessages()]` + `onMessagesUpdate`），补发会改变通知行为、超范围
 
 ## 3. 环境事实（防重复踩坑）
@@ -40,14 +41,12 @@
 ## 4. 待用户确认 / 关注
 
 - **真机冒烟验证**：P1-2 主链路改动 + P1-3 前三个组件已通过真机冒烟（用户确认无问题）；`ChatAppearancePanel`（显示设置：滑块/配色模式/自定义色/色盘/恢复默认）与 `ChatStatusWorldPanel`（世界书条目启停/展开、AI 入口与两种模式、变更预览应用与取消、刷新激活）待真机冒烟。若发现问题：告知功能名即可，按 commit 精确回滚（P1-2：a0c3a11 / 9456dc2 / a4511ac / c78caf5 / 0cd508f）
-- **P1-5 两项待真机冒烟**（编译已过，行为按"不改行为"标准改造）：
-  1. 角色卡前端界面（commit `d44797b`）：全屏页（FrontendCardPage）与聊天页面板两种入口打开；页面内 getState/setState/getCharacter/getMessages/send/appendInteraction/close 均可用；面板收起/展开无白屏
-  2. 会话列表面板（commit `726efec`）：打开/关闭（含遮罩点击）、加载态、切换会话、新建对话、删除确认（含生成中置灰）、分组新建/重命名/删除、移动会话到分组/不分组、分组折叠状态重启后保持、错误提示（sessionError 横幅）
-  - 回滚锚点：`d44797b`（CardFrontendWeb）/ `726efec`（ChatSessionListPanel）；两项均隔离在各自 commit，可单独回滚
-- **P1-4 低风险相待真机冒烟**（共享弹窗涉及两侧入口，建议一并冒烟）：
-  1. 聊天页会话列表面板（`958b43b`）：分组新建（空名拒绝）/重命名/删除（仅解除关联）/移动会话（含"不分组"）/折叠状态重启保持
-  2. 对话记录 Tab（`a1d2a5d`）：以上相同项 + "新建文件夹并移入"（空名拒绝、操作中置灰）+ 左滑"分组"入口
-  - 回滚锚点：`8ff588e`（折叠纯函数）/ `958b43b`（面板）/ `a1d2a5d`（Tab）；三个 commit 相互独立可单独回滚（注：`958b43b` 依赖 `8ff588e` 与 SharedDialogs 新增文件，回滚需成组）
+- **待真机冒烟（当前有效两项）**：
+  1. 角色卡前端界面（commit `d44797b`，P1-5）：全屏页（FrontendCardPage）与聊天页面板两种入口打开；页面内 getState/setState/getCharacter/getMessages/send/appendInteraction/close 均可用；面板收起/展开无白屏
+  2. 对话记录 Tab 分组弹窗（commit `8ff588e` + `a1d2a5d`，P1-4 ①②）：分组新建（空名拒绝）/重命名/删除（仅解除关联）/移动会话（含"不分组"）/"新建文件夹并移入"（空名拒绝、操作中置灰）/左滑"分组"入口/折叠状态重启后保持
+  - 回滚锚点：`d44797b`（CardFrontendWeb）/ `a1d2a5d`（Tab 弹窗迁移，依赖 `8ff588e` 与 SessionGroupDialogs，回滚需成组）
+- **已作废冒烟项**（相关代码已删除）：会话列表面板（`726efec` / `958b43b` 的面板侧）——面板与 ChatViewModel 会话列表 API 已随 P1-4 ③ 删除，不必再测
+- **需回归确认**（删除相影响面）：聊天页正常打开/发送/停止/重生成；更多菜单"新建章节(切换开场白)"创建后提示与当前会话不变；从"对话记录"Tab 点会话进入聊天页仍能切到指定会话（`pendingChatId` → `selectSession` 路径未动，但 `refreshSessions` 已移除，建议确认切换后列表/消息正常）
 - `APK-reference/`（约 100MB 反编译参考资料）暂保留，未清理
 - pages 直连具体服务（17 个文件，最重 ChatPage）属"务实偏差"，治理口径待定（见审计报告 §3）
 - P2/P3/P4 的启动时机以用户节奏为准
@@ -59,4 +58,5 @@
 | 2026-09-27 | 审计 + 文档体系重建 | 审计报告与路线图；`AGENTS.md` + `docs/handover/` 建立；`tools/`、开发截图、旧文档归档清理；决策：交接文档进版本库 |
 | 2026-09-27 | P1 批次执行 | P1-1 ✅；P1-2 重复逻辑消除 ✅；P1-6 不可变性 ✅；**真机冒烟通过（用户确认无问题）**；P1-3：ChatForkPicker ✅ / ChatMessageList ✅ / ChatInputArea ✅ / ChatAppearancePanel ✅ / ChatStatusWorldPanel ✅（**P1-3 收官，ChatPage 5949→4898 行**）；每步编译通过 |
 | 2026-09-27 | P1-5 组件越层修复 | `CardFrontendWeb`/`CardFrontendBridge` 改宿主契约 `FrontendCardHost` ✅（d44797b）；`ChatSessionListPanel` 去 `ChatViewModel`/`AppServices`，改 @Prop + 回调、折叠持久化上提 ChatPage ✅（726efec）；组件层仅剩 `ChatStatusWorldPanel` 一处类型引用；每步编译通过；P1-4 已写分相建议（待对齐合并方向） |
-| 2026-09-27 | P1-4 低风险相 | ① `utils/SessionListCollapseState` 折叠纯函数收口三处重复 ✅（8ff588e）；② `components/SessionGroupDialogs` 四个分组弹窗共享，面板迁移 ✅（958b43b，-325 行）；③ 对话记录 Tab 迁移 ✅（a1d2a5d，-380 行，2815→2435）；每步编译通过（共享弹窗 0 告警）；剩余：合并方向为设计决策，待用户对齐 |
+| 2026-09-27 | P1-4 低风险相 | ① `utils/SessionListCollapseState` 折叠纯函数收口三处重复 ✅（8ff588e）；② `components/SessionGroupDialogs` 四个分组弹窗共享，面板迁移 ✅（958b43b）；③ 对话记录 Tab 迁移 ✅（a1d2a5d，-380 行，2815→2435）；每步编译通过 |
+| 2026-09-27 | P1-4 收官（删除死 UI） | 核实 `ChatSessionListPanel` 不可达（入口早已收敛到"对话记录"Tab）→ 经用户确认改为删除：ChatPage 引用摘除（020dd05）→ 面板整文件（b8500bb）→ ChatViewModel T-4.5 会话列表/分组 API（7983170），合计 **≈-1069 行**；原"数据换源 + overlay + 单组件(mode)"方案作废；`SessionGroupDialogs`/`SessionListCollapseState` 保留给 Tab；每步编译通过 |
