@@ -34,7 +34,13 @@
   - 装配：3 服务构造注入；宿主 `ChatStatusHost` 8 个回调（含 `setCurrentChat` 回写宿主缓存）；类内同名 getter/setter/方法转发 → 搬运代码零改写；ChatService 留 14 个薄包装（8 个公开 API + 6 个内部私有），调用点不变
   - 偏差记录：6 个原 private 方法因跨类调用改为 public（方法体未动）；`finalizeAssistantTurn` 中 flag 复位改走 `resetFieldGenerationRequest()`（1 行调用点）；日志 tag 改为 `ChatStatusService`
   - **ChatService 5,273 → 4,740 行**（P2 累计 6,735 → 4,740，-1,995）
-- [ ] **P2-4 `ChatSwipeController`**（中高）：~L5468-5858
+- [x] **P2-4 `ChatSwipeController`**（中高，commit `4bd6998` / `9c21aa1` / `5ac6bb8`）：
+  1. `9c21aa1` 前置：`ChatGenerationKind` + `ActiveGenerationContext` 迁入新增 `models/ChatGenerationContext.ets`（逐字搬出；`interface` 改为 `export interface`，全仓仅 ChatService 引用）
+  2. `4bd6998`（P2-4a）：新增 `services/ChatSwipeController.ets` —— 浏览/切换族 **151 行逐字搬出**（getSwipeSummaries / getSwipeSummary / canOperateSwipe / doActivateCandidate / activatePrevious / activateNext / activateCandidateIndex / getSummaryForMessage）
+  3. `5ac6bb8`（P2-4b-2）：生成族 **176 行逐字搬出**（generateAlternativeCandidate + replaceAssistantMessageInFullHistory）
+  - 装配：Swipe 会话状态**仍由 ChatService 持有**（与流式核心强耦合，不随迁）；宿主 `ChatSwipeHost` 29 个回调（读 getter + 写 setter + `doStream` 委托，流式核心未动）；类内同名 getter/setter/方法转发 → 搬运代码零改写；ChatService 留 7 个薄包装（6 公开 + 1 私有），调用点不变
+  - 偏差记录：`getSummaryForMessage` 因跨类调用改为 public（方法体未动）；日志 tag 改为 `ChatSwipeController`；`MAX_SWIPE_CANDIDATES` / `MessageSwipeState` 导入随迁
+  - **ChatService 4,740 → 4,484 行**（P2 累计 6,735 → 4,484，-2,251）
 - [ ] **P2-5 Branch 门面**（中）：先搬纯判定与查询（~L5865-6160）
 - [ ] 「聊天主路径冒烟清单」：发送/流式/停止 → 重生成 → 分支切换 → Swipe → 旁白 → 代写 → 记忆生成/查看 → 世界书注入 → 会话增删切换 → 归档导出导入 → 深浅色
 
@@ -88,6 +94,12 @@
   3. 主线发送后：AI 回复中的状态块被解析合并（锁字段不动、未声明字段丢弃）；schema 为空时状态入口不出现
   4. 会话切换/新建后状态随会话切换（statusConfigJson 同步）
   - 回滚锚点：`56e559f`
+- **P2-4 待冒烟（Swipe 全族，"搬运不改行为"）**：
+  1. 候选切换：上一条/下一条/指定索引（开场白选择）切换后内容与摘要同步刷新、会话列表不置顶（仅 updatedAt）
+  2. 重新生成：达到候选上限时的提示（"该回复已达到候选数量上限"）；创建候选失败的提示；生成期间与 Swipe 操作互斥
+  3. 多开场白（alternate_greetings）：新建章节后首条消息可切换候选
+  4. 生成完成后摘要箭头状态复位（isGeneratingCandidate）；候选切换后记忆失效逻辑不报错
+  - 回滚锚点：`5ac6bb8`（P2-4b-2）/ `9c21aa1`（类型迁出）/ `4bd6998`（P2-4a）
 - **已作废冒烟项**（相关代码已删除）：会话列表面板（`726efec` / `958b43b` 的面板侧）——面板与 ChatViewModel 会话列表 API 已随 P1-4 ③ 删除，不必再测
 - **需回归确认**（删除相影响面）：聊天页正常打开/发送/停止/重生成；更多菜单"新建章节(切换开场白)"创建后提示与当前会话不变；从"对话记录"Tab 点会话进入聊天页仍能切到指定会话（`pendingChatId` → `selectSession` 路径未动，但 `refreshSessions` 已移除，建议确认切换后列表/消息正常）
 - `APK-reference/`（约 100MB 反编译参考资料）暂保留，未清理
@@ -106,3 +118,4 @@
 | 2026-09-27 | P2-1 开工（ChatService 瘦身） | ① 契约常量 + 文本纯函数下沉 `ChatTextContract` ✅（64b0c4e，-285 行，5 处外部导入改路径）；② 请求计划抽离 `ChatRequestPlan` ✅（702d3db，五分支语义对齐）；③ `ChatRequestBuilder` 抽取 ✅（8e0ad06，6 方法 615 行逐字搬运 byte 级比对一致）；**ChatService 6,735 → 5,781 行（P2-1 合计 -954）**；装配范式确立：构造注入 + 函数属性宿主回调 + 同名转发（零改写） |
 | 2026-09-27 | P2-2 开工（ChatService 瘦身） | ① `ChatState` / `ChatServiceCallbacks` 迁入 `models/ChatServiceContract` ✅（bac896d，2 处引用改路径）；② `ChatOneShotGenerator` 抽取 ✅（ad5d0aa，6 方法 513 行逐字搬运 byte 级一致 + `AutoContinueTurn` 随迁，宿主回调扩展 **setter 写入面**）；**ChatService 5,781 → 5,273 行**；每步编译通过；待用户真机冒烟 |
 | 2026-09-27 | P2-3 开工（ChatService 瘦身） | `ChatStatusService` 抽取 ✅（56e559f，5 状态字段 + 6 纯函数 + 597 行逐字搬运 byte 级一致；6 处可见性调整、1 处调用点改写（flag 复位走 `resetFieldGenerationRequest`）已记录）；**ChatService 5,273 → 4,740 行**；编译通过；待用户真机冒烟 |
+| 2026-09-27 | P2-4 开工（ChatService 瘦身） | ① `ChatGenerationKind`/`ActiveGenerationContext` 迁入 `models/ChatGenerationContext` ✅（9c21aa1）；② `ChatSwipeController` 浏览/切换族 ✅（4bd6998，151 行逐字一致）；③ 生成族迁入 ✅（5ac6bb8，176 行逐字一致，宿主含 `doStream` 委托；流式核心未动）；**ChatService 4,740 → 4,484 行**；每步编译通过；待用户真机冒烟 |
