@@ -133,21 +133,23 @@
 
 **只读测绘**：L1-502 import（仅 1 个来源 `./DatabaseConstants`，490 行常量）；L504-2577 DDL 常量 + `Vxx_SCHEMA_STATEMENTS`/`Vxx_TO_Vyy` 数组；L2579-2713 `getSchemaStatements`（44 段 if）；L2715+ `getCreateTableStatements`/`getCreateIndexStatements`；**纯数据 + 纯函数，无 ArkData 依赖**（可 host 侧验证）
 
-- [x] **① V38→39 / V39→40 版本映射疑点 — 只读核查结论** ✅（**未改任何代码**）：
+- [x] **① V38→39 / V39→40 版本映射疑点 — 只读核查 + 最小修正** ✅（核查只读；修正经用户拍板后落地，见末条）：
   - **迁移并不缺失**：38→39 / 39→40 的迁移**存在且完整**于 `database/DatabaseMigration.ets`——`V38ToV39Migration`（cleans 存量超大 `extensions_json`，数据迁移）、`V39ToV40Migration`（`ALTER characters` 补 Tavern V3 独有列，`V39_TO_V40_DDL_STATEMENTS` L1311）、`V40ToV41Migration`（`ALTER lorebooks` 补 activation_mode/injection_budget）。**版本连续、无 DROP、只增不改** ✅
   - **疑点确认为「schema 快照映射不准」而非「迁移缺失」**：[DatabaseSchema.ets L2694](`getSchemaStatements`) 将 `39 / 40 / 41 / 42` 四个版本**合并返回 `V42_SCHEMA_STATEMENTS`**；而语义上 `getSchemaStatements(v)` 应返回「到 v 为止的完整建库语句」（见 v1/v2 分支：v2 = v1 + v1→v2）。对 v39/v40/v41 返回 v42 快照，会**多出 v42 才引入的 `chats.world_id` / `chat_memories.world_id` 两列与两个 world 索引**；且 `V39_SCHEMA_STATEMENTS` / `V40_SCHEMA_STATEMENTS` **从未定义**（仅定义了 `V41_SCHEMA_STATEMENTS = [...V38_SCHEMA_STATEMENTS]`），疑为 39–42 分支被"就便"归并
   - **实际影响 = 0（潜伏不一致，非活跃缺陷）**：全仓 `getSchemaStatements` **仅 1 处调用**（`DbHelper.createFreshSchema` → `getSchemaStatements(DATABASE_VERSION)`，即 **47**）；无任何调用方/测试传 39/40/41；故该分支**生产不可达**
-  - **建议（等拍板，不擅自改）**：改为 `39/40/41 → V41_SCHEMA_STATEMENTS`、`42 → V42_SCHEMA_STATEMENTS`（或补 `V39/V40_SCHEMA_STATEMENTS`）。因当前不可达，**本批次不改**；如需修，另开单独 commit 并做逐版 DDL 对比
+  - **修正已落地（用户拍板"最小修正"）**：注册表改为 `39/40/41 → V41_SCHEMA_STATEMENTS`、`42 → V42_SCHEMA_STATEMENTS`（后者未动）。依据：v39 为纯数据清洗（无 DDL），v40/v41 补的列**已并入 `CREATE_CHARACTERS_TABLE` / `CREATE_LOREBOOKS_TABLE` 常量**，故三者的完整建库语句本就等于 v38 链（= `V41_SCHEMA_STATEMENTS`）
+  - 校验（逐版 DDL 对比）：**仅 v39/40/41 变化**（171 → 168 条，即由 v42 快照变回 v38 链）；**v1..v38 与 v42..v47 逐字节不变**；建表 37 / 索引 119 不变；修正后 `v38 == v39 == v40 == v41`、`v41 != v42`；v47 仍 176 条。**这三版不再纳入"逐版不变"验收口径（属预期变更）**，其余 44 版仍逐字节一致
+  - 纪律：本次**未改任何迁移内容**（`DatabaseMigration.ets` 零改动），仅修正"新装快照"的版本归属；`DATABASE_VERSION` 仍 47
 - [x] **② DDL 常量按域拆文件** ✅：新增 `entry/src/main/ets/database/schema/` 7 个域文件（共 **1,744 行**）：`SchemaCore`（227）/ `SchemaLorebook`（114）/ `SchemaPresets`（66）/ `SchemaSwipe`（58）/ `SchemaBranch`（85）/ `SchemaMemory`（106）/ `SchemaWorld`（1,088，废弃沙盒表集中于此）
   - **搬出内容**：全部 **188 个非导出 DDL 常量**（CREATE_*/ALTER_*），逐字搬出后统一补 `export`（跨模块引用所需，等价于 P2 的 private→public 可见性调整，**DDL 文本零改动**）
   - **保留在 DatabaseSchema**：全部 `export` 常量（V1..V47 版本数组、别名导出）+ 3 个函数 → **2,879 → 1,516 行（-1,363，-47.3%）**；import 块由 490 行（≈489 名）缩至 **57 名**
   - 分类规则：`CREATE_CHAT_MEMORIES_*`/`INDEX_CHATS_WORLD_ID`→Memory；characters/chats/messages 及 ALTER→Core；lorebook/pins/sticky→Lorebook；prompts/personas→Presets；swipe→Swipe；branch→Branch；`CREATE_/INDEX_WORLD*`+`GROUP*`+`ALTER_WORLD*`→World；**分类后无 UNCLASSIFIED**；域间**零交叉依赖**（无循环 import 风险）
   - 校验：Node 验证夹具（临时，仓外）解析 `getSchemaStatements(1..47)` + `getCreateTableStatements()` + `getCreateIndexStatements()` 全量字符串，**改造前后逐字节 DIFF = 0**（v1=7 / v38=168 / v42=171 / v47=176 / 表 37 / 索引 119）；`DatabaseMigration.ets` 仅从 DatabaseSchema 取 V* 数组（导出未动）→ 无破坏
   - 编译 BUILD SUCCESSFUL；单测 **96/96**
-- [x] **③ `getSchemaStatements` 逐版 if 链 → Registry** ✅：44 段 if 链改写为 `SCHEMA_BY_VERSION: Map<number, string[]>`（47 条 `set`，1..47 全覆盖；**39/40/41/42 → V42 的归并语义原样保留**，见 ① 结论），`getSchemaStatements` 变 4 行查表 + 浅拷贝（未知版本仍返回 `[]`）
+- [x] **③ `getSchemaStatements` 逐版 if 链 → Registry** ✅：44 段 if 链改写为 `SCHEMA_BY_VERSION: Map<number, string[]>`（47 条 `set`，1..47 全覆盖；39/40/41 的归并语义在 ③ 时原样保留，**随后按 ① 的"最小修正"拆开**），`getSchemaStatements` 变 4 行查表 + 浅拷贝（未知版本仍返回 `[]`）
   - 校验：`getSchemaStatements(1..47)` + 建表/索引全量字符串 **逐字节 DIFF = 0**；**导出声明面 99 → 99 零差异**；编译 BUILD SUCCESSFUL；单测 **96/96**；**DatabaseSchema 1,516 → 1,443 行**
 - **P3-3 收官**：DatabaseSchema **2,879 → 1,443 行（-1,436，-49.9%）**；新增 `database/schema/` 7 个域文件（1,744 行）；①②③ 各自独立 commit；三个接缝均以「逐版 DDL 逐字节一致」为准入
-  - **待拍板（未改）**：① 的 39/40/41 版本映射潜伏不一致（生产不可达）
+  - **① 的 39/40/41 版本映射潜伏不一致已按"最小修正"落地**（用户拍板；仅 v39/40/41 输出变化，属预期）；迁移与 `DATABASE_VERSION` 未动
 
 ### P3-4 治理口径（**只出方案，本批次未落地**，待拍板）
 

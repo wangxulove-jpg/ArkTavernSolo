@@ -1214,9 +1214,14 @@ export const V47_SCHEMA_STATEMENTS: string[] = [
 ];
 
 /**
- * 版本 → 完整建库语句注册表(P3-3③:逐版 if 链改写为 Registry,逐版输出 100% 一致)。
+ * 版本 → 完整建库语句注册表(P3-3③:逐版 if 链改写为 Registry)。
  * 每个条目代表"从空库建到该版本"的完整语句序列;取值时统一返回浅拷贝。
- * 注:v39/v40/v41 与 v42 归并的语义保持不变(见 P3-3① 只读核查结论,本批次不修改)。
+ *
+ * v39/v40/v41 的取值说明(P3-3 修正,经用户拍板):
+ * - v39 为纯数据清洗(无 DDL);v40 给 characters 补列、v41 给 lorebooks 补列,
+ *   这两批列均已并入 CREATE_CHARACTERS_TABLE / CREATE_LOREBOOKS_TABLE 常量,
+ *   故三者的完整建库语句等于 v38 链,即 V41_SCHEMA_STATEMENTS。
+ * - 修正前三者被并到 V42_SCHEMA_STATEMENTS(会多出 v42 才引入的 world_id 列与索引)。
  */
 const SCHEMA_BY_VERSION: Map<number, string[]> = new Map<number, string[]>();
 SCHEMA_BY_VERSION.set(1, VERSION_1_STATEMENTS);
@@ -1257,9 +1262,9 @@ SCHEMA_BY_VERSION.set(35, V35_SCHEMA_STATEMENTS);
 SCHEMA_BY_VERSION.set(36, V36_SCHEMA_STATEMENTS);
 SCHEMA_BY_VERSION.set(37, V37_SCHEMA_STATEMENTS);
 SCHEMA_BY_VERSION.set(38, V38_SCHEMA_STATEMENTS);
-SCHEMA_BY_VERSION.set(39, V42_SCHEMA_STATEMENTS);
-SCHEMA_BY_VERSION.set(40, V42_SCHEMA_STATEMENTS);
-SCHEMA_BY_VERSION.set(41, V42_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(39, V41_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(40, V41_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(41, V41_SCHEMA_STATEMENTS);
 SCHEMA_BY_VERSION.set(42, V42_SCHEMA_STATEMENTS);
 SCHEMA_BY_VERSION.set(43, V43_SCHEMA_STATEMENTS);
 SCHEMA_BY_VERSION.set(44, V44_SCHEMA_STATEMENTS);
