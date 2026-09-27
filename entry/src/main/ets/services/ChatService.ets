@@ -5487,6 +5487,34 @@ export class ChatService {
   }
 
   /**
+   * 候选激活公共执行块:互斥锁 + 持久化切换 + reload + 时间戳 + 记忆失效 + 通知。
+   * activatePreviousCandidate / activateNextCandidate / activateCandidateIndex 共用;
+   * 调用方已完成 canOperateSwipe / isBusy / 索引合法性校验。
+   */
+  private async doActivateCandidate(assistantMessageId: string, targetIndex: number): Promise<void> {
+    if (this.swipePersistenceService === null || this.currentChatId === undefined) {
+      return;
+    }
+    this.swipeOperationInProgress = true;
+    try {
+      await this.swipePersistenceService.activateCandidate(assistantMessageId, targetIndex);
+      // 重新加载 messages
+      await this.reloadCurrentSession();
+      // 重新加载 summaries
+      this.swipeSummaries = await this.swipePersistenceService.listSwipeSummariesByChatId(this.currentChatId);
+      this.updateLastAssistantMessageId();
+      // 仅更新 updatedAt,不修改 lastMessageAt
+      this.persistChatTimestamp();
+      // v12: 切换候选后,失效该 Assistant position 之后的记忆(内容已变化,旧摘要可能不准确)
+      // 失败不阻塞,只记录 warn
+      this.invalidateMemoryFromMessagePosition(assistantMessageId);
+      this.emitMessages(this.lastCallbacks);
+    } finally {
+      this.swipeOperationInProgress = false;
+    }
+  }
+
+  /**
    * 激活前一个候选。
    * T-6.3: 与生成 / session op / 其他 swipe 操作互斥(swipeOperationInProgress)。
    * 仅更新 updatedAt(不修改 lastMessageAt),避免会话反复置顶。
@@ -5510,23 +5538,7 @@ export class ChatService {
     if (newIndex < 0) {
       return;
     }
-    this.swipeOperationInProgress = true;
-    try {
-      await this.swipePersistenceService.activateCandidate(assistantMessageId, newIndex);
-      // 重新加载 messages
-      await this.reloadCurrentSession();
-      // 重新加载 summaries
-      this.swipeSummaries = await this.swipePersistenceService.listSwipeSummariesByChatId(this.currentChatId);
-      this.updateLastAssistantMessageId();
-      // 仅更新 updatedAt,不修改 lastMessageAt
-      this.persistChatTimestamp();
-      // v12: 切换候选后,失效该 Assistant position 之后的记忆(内容已变化,旧摘要可能不准确)
-      // 失败不阻塞,只记录 warn
-      this.invalidateMemoryFromMessagePosition(assistantMessageId);
-      this.emitMessages(this.lastCallbacks);
-    } finally {
-      this.swipeOperationInProgress = false;
-    }
+    await this.doActivateCandidate(assistantMessageId, newIndex);
   }
 
   /**
@@ -5553,23 +5565,7 @@ export class ChatService {
     if (newIndex >= summary.candidateCount) {
       return;
     }
-    this.swipeOperationInProgress = true;
-    try {
-      await this.swipePersistenceService.activateCandidate(assistantMessageId, newIndex);
-      // 重新加载 messages
-      await this.reloadCurrentSession();
-      // 重新加载 summaries
-      this.swipeSummaries = await this.swipePersistenceService.listSwipeSummariesByChatId(this.currentChatId);
-      this.updateLastAssistantMessageId();
-      // 仅更新 updatedAt,不修改 lastMessageAt
-      this.persistChatTimestamp();
-      // v12: 切换候选后,失效该 Assistant position 之后的记忆(内容已变化,旧摘要可能不准确)
-      // 失败不阻塞,只记录 warn
-      this.invalidateMemoryFromMessagePosition(assistantMessageId);
-      this.emitMessages(this.lastCallbacks);
-    } finally {
-      this.swipeOperationInProgress = false;
-    }
+    await this.doActivateCandidate(assistantMessageId, newIndex);
   }
 
   /**
@@ -5597,22 +5593,7 @@ export class ChatService {
     if (target === summary.activeCandidateIndex) {
       return;
     }
-    this.swipeOperationInProgress = true;
-    try {
-      await this.swipePersistenceService.activateCandidate(assistantMessageId, target);
-      // 重新加载 messages
-      await this.reloadCurrentSession();
-      // 重新加载 summaries
-      this.swipeSummaries = await this.swipePersistenceService.listSwipeSummariesByChatId(this.currentChatId);
-      this.updateLastAssistantMessageId();
-      // 仅更新 updatedAt,不修改 lastMessageAt
-      this.persistChatTimestamp();
-      // v12: 切换候选后,失效该 Assistant position 之后的记忆
-      this.invalidateMemoryFromMessagePosition(assistantMessageId);
-      this.emitMessages(this.lastCallbacks);
-    } finally {
-      this.swipeOperationInProgress = false;
-    }
+    await this.doActivateCandidate(assistantMessageId, target);
   }
 
   /**
