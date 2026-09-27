@@ -97,6 +97,7 @@
 
 ## 4. 待用户确认 / 关注
 
+- **冒烟节奏（2026-09-27 用户决定）**：真机冒烟**统一在 P3 批次末期一次性进行**（当前不便实机操作）；下方 P2-9 与 P2-10..P2-14 各冒烟清单保持待办，回滚锚点继续有效。host 侧验证已在当前 HEAD（`f1c54ed`）复跑：编译 BUILD SUCCESSFUL + 单测 **96/96 全通过**；P2 批次按"约束内收官"处理，千行级与实机验收待用户后续拍板
 - **真机冒烟验证**：P1-2 主链路改动 + P1-3 前三个组件已通过真机冒烟（用户确认无问题）；`ChatAppearancePanel`（显示设置：滑块/配色模式/自定义色/色盘/恢复默认）与 `ChatStatusWorldPanel`（世界书条目启停/展开、AI 入口与两种模式、变更预览应用与取消、刷新激活）待真机冒烟。若发现问题：告知功能名即可，按 commit 精确回滚（P1-2：a0c3a11 / 9456dc2 / a4511ac / c78caf5 / 0cd508f）
 - **待真机冒烟（当前有效两项）**：
   1. 角色卡前端界面（commit `d44797b`，P1-5）：全屏页（FrontendCardPage）与聊天页面板两种入口打开；页面内 getState/setState/getCharacter/getMessages/send/appendInteraction/close 均可用；面板收起/展开无白屏
