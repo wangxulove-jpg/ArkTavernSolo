@@ -2412,22 +2412,11 @@ export class ChatService {
       this.markAssistant(this.currentAssistantId, ChatMessageStatus.Cancelled, undefined, undefined);
       this.emitMessages(this.lastCallbacks);
       // 持久化最终 Cancelled 状态,完成后才清理上下文
-      this.persistFinalAssistant(this.currentAssistantId).then((): void => {
-        // Swipe 候选处理:更新摘要生成标志
-        if (ctx !== null && ctx.kind === ChatGenerationKind.SwipeCandidate) {
-          this.updateSwipeSummaryGeneratingFlag(false);
-        }
-        // 更新 Chat 活跃时间(完成一次新生成)
-        this.persistChatActivity();
-        // 持久化后才清理活动上下文
-        this.clearActiveGeneration(expectedOperationId);
-        this.currentAssistantId = null;
-        this.setState(ChatState.Cancelled, this.lastCallbacks);
-      }).catch((_e: Object): void => {
-        this.clearActiveGeneration(expectedOperationId);
-        this.currentAssistantId = null;
-        this.setState(ChatState.Cancelled, this.lastCallbacks);
-      });
+      this.persistFinalAndCleanup(
+        this.currentAssistantId, expectedOperationId,
+        ctx !== null ? ctx.kind : null,
+        ChatState.Cancelled, this.lastCallbacks, null, true
+      );
     }
   }
 
@@ -3715,24 +3704,10 @@ export class ChatService {
       this.currentAssistantId = null;
       Logger.warn(LOG_TAG, 'GenerationFinal | kind=' + context.kind + ' stage=callback_start_failure');
       // 持久化最终 Failed 状态,完成后才清理上下文
-      this.persistFinalAssistant(assistantId).then((): void => {
-        Logger.warn(LOG_TAG, 'GenerationFinal | kind=' + context.kind + ' stage=message_failed_persisted');
-        Logger.warn(LOG_TAG, 'generation finalized status=failed');
-        // Swipe:更新摘要生成标志
-        if (context.kind === ChatGenerationKind.SwipeCandidate) {
-          this.updateSwipeSummaryGeneratingFlag(false);
-        }
-        // 更新 Chat 活跃时间
-        this.persistChatActivity();
-        // 清理活动上下文(仅当仍是本次 operationId)
-        this.clearActiveGeneration(operationId);
-        this.setState(ChatState.Failed, callbacks);
-        callbacks.onError(errorMessage);
-      }).catch((_e: Object): void => {
-        this.clearActiveGeneration(operationId);
-        this.setState(ChatState.Failed, callbacks);
-        callbacks.onError(errorMessage);
-      });
+      this.persistFinalAndCleanup(
+        assistantId, operationId, context.kind,
+        ChatState.Failed, callbacks, errorMessage, false
+      );
     };
 
     const streamCallbacks: ChatStreamCallbacks = {
@@ -3798,27 +3773,15 @@ export class ChatService {
         );
         this.currentAssistantId = null;
         Logger.warn(LOG_TAG, 'GenerationFinal | kind=' + context.kind + ' stage=callback_error');
+        if (context.kind === ChatGenerationKind.SwipeCandidate) {
+          Logger.warn(LOG_TAG, 'Regenerate | failed');
+        }
+        Logger.warn(LOG_TAG, 'stream failed: ' + error.message);
         // 持久化最终 Failed 状态,完成后才清理上下文
-        this.persistFinalAssistant(assistantId).then((): void => {
-          Logger.warn(LOG_TAG, 'GenerationFinal | kind=' + context.kind + ' stage=message_failed_persisted');
-          Logger.warn(LOG_TAG, 'generation finalized status=failed');
-          // Swipe:更新摘要生成标志
-          if (context.kind === ChatGenerationKind.SwipeCandidate) {
-            Logger.warn(LOG_TAG, 'Regenerate | failed');
-            this.updateSwipeSummaryGeneratingFlag(false);
-          }
-          // 更新 Chat 活跃时间
-          this.persistChatActivity();
-          // 清理活动上下文
-          this.clearActiveGeneration(operationId);
-          this.setState(ChatState.Failed, callbacks);
-          callbacks.onError(error.message);
-          Logger.warn(LOG_TAG, 'stream failed: ' + error.message);
-        }).catch((_e: Object): void => {
-          this.clearActiveGeneration(operationId);
-          this.setState(ChatState.Failed, callbacks);
-          callbacks.onError(error.message);
-        });
+        this.persistFinalAndCleanup(
+          assistantId, operationId, context.kind,
+          ChatState.Failed, callbacks, error.message, false
+        );
       }
     };
 
@@ -5008,25 +4971,57 @@ export class ChatService {
       this.currentAssistantId = null;
       Logger.warn(LOG_TAG, 'GenerationFinal | kind=' + context.kind + ' stage=callback_start_timeout');
       // 持久化最终 Failed 状态,完成后才清理上下文
-      this.persistFinalAssistant(assistantId).then((): void => {
-        Logger.warn(LOG_TAG, 'GenerationFinal | kind=' + context.kind + ' stage=message_failed_persisted');
-        Logger.warn(LOG_TAG, 'generation finalized status=failed');
-        // Swipe:更新摘要生成标志
-        if (context.kind === ChatGenerationKind.SwipeCandidate) {
-          this.updateSwipeSummaryGeneratingFlag(false);
-        }
-        // 更新 Chat 活跃时间
-        this.persistChatActivity();
-        // 清理活动上下文
-        this.clearActiveGeneration(context.operationId);
-        this.setState(ChatState.Failed, callbacks);
-        callbacks.onError('请求启动超时,请重试');
-      }).catch((_e: Object): void => {
-        this.clearActiveGeneration(context.operationId);
-        this.setState(ChatState.Failed, callbacks);
-        callbacks.onError('请求启动超时,请重试');
-      });
+      this.persistFinalAndCleanup(
+        assistantId, context.operationId, context.kind,
+        ChatState.Failed, callbacks, '请求启动超时,请重试', false
+      );
     }, START_TIMEOUT_MS);
+  }
+
+  /**
+   * 生成收尾公共尾部:持久化最终状态 → Swipe 标志 → 活跃时间 → 清理上下文 → 置终态 → 通知。
+   * 供失败路径(handleStartFailure / onError / startStartTimer)与取消路径(stopGeneration)共用。
+   * @param kind SwipeCandidate 时同步摘要生成标志;null 表示无活动上下文(stop 的 ctx 为空场景)。
+   * @param errorMessage 非 null 表示失败路径(打失败日志并回调 onError);null 表示取消路径。
+   * @param clearAssistantIdAfterPersist 是否在持久化完成后清空 currentAssistantId
+   *        (stopGeneration 为 true;失败路径已在调用前清空,传 false 保持原时序)。
+   */
+  private persistFinalAndCleanup(
+    assistantId: string | null,
+    operationId: number,
+    kind: ChatGenerationKind | null,
+    finalState: ChatState,
+    callbacks: ChatServiceCallbacks | null,
+    errorMessage: string | null,
+    clearAssistantIdAfterPersist: boolean
+  ): void {
+    this.persistFinalAssistant(assistantId).then((): void => {
+      if (errorMessage !== null) {
+        Logger.warn(LOG_TAG, 'GenerationFinal | kind=' + kind + ' stage=message_failed_persisted');
+        Logger.warn(LOG_TAG, 'generation finalized status=failed');
+      }
+      if (kind === ChatGenerationKind.SwipeCandidate) {
+        this.updateSwipeSummaryGeneratingFlag(false);
+      }
+      this.persistChatActivity();
+      this.clearActiveGeneration(operationId);
+      if (clearAssistantIdAfterPersist) {
+        this.currentAssistantId = null;
+      }
+      this.setState(finalState, callbacks);
+      if (errorMessage !== null && callbacks !== null) {
+        callbacks.onError(errorMessage);
+      }
+    }).catch((_e: Object): void => {
+      this.clearActiveGeneration(operationId);
+      if (clearAssistantIdAfterPersist) {
+        this.currentAssistantId = null;
+      }
+      this.setState(finalState, callbacks);
+      if (errorMessage !== null && callbacks !== null) {
+        callbacks.onError(errorMessage);
+      }
+    });
   }
 
   private clearStartTimer(): void {
