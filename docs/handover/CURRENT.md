@@ -149,6 +149,40 @@
 - **P3-3 收官**：DatabaseSchema **2,879 → 1,443 行（-1,436，-49.9%）**；新增 `database/schema/` 7 个域文件（1,744 行）；①②③ 各自独立 commit；三个接缝均以「逐版 DDL 逐字节一致」为准入
   - **待拍板（未改）**：① 的 39/40/41 版本映射潜伏不一致（生产不可达）
 
+### P3-4 治理口径（**只出方案，本批次未落地**，待拍板）
+
+> 依据：本轮只读统计（`pages/` × `services/` 导入扫描、`DbHelper` 调用点扫描）。
+> 结论：**主干分层成立**，偏差集中在两类边界；建议**先定口径、分批治理**，不整体重构。
+
+#### (a) pages → services 分级治理
+
+现状（27 个页面文件）：**仅 11 个**只依赖 `AppServices`（组合根，架构允许）；其余 16 个直接 import 具体服务；另有若干仅 import **常量/纯函数/类型**（`ChatTextContract`、`ChapterMemoryIndexer`、`MemoryService` 常量、`ChatMemoryMode`/`AiLorebookMode`/`ChatBackgroundConfig`/`DeepSeekBalanceInfo`/`SyncResult`/`ReasoningEffort`/`CharacterBookRef`）。
+
+| 级别 | 判定 | 页面 | 处置建议 |
+|---|---|---|---|
+| **T1 允许** | 仅 `AppServices.getXxx()` + 纯常量/纯函数/纯类型 | AddCharacter / BranchMap / CharacterList / Index / LorebookSourceEditor / ModelSettings / PersonaList / PromptPresetEdit / PromptPresetList / WorldMemory / ContinueGuide（仅常量） | **冻结为规范**（写入 AGENTS §3 白名单） |
+| **T2 应治理** | 直接 import 具体服务类并调用 | AiCardRevise / AiCharacterMaker / AiCharacterPreview（ModelService、AiCharacterGenerationService）；CharacterEdit / PersonaEdit（PersonaService）；TtsSettings（Tts/EdgeTts）；SyncSettings（WebDavSyncService）；MarketDetail（MarketImportService）；ChatBackgroundSettings（ChatBackgroundService）；ContextBudget（ContextBudgetSnapshotStore/Estimator）；MemoryManagement / WorldChapterList / WorldMemoryDetail（MemoryService） | **按页面逐个补/并 VM**（一次一页，行为等价）；优先「已有 VM 或逻辑较重」者：MemoryManagement、ContextBudget、WorldMemory*、Persona/CharacterEdit |
+| **T3 已登记偏差（冻结）** | `ChatPage`（~8 服务）、`LorebookPage`（LorebookService/CharacterService/CharacterRepository） | — | **不动**；仅在触碰相关功能时顺带上提，禁止扩散 |
+
+**口径建议**：T1 白名单化；T2 作为 P4 候选（每页独立 commit + 冒烟）；T3 保持登记、不新增同类偏差（**新增页面一律走 VM**）。
+
+#### (b) services → DbHelper / persistence 口径
+
+现状：**已存在事实上的两层持久化**——
+1. **Repository 层**（21 文件）：单表 CRUD + 行映射，多数方法接受可选 `store`（事务内复用，如 `...WithStore(store, ...)`）
+2. **PersistenceService 层**：跨表事务编排，统一经 `dbHelper.runInTransaction(fn)`
+
+`DbHelper` 真实对外面 = `initialize` / `getStore` / `getVersion` / `runInTransaction` / `getTransactionDepth` / `isInTransaction` / `isInitialized` / `close`。
+直接引用 `DbHelper` 的**服务**共 6 个：`ForkChatService`、`ChatArchiveImportService`、`ChatPersistenceService`、`sync/SyncDataExporter`、`sync/SyncDataImporter`、`sync/WebDavSyncService`（+ 组合根 `AppServices`，属允许）。另 `ConversationBranchPersistenceService`/`MemoryPersistenceService`/`MessageSwipePersistenceService` 会 `getStore()` 取裸 store 传给 Repository。
+
+| 选项 | 做法 | 收益 | 成本/风险 | 建议 |
+|---|---|---|---|---|
+| **A 正式化现状** | 承认「Repository + PersistenceService」为正式口径；抽 `TransactionCoordinator`（只暴露 `runInTransaction` / `runWithStore`，不泄露 `RdbStore`），服务不再直连 `DbHelper` | 口径清晰、边界可测、DbHelper 仅 2 处引用 | 中（6 处 import + 1 接口；事务语义须逐处核对） | **推荐（P4）** |
+| **B 补 Repository** | 把跨表事务完全下沉 Repository（每表补 `WithStore` + 组合方法） | services 完全不碰 store | 高（fork/归档/同步等事务编排与业务强耦合，易过度设计） | 不推荐 |
+| **C 仅止血** | 不改造，规定「services 不得新增 `DbHelper` 引用；新跨表事务一律走现有 PersistenceService」 | 零成本、立即生效 | 现状偏差保留 | **可接受的最小方案** |
+
+**口径建议**：先落 **C**（即刻生效的约束）+ 将 **A** 列入 P4（ROI 最高、可一次性收口）；**B 不做**。
+
 ## 3. 环境事实（防重复踩坑）
 
 - SDK：`D:\DevEco_studio\DevEco Studio\sdk`（6.1.1；`D:\DevEco_studio\Sdk` 是旧版 6.0.2，会报 00303312）
@@ -223,6 +257,12 @@
   3. 触发阈值（③）：长会话达到阈值自动触发章节/rolling 总结的时机不变（日志 tag 现为 `MemoryTriggerPolicy`）
   4. 死代码删除回归：无 UI 入口（`getPersistence`/`invalidateFromPosition`/`softInvalidateFromPosition` 均无调用方）；确认"重新生成/Swipe 切换后记忆软失效"仍走 `softInvalidateCoveringPosition`（未动）
   - 回滚锚点：`7ebc2e1`（P3-2①）/ `bfb1114`（P3-2②）/ ③+死代码（各自独立）
+- **P3-3 待冒烟（数据库层，**重点**）**：
+  1. 全新安装（清数据后首启）：建库成功、`user_version=47`、聊天/角色/世界书/记忆/Swipe/分支各表可用（对应 `createFreshSchema` → `getSchemaStatements(47)`）
+  2. 既有库启动（低版本升级）：逐版迁移链跑通（含 38→39 数据清洗、39→40 characters 补列、40→41 lorebooks 补列、41→42 world_id 补列、43→44 正则/扫描深度、44→45 pins、45→46 sticky、46→47 anchors）；升级后旧数据可读、无 `schema failed`
+  3. 启动幂等：非首次启动走 `ensureSchemaExists`（仅 CREATE IF NOT EXISTS，不执行 ALTER）无报错
+  4. 回归：聊天主链路（发送/流式/重生成/Swipe/分支）与记忆、世界书读写正常
+  - 回滚锚点：`2ad376d`（P3-3② 域拆分）/ `71dd42a`（P3-3③ Registry，各自独立）
 - **本轮附加验证（2026-09-27，host 侧）**：本地单元测试套件已在本机执行通过 —— `hvigorw test`（`entry/src/test`，16 个测试类 / **96 用例全部 Success，0 失败 0 忽略**；结果落盘 `entry/.test/default/intermediates/test/coverage_data/test_result.txt`）。覆盖：ChatTextContract 纯函数（前端交互缓冲 / 粘滞提醒文本 / 状态段拆分 —— P2-1、P2-3 搬运过的纯函数）、PromptSegment 段序、状态 schema 解析、世界书激活与粘滞服务、ChapterMemoryIndexer、MemoryLoadRefService、ContextBudgetEstimator、Lorebook 模式、Gemini 模型过滤、前端契约 v2；**不含**会话 / Swipe / 分支 / 流式簇（依赖 DB/网络，只能真机冒烟）。命令：`hvigorw test --mode module -p module=entry@default -p product=default -p buildMode=debug --no-daemon`
 - **API 面等价校验（2026-09-27，机械对比）**：以 tag `refactor-baseline` 为基准，抽取 ChatService 全部非 private 声明（方法 / 访问器）逐行对比 → 修复后 **89 项签名与基线完全一致**（含 `async` 修饰符）。过程中发现并修复 1 处搬运残留：`refreshLorebookPinNow` 的 `async` 修饰符在 P2-7 薄包装时丢失（调用侧行为等价，但签名不同）→ 已恢复（commit `36d809c`，编译通过）。新模块分层抽查：`ChatSessionService` / `ChatMessageSender` / `ChatUserIdentityService` 无 viewmodels / pages / components 越层导入
 - **已作废冒烟项**（相关代码已删除）：会话列表面板（`726efec` / `958b43b` 的面板侧）——面板与 ChatViewModel 会话列表 API 已随 P1-4 ③ 删除，不必再测
