@@ -26,10 +26,9 @@ import { ChatMemoryMode } from '../services/ChatMemoryModeService';
 import { ChatMessage, ChatMessageStatus } from '../models/ChatMessage';
 import { ChatRole } from '../models/ChatRole';
 import { ChatStatusState, ChatStatusEntry } from '../models/ChatStatusState';
-import { LorebookEntry } from '../models/Lorebook';
-import { AiLorebookChangeSet, AiLorebookAdd, AiLorebookUpdate, AiLorebookDelete } from '../models/LorebookAiTypes';
+import { AiLorebookChangeSet } from '../models/LorebookAiTypes';
 import { AiLorebookMode } from '../services/ai/AiLorebookService';
-import { LorebookPanelBook, LorebookPanelData } from '../viewmodels/ChatViewModel';
+import { LorebookPanelData } from '../viewmodels/ChatViewModel';
 import { ChatMessageSource } from '../models/ChatMessageSource';
 import { ChatMessageRenderState } from '../models/ChatMessageRenderState';
 import { MessageSwipeSummary, MAX_SWIPE_CANDIDATES } from '../models/MessageSwipe';
@@ -44,6 +43,7 @@ import { ChatForkPicker } from '../components/ChatForkPicker';
 import { ChatMessageList } from '../components/ChatMessageList';
 import { ChatInputArea } from '../components/ChatInputArea';
 import { ChatAppearancePanel, CustomColorTarget, ColorPickerRequest } from '../components/ChatAppearancePanel';
+import { ChatStatusWorldPanel } from '../components/ChatStatusWorldPanel';
 import { promptAction, router, window, mediaquery, display } from '@kit.ArkUI';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { common } from '@kit.AbilityKit';
@@ -325,10 +325,6 @@ struct ChatPage {
   @State aiMode: string = 'worldbook';
   /** 待确认的世界书变更集(非空时显示预览) */
   @State pendingChangeSet: AiLorebookChangeSet | null = null;
-  /** 变更预览中展开中的提案项 key(点击展开/收起关键词与内容) */
-  @State expandedAiPreviewKey: string = '';
-  /** 世界书条目展开中的 ID(点击展开/收起内容) */
-  @State expandedEntryId: string = '';
   /** 世界书面板展示数据(由 viewModel.lorebookPanelData 同步) */
   @State lorebookPanelData: LorebookPanelData | null = null;
   /** 世界书面板刷新版本号(每次同步递增,强制 ForEach 重建,解决条目更新后不刷新) */
@@ -2227,471 +2223,54 @@ struct ChatPage {
 
   // ===== CHAT-STATUS-1A / T-7.x: 状态/世界书滑动面板 =====
 
+  /**
+   * 状态/世界书面板(供 bindSheet 使用)。
+   * 渲染与交互全部在 ChatStatusWorldPanel 内(纯搬运);状态与业务动作仍由本页持有:
+   * - 双向:@Link(面板可见性 / AI 入口 / AI 指令输入)
+   * - 业务动作:回调上抛本页方法(manualRefreshLorebookActivated / runAiAction / applyPendingChanges /
+   *   viewModel.toggleLorebookEntryEnabled)
+   */
   @Builder
   statusWorldSheetContent() {
-    Column() {
-      // 顶部栏:标题 + AI 入口 + 关闭
-      this.worldbookHeader()
-
-      // AI 操作区(置于顶部,键盘弹出时不会被遮挡)
-      this.aiActionArea()
-
-      // 世界书内容(单页,无 Swiper)
-      this.worldbookPageContent()
-
-      // 世界书变更预览(确认/取消)
-      this.aiPreviewArea()
-    }
-    .width('100%')
-    .padding({ left: 14, right: 14, top: 12, bottom: 12 })
-  }
-
-  @Builder
-  worldbookHeader() {
-    Row() {
-      Text('世界书')
-        .fontSize(15)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-      Blank()
-
-      // AI 入口(低调透明)
-      Row() {
-        Text('✦')
-          .fontSize(12)
-          .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-        Text('AI')
-          .fontSize(11)
-          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-          .margin({ left: 4 })
-      }
-      .height(28)
-      .padding({ left: 10, right: 10 })
-      .borderRadius(14)
-      .backgroundColor(this.aiEntryVisible ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.07)')
-      .opacity(this.aiEntryVisible ? 0.9 : 0.6)
-      .onClick(() => {
-        this.aiEntryVisible = !this.aiEntryVisible;
-        if (!this.aiEntryVisible) {
-          this.pendingChangeSet = null;
-        }
-      })
-      .key('chat.world.ai')
-
-      // 手动刷新激活内容(按需锁定模式):切换开场白/章节后重新匹配并锁定
-      Row() {
-        Text('↻')
-          .fontSize(12)
-          .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-        Text('刷新激活')
-          .fontSize(11)
-          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-          .margin({ left: 4 })
-      }
-      .height(28)
-      .padding({ left: 10, right: 10 })
-      .borderRadius(14)
-      .backgroundColor('rgba(255,255,255,0.07)')
-      .onClick(() => {
+    ChatStatusWorldPanel({
+      effectiveTheme: this.effectiveTheme,
+      statusPanelVisible: this.statusPanelVisible,
+      aiEntryVisible: this.aiEntryVisible,
+      aiPromptText: this.aiPromptText,
+      aiMode: this.aiMode,
+      aiLoading: this.aiLoading,
+      pendingChangeSet: this.pendingChangeSet,
+      lorebookPanelData: this.lorebookPanelData,
+      lorebookPanelVersion: this.lorebookPanelVersion,
+      onClearPendingChanges: (): void => {
+        this.pendingChangeSet = null;
+      },
+      onRefreshActivated: (): void => {
         this.manualRefreshLorebookActivated();
-      })
-      .key('chat.world.refresh')
-
-      Text('✕')
-        .fontSize(13)
-        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-        .opacity(0.7)
-        .margin({ left: 12 })
-        .onClick(() => {
-          this.statusPanelVisible = false;
-          this.aiEntryVisible = false;
-          this.pendingChangeSet = null;
-        })
-        .key('chat.world.close')
-    }
-    .width('100%')
-    .margin({ bottom: 6 })
-  }
-
-  @Builder
-  worldbookPageContent() {
-    Scroll() {
-      Column() {
-        if (this.lorebookPanelData === null) {
-          Text('暂无世界书，点击上方 AI 可从近期对话提取设定')
-            .fontSize(13)
-            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-            .width('100%')
-            .padding({ top: 12, bottom: 12 })
-        } else {
-          ForEach(this.lorebookPanelData!.books, (book: LorebookPanelBook) => {
-            this.worldBookGroupRow(book)
-          }, (book: LorebookPanelBook) =>
-            book.lorebookId + '|' + String(this.lorebookPanelVersion))
-        }
-      }
-      .width('100%')
-      .padding({ bottom: 8 })
-    }
-    .width('100%')
-      // layoutWeight 占满顶部栏/AI 区之后的剩余高度:条目只在面板内滚动,
-      // 不会把内容顶出圆角背景框以外。
-      .layoutWeight(1)
-      .scrollBar(BarState.Auto)
-      .edgeEffect(EdgeEffect.Spring)
-  }
-
-  @Builder
-  worldBookGroupRow(book: LorebookPanelBook) {
-    Column() {
-      Text((book.isCharacterBook ? '角色专属 · ' : '全局 · ') + (book.name.length > 0 ? book.name : '世界书'))
-        .fontSize(12)
-        .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-        .width('100%')
-        .margin({ top: 6, bottom: 4 })
-      if (book.entries.length === 0) {
-        Text('(无条目)')
-          .fontSize(12)
-          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-          .width('100%')
-          .padding({ top: 2, bottom: 2 })
-      } else {
-        ForEach(book.entries, (entry: LorebookEntry) => {
-          this.worldBookEntryRow(book, entry)
-        }, (entry: LorebookEntry) =>
-          entry.id + '|' + String(this.lorebookPanelVersion))
-      }
-    }
-    .width('100%')
-  }
-
-  @Builder
-  worldBookEntryRow(book: LorebookPanelBook, entry: LorebookEntry) {
-    Column() {
-      Row() {
-        Text(entry.name)
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-          .layoutWeight(1)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text(entry.constant ? '恒定' : '')
-          .fontSize(10)
-          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-          .opacity(0.7)
-          .margin({ right: 8 })
-        Text(entry.enabled ? '启用' : '停用')
-          .fontSize(10)
-          .fontColor(entry.enabled
-            ? ThemePalette.textPrimaryColor(this.effectiveTheme)
-            : ThemePalette.textTertiaryColor(this.effectiveTheme))
-          .opacity(entry.enabled ? 0.9 : 0.5)
-          .onClick(() => {
-            if (this.viewModel !== null) {
-              this.viewModel!.toggleLorebookEntryEnabled(
-                book.lorebookId, entry.id, !entry.enabled
-              ).then((): void => {
-                this.syncLorebookPanelData();
-              }).catch((): void => {
-              });
-            }
-          })
-          .key('chat.world.entry.' + entry.id + '.toggle')
-      }
-      .width('100%')
-
-      if (entry.keys.length > 0) {
-        Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
-          ForEach(entry.keys, (key: string) => {
-            Text(key)
-              .fontSize(10)
-              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-              .backgroundColor('rgba(255,255,255,0.06)')
-              .borderRadius(8)
-              .padding({ left: 8, right: 8, top: 2, bottom: 2 })
-              .margin({ right: 6, top: 4 })
-          }, (key: string) => key)
-        }
-        .width('100%')
-      }
-
-      Text(entry.content)
-        .fontSize(12)
-        .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-        .width('100%')
-        .maxLines(this.expandedEntryId === entry.id ? 100 : 3)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .onClick(() => {
-          this.expandedEntryId = this.expandedEntryId === entry.id ? '' : entry.id;
-        })
-        .margin({ top: 4 })
-    }
-    .width('100%')
-    .padding({ left: 8, right: 8, top: 6, bottom: 6 })
-    .borderRadius(10)
-    .backgroundColor('rgba(255,255,255,0.04)')
-    .margin({ top: 4 })
-  }
-
-  @Builder
-  aiActionArea() {
-    if (this.aiEntryVisible) {
-      Column() {
-        Row() {
-          this.aiModeChip('修改世界书', 'worldbook')
-          this.aiModeChip('提取角色/地点', 'extract')
-        }
-        .width('100%')
-        .margin({ top: 6 })
-
-        Row() {
-          TextInput({
-            placeholder: this.aiMode === 'worldbook'
-              ? '如：新增角色 张三，酒馆老板'
-              : '自动提取近期对话中的新角色/地点',
-            text: this.aiPromptText
-          })
-            .layoutWeight(1)
-            .height(32)
-            .fontSize(12)
-            .onChange((value: string) => {
-              this.aiPromptText = value;
-            })
-          Text(this.aiLoading ? '处理中…' : '执行')
-            .fontSize(12)
-            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-            .opacity(this.aiLoading ? 0.4 : 1)
-            .margin({ left: 12 })
-            .onClick(() => {
-              this.runAiAction();
-            })
-            .key('chat.world.ai.run')
-        }
-        .width('100%')
-        .margin({ top: 8 })
-      }
-      .width('100%')
-    }
-  }
-
-  @Builder
-  aiModeChip(label: string, mode: string) {
-    Text(label)
-      .fontSize(11)
-      .fontColor(this.aiMode === mode
-        ? ThemePalette.accentColor(this.effectiveTheme)
-        : ThemePalette.textSecondaryColor(this.effectiveTheme))
-      .backgroundColor(this.aiMode === mode ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.04)')
-      .borderRadius(12)
-      .padding({ left: 10, right: 10, top: 4, bottom: 4 })
-      .margin({ right: 8 })
-      .onClick(() => {
+      },
+      onSelectAiMode: (mode: string): void => {
         this.aiMode = mode;
         this.pendingChangeSet = null;
         if (mode === 'extract') {
           this.runAiExtract();
         }
-      })
-      .key('chat.world.mode.' + mode)
-  }
-
-  @Builder
-  aiPreviewArea() {
-    if (this.pendingChangeSet !== null) {
-      Column() {
-        Text('变更预览')
-          .fontSize(12)
-          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-          .width('100%')
-          .margin({ bottom: 4 })
-
-        if (this.pendingChangeSet!.adds.length === 0
-          && this.pendingChangeSet!.updates.length === 0
-          && this.pendingChangeSet!.deletes.length === 0) {
-          Text('未识别到需要变更的内容')
-            .fontSize(11)
-            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-            .width('100%')
-        } else {
-          Scroll() {
-            Column() {
-              ForEach(this.pendingChangeSet!.adds, (a: AiLorebookAdd, index: number) => {
-                this.aiPreviewAddRow(a, index)
-              }, (a: AiLorebookAdd, index: number) => 'add-' + a.lorebookId + '-' + a.name + '-' + String(index))
-              ForEach(this.pendingChangeSet!.updates, (u: AiLorebookUpdate, index: number) => {
-                this.aiPreviewUpdateRow(u, index)
-              }, (u: AiLorebookUpdate, index: number) => 'upd-' + u.lorebookId + '-' + u.entryId + '-' + String(index))
-              ForEach(this.pendingChangeSet!.deletes, (d: AiLorebookDelete, index: number) => {
-                Row() {
-                  Text('删除')
-                    .fontSize(10)
-                    .fontColor($r('app.color.app_danger'))
-                  Text(d.entryId)
-                    .fontSize(11)
-                    .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-                    .layoutWeight(1)
-                    .margin({ left: 6 })
-                    .maxLines(1)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
-                }
-                .width('100%')
-                .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-                .backgroundColor('rgba(255,255,255,0.04)')
-                .borderRadius(8)
-                .margin({ top: 4 })
-              }, (d: AiLorebookDelete, index: number) => 'del-' + d.lorebookId + '-' + d.entryId + '-' + String(index))
-            }
-            .width('100%')
-          }
-          .width('100%')
-          .constraintSize({ maxHeight: 140 })
-          .scrollBar(BarState.Auto)
-          .edgeEffect(EdgeEffect.Spring)
+      },
+      onRunAiAction: (): void => {
+        this.runAiAction();
+      },
+      onApplyPendingChanges: (): void => {
+        this.applyPendingChanges();
+      },
+      onToggleEntryEnabled: (lorebookId: string, entryId: string, enabled: boolean): void => {
+        if (this.viewModel !== null) {
+          this.viewModel!.toggleLorebookEntryEnabled(lorebookId, entryId, enabled).then((): void => {
+            this.syncLorebookPanelData();
+          }).catch((): void => {
+          });
         }
-
-        Row() {
-          Text('应用')
-            .fontSize(12)
-            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-            .onClick(() => {
-              this.applyPendingChanges();
-            })
-            .key('chat.world.apply')
-          Blank()
-          Text('取消')
-            .fontSize(12)
-            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-            .onClick(() => {
-              this.pendingChangeSet = null;
-            })
-            .key('chat.world.cancel')
-        }
-        .width('100%')
-        .margin({ top: 8 })
       }
-      .width('100%')
-      .padding({ top: 8, bottom: 4 })
-      .border({ width: 0.5, color: ThemePalette.surface2Color(this.effectiveTheme) })
-      .borderRadius(10)
-      .margin({ top: 8 })
-    }
-  }
-
-  /** 变更预览:新增条目行(点击展开关键词与内容,便于确认前审阅)。 */
-  @Builder
-  aiPreviewAddRow(a: AiLorebookAdd, index: number) {
-    Column() {
-      Row() {
-        Text('新增')
-          .fontSize(10)
-          .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-        Text(a.name)
-          .fontSize(11)
-          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-          .layoutWeight(1)
-          .margin({ left: 6 })
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text(this.expandedAiPreviewKey === 'add-' + String(index) ? '收起' : '展开')
-          .fontSize(10)
-          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-          .opacity(0.8)
-      }
-      .width('100%')
-
-      if (this.expandedAiPreviewKey === 'add-' + String(index)) {
-        // 关键词
-        if (a.keys.length > 0) {
-          Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
-            ForEach(a.keys, (k: string) => {
-              Text(k)
-                .fontSize(10)
-                .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-                .backgroundColor('rgba(255,255,255,0.06)')
-                .borderRadius(8)
-                .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-                .margin({ right: 5, top: 4 })
-            }, (k: string) => k)
-          }
-          .width('100%')
-        }
-        // 内容
-        Text(a.content)
-          .fontSize(11)
-          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-          .width('100%')
-          .margin({ top: 4 })
-      }
-    }
-    .width('100%')
-    .padding({ left: 8, right: 8, top: 5, bottom: 5 })
-    .backgroundColor('rgba(255,255,255,0.04)')
-    .borderRadius(8)
-    .margin({ top: 4 })
-    .onClick(() => {
-      const k: string = 'add-' + String(index);
-      this.expandedAiPreviewKey = this.expandedAiPreviewKey === k ? '' : k;
     })
   }
-
-  /** 变更预览:修改条目行(点击展开被修改的字段与内容)。 */
-  @Builder
-  aiPreviewUpdateRow(u: AiLorebookUpdate, index: number) {
-    Column() {
-      Row() {
-        Text('修改')
-          .fontSize(10)
-          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-        Text(u.name !== undefined ? u.name : u.entryId)
-          .fontSize(11)
-          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-          .layoutWeight(1)
-          .margin({ left: 6 })
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text(this.expandedAiPreviewKey === 'upd-' + String(index) ? '收起' : '展开')
-          .fontSize(10)
-          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-          .opacity(0.8)
-      }
-      .width('100%')
-
-      if (this.expandedAiPreviewKey === 'upd-' + String(index)) {
-        if (u.name !== undefined) {
-          Text('名称：' + u.name)
-            .fontSize(11)
-            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-            .width('100%')
-            .margin({ top: 4 })
-        }
-        if (u.content !== undefined && u.content.length > 0) {
-          Text(u.content)
-            .fontSize(11)
-            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-            .width('100%')
-            .margin({ top: 4 })
-        } else if (u.name === undefined) {
-          Text('（未提供具体字段，请直接应用）')
-            .fontSize(11)
-            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-            .width('100%')
-            .margin({ top: 4 })
-        }
-      }
-    }
-    .width('100%')
-    .padding({ left: 8, right: 8, top: 5, bottom: 5 })
-    .backgroundColor('rgba(255,255,255,0.04)')
-    .borderRadius(8)
-    .margin({ top: 4 })
-    .onClick(() => {
-      const k: string = 'upd-' + String(index);
-      this.expandedAiPreviewKey = this.expandedAiPreviewKey === k ? '' : k;
-    })
-  }
-
-  // ===== T-7.x: 世界书面板逻辑 =====
 
   // ===== 角色状态管理面板逻辑(CHAT-STATUS-1B) =====
 
