@@ -18,7 +18,7 @@
 
 - [x] **P1-1 死代码清理**（2026-09-27 完成）：删除 `findLastAssistantIndex`（ChatService）；删除 `getEffectiveMemory` / `getInjectionContext` 及 `MemoryInjectionContext` 类型（MemoryService）；`trySummarize` 复核为 rolling 回退路径（被 `tryGenerateMultiLayerMemory` 调用）保留；关联注释 2 处同步修正；编译 BUILD SUCCESSFUL
 - [x] **P1-2 ChatService 重复逻辑消除**（2026-09-27 完成）：Swipe 三方法 → `doActivateCandidate`；失败收尾 4 处 → `persistFinalAndCleanup`；锚点插入两处 → `applyAnchoredInserts`；状态一次性请求两处 → `runStatusOneShotStream`；每步编译通过
-- [ ] **P1-3 ChatPage 组件抽取**（逐个，纯搬运不改行为）：`ChatMessageList`（messageList, L3456, ≈160 行）/ `ChatInputArea`（inputArea, L3808, ≈160 行）/ `ChatAppearancePanel`（appearanceSheetContent, L2732, ≈360 行）/ `ChatStatusWorldPanel`（L2104-2453）/ `ChatForkPicker`（L5623, ≈80 行）
+- [ ] **P1-3 ChatPage 组件抽取**（逐个，纯搬运不改行为）：✅ `ChatForkPicker` 已抽取（components/ChatForkPicker.ets，2026-09-27，ChatPage 减 82 行）；⬜ `ChatMessageList`（messageList, ≈160 行）/ `ChatInputArea`（inputArea, ≈160 行）/ `ChatAppearancePanel`（appearanceSheetContent, ≈360 行）/ `ChatStatusWorldPanel`（≈350 行）
 - [ ] **P1-4 会话列表去重**：`ChatSessionRootView` ↔ `ChatSessionListPanel` 近乎全量重复，合并为单组件 + 布局参数
 - [ ] **P1-5 组件越层修复**：`CardFrontendWeb`（L23）、`ChatSessionListPanel`（L25/L30）对 ChatViewModel / AppServices 的直接依赖
 - [x] **P1-6 不可变性修复**（2026-09-27 完成）：`deleteMessage` / `editNarratorMessage` / `editAssistantMessage` 改为新数组整体替换；复核后**未补 `emitMessages`**——刷新契约由 ChatViewModel 承担（`[...getMessages()]` + `onMessagesUpdate`），补发会改变通知行为、超范围

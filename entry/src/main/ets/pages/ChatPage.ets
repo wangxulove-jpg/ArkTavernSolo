@@ -42,6 +42,7 @@ import { ChatMessageActionSheet, MessageAction } from '../components/ChatMessage
 import { ChatMoreMenuSheet } from '../components/ChatMoreMenuSheet';
 import { CharacterImageView } from '../components/CharacterImageView';
 import { ColorWheelPicker } from '../components/ColorWheelPicker';
+import { ChatForkPicker } from '../components/ChatForkPicker';
 import { promptAction, router, window, mediaquery, display } from '@kit.ArkUI';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { common } from '@kit.AbilityKit';
@@ -1295,7 +1296,16 @@ struct ChatPage {
 
         // Fork 模式选择弹窗
         if (this.showForkModePicker) {
-          this.forkModePickerDialog()
+          ChatForkPicker({
+            effectiveTheme: this.effectiveTheme,
+            onPick: (fullHistory: boolean): void => {
+              this.showForkModePicker = false;
+              void this.executeForkChat(this.forkTargetMessageId, fullHistory);
+            },
+            onCancel: (): void => {
+              this.showForkModePicker = false;
+            }
+          })
         }
 
         // 色盘选择器覆盖层(自定义 Markdown 文字颜色)
@@ -5617,87 +5627,6 @@ struct ChatPage {
     }
     this.forkTargetMessageId = messageId;
     this.showForkModePicker = true;
-  }
-
-  @Builder
-  forkModePickerDialog() {
-    Stack() {
-      Column() {
-        Text('从此处创建独立对话')
-          .fontSize(18)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-          .margin({ top: 20, bottom: 8 })
-
-        Text('选择新会话的初始内容范围,新会话与原会话后续完全独立。')
-          .fontSize(13)
-          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-          .lineHeight(20)
-          .margin({ left: 16, right: 16, bottom: 12 })
-
-        Divider().color(ThemePalette.dividerColor(this.effectiveTheme))
-
-        // 携带完整历史
-        Column() {
-          Text('携带完整历史')
-            .fontSize(15)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .margin({ top: 12, bottom: 4 })
-          Text('复制从根到当前消息的全部历史与记忆')
-            .fontSize(12)
-            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-        }
-        .width('100%')
-        .alignItems(HorizontalAlign.Center)
-        .padding({ top: 8, bottom: 12 })
-        .onClick(() => {
-          this.showForkModePicker = false;
-          void this.executeForkChat(this.forkTargetMessageId, true);
-        })
-
-        Divider().color(ThemePalette.dividerColor(this.effectiveTheme))
-
-        // 只携带记忆
-        Column() {
-          Text('只携带记忆')
-            .fontSize(15)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .margin({ top: 12, bottom: 4 })
-          Text('不复制旧消息,仅继承记忆摘要 + 最近 2 条消息')
-            .fontSize(12)
-            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-        }
-        .width('100%')
-        .alignItems(HorizontalAlign.Center)
-        .padding({ top: 8, bottom: 12 })
-        .onClick(() => {
-          this.showForkModePicker = false;
-          void this.executeForkChat(this.forkTargetMessageId, false);
-        })
-
-        Divider().color(ThemePalette.dividerColor(this.effectiveTheme))
-
-        // 取消
-        Text('取消')
-          .fontSize(15)
-          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-          .width('100%')
-          .textAlign(TextAlign.Center)
-          .padding({ top: 14, bottom: 14 })
-          .onClick(() => {
-            this.showForkModePicker = false;
-          })
-      }
-      .width('80%')
-      .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
-      .borderRadius(12)
-    }
-    .width('100%')
-    .height('100%')
-    .backgroundColor('rgba(0,0,0,0.5)')
-    .onClick(() => {
-      this.showForkModePicker = false;
-    })
   }
 
   private async executeForkChat(
