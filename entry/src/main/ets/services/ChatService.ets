@@ -105,9 +105,6 @@ import {
 } from './PromptPresetRuntimeResolver';
 import { PromptPreset } from '../models/PromptPreset';
 import { Persona } from '../models/Persona';
-import { AppServices } from './AppServices';
-import { WorldGroupService } from './WorldGroupService';
-import { WorldGroup } from '../models/WorldGroup';
 import { generateUuid } from '../utils/Uuid';
 import { Logger } from '../utils/Logger';
 import { planRequest, RequestPlanDeps, RequestPlanResult } from './ChatRequestPlan';
@@ -120,8 +117,8 @@ import { ChatMessageService, ChatMessageDeps, ChatMessageHost } from './ChatMess
 import { ChatContextMaintenanceService, ChatContextDeps, ChatContextHost } from './ChatContextMaintenanceService';
 import { ChatSessionService, ChatSessionDeps, ChatSessionHost } from './ChatSessionService';
 import { ChatMessageSender, ChatSendDeps, ChatSendHost } from './ChatMessageSender';
+import { ChatUserIdentityService, ChatUserIdentityDeps, ChatUserIdentityHost } from './ChatUserIdentityService';
 import {
-  GLOBAL_USER_NAME_KEY,
   LOREBOOK_ACTIVATION_DEFAULT_PREFS_KEY,
   LOREBOOK_INJECTION_DEPTH_PREFS_KEY,
   MEMORY_KEYWORD_RETRIEVAL_PREFS_KEY,
@@ -138,10 +135,6 @@ const LOG_TAG: string = 'ChatService';
 
 /** 启动阶段超时(毫秒),收到首个 onStart/onDelta/onComplete/onError 后清除 */
 const START_TIMEOUT_MS: number = 15000;
-
-/** 默认用户名(本阶段固定值,后续可扩展为用户设置) */
-const DEFAULT_USER_NAME: string = 'User';
-
 
 /** delta 持久化节流间隔(毫秒) */
 const PERSISTENCE_THROTTLE_MS: number = 400;
@@ -298,6 +291,8 @@ export class ChatService {
   private readonly sessionService: ChatSessionService;
   /** 消息发起入口(P2-10:自本类抽离,状态仍在本类,经宿主回调读写) */
   private readonly messageSender: ChatMessageSender;
+  /** 用户称呼与 Persona(P2-11:自本类抽离,状态仍在本类,经宿主回调读写) */
+  private readonly userIdentityService: ChatUserIdentityService;
 
   constructor(
     modelService: ModelService,
@@ -745,6 +740,20 @@ export class ChatService {
       stopGeneration: (): void => this.stopGeneration()
     };
     this.messageSender = new ChatMessageSender(sendDeps, sendHost);
+
+    const identityDeps: ChatUserIdentityDeps = {
+      persistenceService: this.persistenceService,
+      appPreferences: this.appPreferences
+    };
+    const identityHost: ChatUserIdentityHost = {
+      getCurrentChat: (): Chat | null => this.currentChat,
+      setCurrentChat: (chat: Chat | null): void => {
+        this.currentChat = chat;
+      },
+      getCurrentChatId: (): string | undefined => this.currentChatId,
+      getCharacter: (): Character | null => this.character
+    };
+    this.userIdentityService = new ChatUserIdentityService(identityDeps, identityHost);
   }
 
   /** 初始化角色聊天上下文(无持久化版本;委托 ChatSessionService)。 */
@@ -790,129 +799,34 @@ export class ChatService {
     return this.sessionService.createChapter(greetingIndex);
   }
 
-  /**
-   * 解析当前生效的用户称呼。
-   *
-   * 优先级(v9 引入):
-   * 1. 当前会话 userNameOverride 非空 -> 使用对话级覆盖
-   * 2. 当前角色 userName 非空 -> 使用角色专属称呼
-   * 3. AppPreferences 中 global_user_name 非空 -> 使用全局用户称呼
-   * 4. 以上均空 -> 回退到 'User'
-   *
-   * AppPreferences 不可用或读取失败时静默回退到 DEFAULT_USER_NAME。
-   *
-   * @returns 当前生效的用户称呼
-   */
+  /** 解析当前生效的用户称呼(委托 ChatUserIdentityService)。 */
   async resolveUserName(): Promise<string> {
-    // 1. 对话级覆盖
-    if (this.currentChat !== null && this.currentChat.userNameOverride.trim().length > 0) {
-      return this.currentChat.userNameOverride.trim();
-    }
-    // 2. 角色专属称呼
-    if (this.character !== null && this.character.userName.trim().length > 0) {
-      return this.character.userName.trim();
-    }
-    // 3. Persona.name(有效身份名称)
-    const persona: Persona | null = await this.resolveEffectivePersona();
-    if (persona !== null && persona.name.trim().length > 0) {
-      return persona.name.trim();
-    }
-    // 4. 全局用户称呼
-    if (this.appPreferences !== null) {
-      try {
-        const globalName: string = await this.appPreferences.getString(GLOBAL_USER_NAME_KEY, '');
-        if (globalName.trim().length > 0) {
-          return globalName.trim();
-        }
-      } catch (e) {
-        Logger.warn(LOG_TAG, 'resolveUserName: read global failed: '
-          + (e instanceof Error ? e.message : String(e)));
-      }
-    }
-    // 5. 默认 'User'
-    return DEFAULT_USER_NAME;
+    return this.userIdentityService.resolveUserName();
   }
 
-  /**
-   * 更新当前会话的对话级用户称呼覆盖。
-   * - 传入非空字符串:写入并 trim
-   * - 传入 null 或空字符串:清空覆盖(回退到角色或全局)
-   *
-   * 持久化通过 ChatPersistenceService.updateUserNameOverride 完成。
-   * 内存中的 currentChat 同步更新。
-   *
-   * @param override 新的覆盖值(null 或空字符串表示清空)
-   * @returns 更新后的 Chat 对象(无当前会话时返回 null)
-   * @throws Error 当无 persistenceService 或会话不存在时
-   */
+  /** 更新当前会话的对话级用户称呼覆盖(委托 ChatUserIdentityService)。 */
   async updateCurrentChatUserNameOverride(override: string | null): Promise<Chat | null> {
-    if (this.persistenceService === null) {
-      throw new Error('persistenceService unavailable');
-    }
-    if (this.currentChatId === undefined) {
-      throw new Error('当前无活跃会话');
-    }
-    const normalized: string = override === null ? '' : override.trim();
-    const updated: Chat = await this.persistenceService.updateUserNameOverride(
-      this.currentChatId, normalized
-    );
-    this.currentChat = updated;
-    return updated;
+    return this.userIdentityService.updateCurrentChatUserNameOverride(override);
   }
 
-  /**
-   * 更新当前聊天的锁定 Persona ID。
-   * @param personaId Persona ID(null 或空字符串清除锁定)
-   * @returns 更新后的 Chat 对象(无当前会话时返回 null)
-   */
+  /** 更新当前聊天的锁定 Persona ID(委托 ChatUserIdentityService)。 */
   async updateCurrentChatPersonaId(personaId: string | null): Promise<Chat | null> {
-    if (this.persistenceService === null) {
-      throw new Error('persistenceService unavailable');
-    }
-    if (this.currentChatId === undefined) {
-      throw new Error('当前无活跃会话');
-    }
-    const effectiveId: string = personaId === null ? '' : personaId;
-    const updated: Chat = await this.persistenceService.updateChatPersonaId(
-      this.currentChatId, effectiveId
-    );
-    this.currentChat = updated;
-    return updated;
+    return this.userIdentityService.updateCurrentChatPersonaId(personaId);
   }
 
+  /** 更新当前会话的用户 Persona 摘要(委托 ChatUserIdentityService)。 */
   async updateCurrentChatUserPersonaSummary(summary: string): Promise<Chat | null> {
-    if (this.persistenceService === null) {
-      throw new Error('persistenceService unavailable');
-    }
-    if (this.currentChatId === undefined) {
-      throw new Error('当前无活跃会话');
-    }
-    const updated: Chat = await this.persistenceService.updateUserPersonaSummary(
-      this.currentChatId, summary
-    );
-    this.currentChat = updated;
-    return updated;
+    return this.userIdentityService.updateCurrentChatUserPersonaSummary(summary);
   }
 
-  /** 获取当前角色的默认 Persona ID */
+  /** 获取当前角色的默认 Persona ID(委托 ChatUserIdentityService)。 */
   getCharacterDefaultPersonaId(): string {
-    return this.character !== null ? this.character.defaultPersonaId : '';
+    return this.userIdentityService.getCharacterDefaultPersonaId();
   }
 
-  /**
-   * 解析当前聊天的有效 Persona。
-   * 优先级:聊天锁定 > 角色默认 > 全局默认 > null
-   */
+  /** 解析当前聊天的有效 Persona(委托 ChatUserIdentityService)。 */
   async resolveEffectivePersona(): Promise<Persona | null> {
-    const chatPersonaId: string = this.currentChat !== null ? this.currentChat.personaId : '';
-    const characterDefaultPersonaId: string = this.character !== null ? this.character.defaultPersonaId : '';
-    try {
-      const personaService = AppServices.getPersonaService();
-      return await personaService.resolveEffectivePersona(chatPersonaId, characterDefaultPersonaId);
-    } catch (e) {
-      Logger.warn(LOG_TAG, 'resolveEffectivePersona failed: ' + String(e));
-      return null;
-    }
+    return this.userIdentityService.resolveEffectivePersona();
   }
 
   /**
