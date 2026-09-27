@@ -28,6 +28,13 @@ import { PersistedChatSession } from '../models/PersistedChatSession';
 import { generateUuid } from '../utils/Uuid';
 import { ChatPersistenceService } from './ChatPersistenceService';
 import { MessageSwipePersistenceService } from './MessageSwipePersistenceService';
+import { ChatState, ChatServiceCallbacks } from '../models/ChatServiceContract';
+import { ActiveGenerationContext } from '../models/ChatGenerationContext';
+import { TokenBudget } from '../models/TokenBudget';
+import { HistoryTrimResult } from '../models/HistoryTrimResult';
+import { AppServices } from './AppServices';
+import { WorldGroupService } from './WorldGroupService';
+import { WorldGroup } from '../models/WorldGroup';
 import { AppPreferences } from '../storage/AppPreferences';
 import { Logger } from '../utils/Logger';
 import {
@@ -102,6 +109,32 @@ export interface ChatSessionHost {
   loadMemoryPrefs: () => Promise<void>;
   /** 刷新 Branch 状态(宿主私有能力) */
   refreshBranchState: () => Promise<void>;
+  /** 会话操作互斥标志读取 */
+  getSessionOperationInProgress: () => boolean;
+  /** 会话操作互斥标志更新 */
+  setSessionOperationInProgress: (inProgress: boolean) => void;
+  /** Swipe 浏览/切换操作互斥标志读取 */
+  getSwipeOperationInProgress: () => boolean;
+  /** 是否正在生成(生成中不可切换会话) */
+  isGenerating: () => boolean;
+  /** flush pending persistence(宿主私有能力) */
+  flushPersistence: () => void;
+  /** 当前会话 Chat 对象读取 */
+  getCurrentChat: () => Chat | null;
+  /** 最近一次使用的回调读取(用于状态通知) */
+  getLastCallbacks: () => ChatServiceCallbacks | null;
+  /** 设置聊天状态机并通知(宿主私有能力) */
+  setState: (state: ChatState, callbacks: ChatServiceCallbacks | null) => void;
+  /** 通知消息更新(宿主私有能力) */
+  emitMessages: (callbacks: ChatServiceCallbacks | null) => void;
+  /** 最近一次 Token 预算更新 */
+  setLastTokenBudget: (budget: TokenBudget | undefined) => void;
+  /** 最近一次历史裁剪结果更新 */
+  setLastHistoryTrimResult: (result: HistoryTrimResult | undefined) => void;
+  /** 当前 Assistant 消息 id 更新 */
+  setCurrentAssistantId: (assistantId: string | null) => void;
+  /** 当前活动生成上下文更新 */
+  setActiveGeneration: (context: ActiveGenerationContext | null) => void;
 }
 
 export class ChatSessionService {
@@ -214,6 +247,356 @@ export class ChatSessionService {
   private async refreshBranchState(): Promise<void> {
     return this.host.refreshBranchState();
   }
+
+  private get sessionOperationInProgress(): boolean {
+    return this.host.getSessionOperationInProgress();
+  }
+
+  private set sessionOperationInProgress(value: boolean) {
+    this.host.setSessionOperationInProgress(value);
+  }
+
+  private get swipeOperationInProgress(): boolean {
+    return this.host.getSwipeOperationInProgress();
+  }
+
+  private isGenerating(): boolean {
+    return this.host.isGenerating();
+  }
+
+  private flushPersistence(): void {
+    this.host.flushPersistence();
+  }
+
+  private get currentChat(): Chat | null {
+    return this.host.getCurrentChat();
+  }
+
+  private get lastCallbacks(): ChatServiceCallbacks | null {
+    return this.host.getLastCallbacks();
+  }
+
+  private setState(state: ChatState, callbacks: ChatServiceCallbacks | null): void {
+    this.host.setState(state, callbacks);
+  }
+
+  private emitMessages(callbacks: ChatServiceCallbacks | null): void {
+    this.host.emitMessages(callbacks);
+  }
+
+  private set lastTokenBudget(value: TokenBudget | undefined) {
+    this.host.setLastTokenBudget(value);
+  }
+
+  private set lastHistoryTrimResult(value: HistoryTrimResult | undefined) {
+    this.host.setLastHistoryTrimResult(value);
+  }
+
+  private set currentAssistantId(value: string | null) {
+    this.host.setCurrentAssistantId(value);
+  }
+
+  private set activeGeneration(value: ActiveGenerationContext | null) {
+    this.host.setActiveGeneration(value);
+  }
+
+  // ===== 搬运方法(会话操作族,P2-9c,原 ChatService 成员逐字搬出) =====
+
+  /**
+   * 新建会话。
+   *
+   * 流程:
+   * 1. 校验:未生成、未在执行其他会话操作
+   * 2. flush pending persistence
+   * 3. 使用当前角色上下文创建新 Chat
+   * 4. 有角色 firstMessage 时只创建一次
+   * 5. 设置新的 currentChatId、currentSequenceNumber
+   * 6. 用新数组替换 messages
+   * 7. 通知 onMessagesChanged
+   * 8. 清除上一次生成状态、错误状态和 Token 统计
+   *
+   * 不会:清空旧 Chat 数据 / 复用旧 chatId / 把旧 messages 写入新 Chat / 重复插入 firstMessage。
+   *
+   * @throws Error 生成中或会话操作进行中,或持久化失败
+   */
+  async startNewSession(): Promise<void> {
+    if (this.disposed) {
+      throw new Error('ChatService disposed');
+    }
+    if (this.isGenerating()) {
+      throw new Error('请先停止当前回复');
+    }
+    if (this.sessionOperationInProgress) {
+      throw new Error('会话操作进行中,请稍候');
+    }
+    if (this.swipeOperationInProgress) {
+      throw new Error('请先完成当前 Swipe 操作');
+    }
+    this.sessionOperationInProgress = true;
+    try {
+      this.flushPersistence();
+      const characterId: string | undefined =
+        this.character !== null ? this.character.id : undefined;
+      await this.createNewSession(characterId);
+      this.lastTokenBudget = undefined;
+      this.lastHistoryTrimResult = undefined;
+      this.currentAssistantId = null;
+      // 新建会话后重新加载 Swipe 摘要(首条开场白的 alternate_greetings 候选 1..N)
+      await this.reloadSwipeStateAfterNewSession();
+      this.activeGeneration = null;
+      // T-6.4B-1: 新建会话后刷新 Branch 状态
+      await this.refreshBranchState();
+      this.setState(ChatState.Idle, this.lastCallbacks);
+      this.emitMessages(this.lastCallbacks);
+    } finally {
+      this.sessionOperationInProgress = false;
+    }
+  }
+
+
+  /**
+   * 切换到指定会话。
+   *
+   * 流程:
+   * 1. 校验:未生成、未在执行其他会话操作
+   * 2. 验证 chatId 非空
+   * 3. 相同 chatId 直接返回(不重复加载、不重复 firstMessage)
+   * 4. flush pending persistence
+   * 5. 加载目标会话(自动 normalize interrupted Streaming)
+   * 6. 验证目标会话属于当前角色或普通助手上下文
+   * 7. 替换 currentChatId、currentSequenceNumber、messages
+   * 8. 通知页面更新
+   * 9. 清除旧会话的 UI 临时状态
+   *
+   * 不会:自动发起模型请求 / 信任列表传入的 Chat 对象(在 Service 层再次校验)。
+   *
+   * @param chatId 目标会话 id
+   * @throws Error 生成中、会话操作进行中、chatId 无效、目标不存在、目标不属于当前上下文
+   */
+  async switchSession(chatId: string): Promise<void> {
+    if (this.disposed) {
+      throw new Error('ChatService disposed');
+    }
+    if (this.isGenerating()) {
+      throw new Error('请先停止当前回复');
+    }
+    if (this.sessionOperationInProgress) {
+      throw new Error('会话操作进行中,请稍候');
+    }
+    if (this.swipeOperationInProgress) {
+      throw new Error('请先完成当前 Swipe 操作');
+    }
+    if (chatId.length === 0) {
+      throw new Error('会话 id 为空');
+    }
+    this.sessionOperationInProgress = true;
+    try {
+      if (this.currentChatId === chatId) {
+        return;
+      }
+      this.flushPersistence();
+      await this.switchToSessionInternal(chatId);
+      this.lastTokenBudget = undefined;
+      this.lastHistoryTrimResult = undefined;
+      this.currentAssistantId = null;
+      this.activeGeneration = null;
+      this.setState(ChatState.Idle, this.lastCallbacks);
+      this.emitMessages(this.lastCallbacks);
+    } finally {
+      this.sessionOperationInProgress = false;
+    }
+  }
+
+
+  /**
+   * 删除指定会话。
+   *
+   * - 删除非当前会话:删除 Chat 和 Message(事务),当前页面消息不变
+   * - 删除当前会话:删除后按以下顺序回退:
+   *   1. 查询当前上下文剩余会话
+   *   2. 存在则加载最近一条
+   *   3. 不存在则立即创建一条新会话(有角色 firstMessage 时加入)
+   *   4. 页面立即更新为新会话消息
+   *
+   * @param chatId 待删除的会话 id
+   * @throws Error 生成中、会话操作进行中、删除失败
+   */
+  async deleteSession(chatId: string): Promise<void> {
+    if (this.disposed) {
+      throw new Error('ChatService disposed');
+    }
+    if (this.isGenerating()) {
+      throw new Error('请先停止当前回复');
+    }
+    if (this.sessionOperationInProgress) {
+      throw new Error('会话操作进行中,请稍候');
+    }
+    if (this.swipeOperationInProgress) {
+      throw new Error('请先完成当前 Swipe 操作');
+    }
+    if (chatId.length === 0) {
+      throw new Error('会话 id 为空');
+    }
+    if (this.persistenceService === null) {
+      throw new Error('persistenceService unavailable');
+    }
+    this.sessionOperationInProgress = true;
+    try {
+      await this.persistenceService.deleteSession(chatId);
+
+      if (chatId === this.currentChatId) {
+        // 删除的是当前会话:查询剩余,自动切换或新建
+        const characterId: string | undefined =
+          this.character !== null ? this.character.id : undefined;
+        const remaining: Chat[] =
+          await this.persistenceService.listSessionsForContext(characterId, 50);
+        if (remaining.length > 0) {
+          // 列表已按 last_message_at DESC 排序,首条为最近会话
+          await this.switchToSessionInternal(remaining[0].id);
+        } else {
+          // 无剩余会话,创建新会话
+          await this.createNewSession(characterId);
+          // 新建会话后重新加载 Swipe 摘要与 lastAssistantMessageId(首条开场白候选)
+          await this.reloadSwipeStateAfterNewSession();
+        }
+        this.lastTokenBudget = undefined;
+        this.lastHistoryTrimResult = undefined;
+        this.currentAssistantId = null;
+        this.activeGeneration = null;
+        // T-6.4B-1: 删除会话后刷新 Branch 状态
+        await this.refreshBranchState();
+        this.setState(ChatState.Idle, this.lastCallbacks);
+        this.emitMessages(this.lastCallbacks);
+      }
+    } finally {
+      this.sessionOperationInProgress = false;
+    }
+  }
+
+
+  /**
+   * 内部:切换到指定会话并替换当前状态(不持锁,由调用方持锁)。
+   * 验证目标会话属于当前角色或普通助手上下文。
+   */
+  async switchToSessionInternal(chatId: string): Promise<void> {
+    if (this.persistenceService === null) {
+      throw new Error('persistenceService unavailable');
+    }
+    const session: PersistedChatSession | null =
+      await this.persistenceService.loadSession(chatId);
+    if (session === null) {
+      throw new Error('会话不存在或已删除');
+    }
+    // 验证上下文归属
+    const expectedCharId: string | undefined =
+      this.character !== null ? this.character.id : undefined;
+    const actualCharId: string | undefined = session.chat.characterId;
+    if (expectedCharId !== actualCharId) {
+      throw new Error('目标会话不属于当前聊天上下文');
+    }
+    this.currentChatId = session.chat.id;
+    this.currentChat = session.chat;
+    this.messages = session.messages.slice();
+    this.currentSequenceNumber = session.maxSequenceNumber;
+    // 加载 Swipe summaries
+    this.swipeSummaries = [];
+    this.lastAssistantMessageId = '';
+    if (this.swipePersistenceService !== null && this.currentChatId !== undefined) {
+      this.swipeSummaries = await this.swipePersistenceService.listSwipeSummariesByChatId(this.currentChatId);
+    }
+    this.updateLastAssistantMessageId();
+    // CHAT-STATUS-1A: 切换会话后加载该会话的角色状态
+    this.syncStatusStateFromCurrentChat();
+    // T-6.4B-1: 切换会话后刷新 Branch 状态
+    await this.refreshBranchState();
+  }
+
+
+  /**
+   * 新建章节(世界分组内切换开场白)。
+   *
+   * 流程(Stage 6 §4.4):
+   * 1. 校验:角色存在、开场白索引有效、当前会话存在
+   * 2. 确保当前会话所属世界分组(无分组时创建"角色名+的世界"并把当前会话移入)
+   * 3. 计算章节序号 = 组内会话数 + 1,标题 = "第N章·开场白前20字"
+   * 4. statusConfigJson 优先继承当前会话,否则取组内最近会话的
+   * 5. 用选定开场白创建新会话(事务),初始化其余开场白为 Swipe 候选
+   * 6. 切换到新会话(原会话保留,可切回)
+   *
+   * @param greetingIndex 开场白池索引(0 ≤ greetingIndex < 池长度)
+   * @returns 新章节会话 id
+   * @throws Error 前置校验失败 / 持久化失败(事务由 createSessionWithFirstMessage 保证)
+   */
+  async createChapter(greetingIndex: number): Promise<string> {
+    if (this.disposed) {
+      throw new Error('ChatService disposed');
+    }
+    if (this.character === null) {
+      throw new Error('当前无角色,无法新建章节');
+    }
+    if (this.currentChat === null || this.currentChatId === undefined) {
+      throw new Error('当前无活跃会话');
+    }
+    if (this.persistenceService === null) {
+      throw new Error('persistenceService unavailable');
+    }
+    const greetingPool: string[] = this.buildGreetingPool();
+    if (greetingIndex < 0 || greetingIndex >= greetingPool.length) {
+      throw new Error('开场白索引无效');
+    }
+
+    // 2. 确保世界分组
+    const worldGroupService: WorldGroupService = AppServices.getWorldGroupService();
+    let worldId: string = this.currentChat.worldId;
+    if (worldId.length === 0) {
+      const group: WorldGroup =
+        await worldGroupService.create(this.character.name + '的世界');
+      await worldGroupService.moveChatToWorld(this.currentChat.id, group.id);
+      worldId = group.id;
+    }
+
+    // 3. 章节序号与标题
+    const worldChats: Chat[] = await worldGroupService.listChatsInWorld(worldId);
+    const chapterNumber: number = worldChats.length + 1;
+    const greeting: string = greetingPool[greetingIndex];
+    const title: string = '第' + chapterNumber.toString() + '章·'
+      + this.buildChapterTitlePreview(greeting);
+
+    // 4. 状态配置继承
+    let statusConfigJson: string = this.currentChat.statusConfigJson;
+    if (statusConfigJson.length === 0) {
+      const latest: Chat | null = await worldGroupService.latestChatInWorld(worldId);
+      if (latest !== null) {
+        statusConfigJson = latest.statusConfigJson;
+      }
+    }
+
+    // 5. 创建新会话(选定开场白作为首条消息)
+    const firstMsg: ChatMessage = {
+      id: 'msg-' + generateUuid(),
+      role: ChatRole.Assistant,
+      content: greeting,
+      createdAt: Date.now(),
+      isStreaming: false,
+      status: ChatMessageStatus.Completed,
+      source: ChatMessageSource.CharacterFirstMessage
+    };
+    const session: PersistedChatSession = await this.persistenceService.createSessionWithFirstMessage(
+      this.character.id, title, firstMsg
+    );
+    const newChatId: string = session.chat.id;
+    await worldGroupService.moveChatToWorld(newChatId, worldId);
+    if (statusConfigJson.length > 0) {
+      await this.persistenceService.updateChatStatusConfig(newChatId, statusConfigJson);
+    }
+    // 其余开场白作为首条消息的 Swipe 候选
+    await this.initializeGreetingSwipeCandidates(firstMsg.id, greetingPool.slice(1));
+
+    // 6. 切换到新会话(复用公开 switchSession:flush + 加载 + 通知页面)
+    await this.switchSession(newChatId);
+    return newChatId;
+  }
+
 
   // ===== 搬运方法(会话初始化族,P2-9b,原 ChatService 成员逐字搬出) =====
 
