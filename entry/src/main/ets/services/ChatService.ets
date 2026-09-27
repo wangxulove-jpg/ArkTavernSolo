@@ -116,6 +116,7 @@ import { ChatOneShotGenerator, ChatOneShotDeps, ChatOneShotHost } from './ChatOn
 import { ChatStatusService, ChatStatusDeps, ChatStatusHost } from './ChatStatusService';
 import { ChatSwipeController, ChatSwipeDeps, ChatSwipeHost } from './ChatSwipeController';
 import { ConversationBranchService, ConversationBranchDeps, ConversationBranchHost } from './ConversationBranchService';
+import { ChatMessageService, ChatMessageDeps, ChatMessageHost } from './ChatMessageService';
 import {
   GLOBAL_USER_NAME_KEY,
   LOREBOOK_ACTIVATION_DEFAULT_PREFS_KEY,
@@ -293,6 +294,8 @@ export class ChatService {
   private readonly swipeController: ChatSwipeController;
   /** Branch 查询/判定门面(P2-5:自本类抽离,状态仍在本类,经宿主回调读写) */
   private readonly branchService: ConversationBranchService;
+  /** 消息级操作(删除/编辑)(P2-6:自本类抽离,状态仍在本类,经宿主回调读写) */
+  private readonly messageService: ChatMessageService;
 
   constructor(
     modelService: ModelService,
@@ -515,6 +518,30 @@ export class ChatService {
       getBranchOperationInProgress: (): boolean => this.branchOperationInProgress
     };
     this.branchService = new ConversationBranchService(branchDeps, branchHost);
+
+    const messageDeps: ChatMessageDeps = {
+      persistenceService: this.persistenceService,
+      swipePersistenceService: this.swipePersistenceService
+    };
+    const messageHost: ChatMessageHost = {
+      isDisposed: (): boolean => this.disposed,
+      isGenerating: (): boolean => this.isGenerating(),
+      getSwipeOperationInProgress: (): boolean => this.swipeOperationInProgress,
+      getMessages: (): ChatMessage[] => this.messages,
+      setMessages: (messages: ChatMessage[]): void => {
+        this.messages = messages;
+      },
+      getCurrentAssistantId: (): string | null => this.currentAssistantId,
+      setCurrentAssistantId: (assistantId: string | null): void => {
+        this.currentAssistantId = assistantId;
+      },
+      getCurrentChatId: (): string | undefined => this.currentChatId,
+      findMessageIndexById: (messageId: string): number => this.findMessageIndexById(messageId),
+      invalidateMemoryFromMessagePosition: (messageId: string): void => {
+        this.invalidateMemoryFromMessagePosition(messageId);
+      }
+    };
+    this.messageService = new ChatMessageService(messageDeps, messageHost);
   }
 
   /**
@@ -4189,117 +4216,20 @@ export class ChatService {
 
 
 
-  /**
-   * 删除单条消息(聊天泡"删除"功能)。
-   *
-   * 规则:
-   * - 首条消息(本会话开场白)不可删除,避免破坏会话结构
-   * - 删除前失效覆盖该消息位置的记忆(章节/核心等,避免记忆引用已删内容)
-   * - 若为 Assistant 消息,同步清理其 Swipe 候选数据
-   * - 物理删除数据库记录并从内存列表移除
-   *
-   * @param messageId 待删除的消息 ID
-   */
+  // ===== 消息级操作(删除 / 编辑,实现已抽至 services/ChatMessageService,P2-6) =====
+
+  /** 删除单条消息(委托 ChatMessageService)。 */
   async deleteMessage(messageId: string): Promise<void> {
-    if (this.disposed) {
-      throw new Error('ChatService disposed');
-    }
-    if (this.isGenerating()) {
-      throw new Error('请先停止当前回复');
-    }
-    if (this.swipeOperationInProgress) {
-      throw new Error('请先完成当前 Swipe 操作');
-    }
-    const idx: number = this.findMessageIndexById(messageId);
-    if (idx <= 0) {
-      throw new Error('首条消息不可删除');
-    }
-    if (idx >= this.messages.length) {
-      return;
-    }
-    // 删除前失效覆盖该位置的记忆(不阻塞删除)
-    this.invalidateMemoryFromMessagePosition(messageId);
-    // Assistant 消息:清理 Swipe 候选数据
-    if (this.swipePersistenceService !== null) {
-      try {
-        await this.swipePersistenceService.removeSwipeState(messageId);
-      } catch (e) {
-        Logger.warn(LOG_TAG, 'deleteMessage | clear swipe failed: '
-          + (e instanceof Error ? e.message : String(e)));
-      }
-    }
-    // 物理删除数据库记录
-    if (this.persistenceService !== null) {
-      await this.persistenceService.removeMessage(messageId);
-    }
-    // 移除内存列表(不可变更新:构造新数组并整体替换)
-    const next: ChatMessage[] = this.messages.slice();
-    next.splice(idx, 1);
-    this.messages = next;
-    if (this.currentAssistantId === messageId) {
-      this.currentAssistantId = null;
-    }
+    return this.messageService.deleteMessage(messageId);
   }
 
+  /** 编辑旁白消息(仅 senderType=narrator 生效;委托 ChatMessageService)。 */
   async editNarratorMessage(messageId: string, editedContent: string): Promise<void> {
-    if (this.disposed) {
-      throw new Error('ChatService disposed');
-    }
-    const idx: number = this.findMessageIndexById(messageId);
-    if (idx < 0) {
-      return;
-    }
-    const msg: ChatMessage = this.messages[idx];
-    if (msg.senderType !== 'narrator') {
-      return;
-    }
-    const updated: ChatMessage = mergeChatMessage(msg, {
-      content: editedContent,
-      updatedAt: Date.now()
-    });
-    // 不可变更新:构造新数组并整体替换
-    const next: ChatMessage[] = this.messages.slice();
-    next[idx] = updated;
-    this.messages = next;
-    if (this.persistenceService !== null && this.currentChatId !== undefined) {
-      await this.persistenceService.updateMessage(messageId, updated);
-    }
+    return this.messageService.editNarratorMessage(messageId, editedContent);
   }
 
-  /**
-   * 编辑角色回复内容(仅改当前激活的文本,不重新生成)。
-   *
-   * - 仅对 Assistant 消息生效
-   * - 编辑会改变剧情内容,因此失效覆盖该消息位置的记忆(与 re-swipe/删除一致)
-   * - Swipe 候选记录保留不动(只更新激活消息本身)
-   *
-   * @param messageId 目标 Assistant 消息 ID
-   * @param editedContent 编辑后的内容
-   */
+  /** 编辑角色回复内容(仅改当前激活文本,不重新生成;委托 ChatMessageService)。 */
   async editAssistantMessage(messageId: string, editedContent: string): Promise<void> {
-    if (this.disposed) {
-      throw new Error('ChatService disposed');
-    }
-    const idx: number = this.findMessageIndexById(messageId);
-    if (idx < 0) {
-      return;
-    }
-    const msg: ChatMessage = this.messages[idx];
-    if (msg.role !== ChatRole.Assistant) {
-      return;
-    }
-    const updated: ChatMessage = mergeChatMessage(msg, {
-      content: editedContent,
-      updatedAt: Date.now()
-    });
-    // 不可变更新:构造新数组并整体替换
-    const next: ChatMessage[] = this.messages.slice();
-    next[idx] = updated;
-    this.messages = next;
-    if (this.persistenceService !== null && this.currentChatId !== undefined) {
-      await this.persistenceService.updateMessage(messageId, updated);
-    }
-    // 编辑内容会改变剧情,失效覆盖该位置的记忆(章节/核心等)
-    this.invalidateMemoryFromMessagePosition(messageId);
+    return this.messageService.editAssistantMessage(messageId, editedContent);
   }
 }
