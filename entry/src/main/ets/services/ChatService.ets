@@ -62,12 +62,7 @@ import {
   ConversationBranchSummary,
   ConversationRecordCounts
 } from '../models/ConversationBranch';
-import {
-  MessageSwipeSummary,
-  MessageSwipeCandidateUpdates,
-  MessageSwipeState,
-  MAX_SWIPE_CANDIDATES
-} from '../models/MessageSwipe';
+import { MessageSwipeSummary, MessageSwipeCandidateUpdates } from '../models/MessageSwipe';
 import { ImpersonateCandidate } from '../models/ImpersonateCandidate';
 import { ChatMessage, ChatMessageStatus, createChatMessage, mergeChatMessage } from '../models/ChatMessage';
 import { ChatMemory } from '../models/ChatMemory';
@@ -457,7 +452,38 @@ export class ChatService {
       },
       emitMessages: (callbacks: ChatServiceCallbacks | null): void => {
         this.emitMessages(callbacks);
-      }
+      },
+      isDisposed: (): boolean => this.disposed,
+      getGenerationOperationId: (): number => this.generationOperationId,
+      setGenerationOperationId: (operationId: number): void => {
+        this.generationOperationId = operationId;
+      },
+      getActiveGeneration: (): ActiveGenerationContext | null => this.activeGeneration,
+      setActiveGeneration: (context: ActiveGenerationContext | null): void => {
+        this.activeGeneration = context;
+      },
+      getCurrentAssistantId: (): string | null => this.currentAssistantId,
+      setCurrentAssistantId: (assistantId: string | null): void => {
+        this.currentAssistantId = assistantId;
+      },
+      getMessages: (): ChatMessage[] => this.messages,
+      setMessages: (messages: ChatMessage[]): void => {
+        this.messages = messages;
+      },
+      getLastPersistedContentLength: (): number => this.lastPersistedContentLength,
+      setLastPersistedContentLength: (length: number): void => {
+        this.lastPersistedContentLength = length;
+      },
+      getPendingPersistAssistantId: (): string | null => this.pendingPersistAssistantId,
+      setPendingPersistAssistantId: (assistantId: string | null): void => {
+        this.pendingPersistAssistantId = assistantId;
+      },
+      setState: (state: ChatState, callbacks: ChatServiceCallbacks | null): void => {
+        this.setState(state, callbacks);
+      },
+      doStream: (assistantId: string, callbacks: ChatServiceCallbacks,
+        context: ActiveGenerationContext): Promise<void> =>
+        this.doStream(assistantId, callbacks, context)
     };
     this.swipeController = new ChatSwipeController(swipeDeps, swipeHost);
   }
@@ -3482,147 +3508,11 @@ export class ChatService {
   }
 
   /**
-   * 为最后一条 Assistant 消息生成新的候选回复。
-   * 内部创建 Streaming 候选,启动流式请求。
-   *
-   * T-6.3:
-   * - 创建 SwipeCandidate ActiveGenerationContext(包含 candidateIndex)
-   * - 与 normal send / swipe browse / session op 互斥(swipeOperationInProgress)
-   * - 启动失败时通过 doStream 的 handleStartFailure 统一处理
-   * - 持久化走 MessageSwipePersistenceService(由 flushPersistence/persistWithRetry 路由)
+   * 为最后一条 Assistant 消息生成新的候选回复(委托 ChatSwipeController)。
+   * 内部创建 Streaming 候选并启动流式请求(携带 SwipeCandidate 活动上下文)。
    */
   async generateAlternativeCandidate(): Promise<void> {
-    if (this.disposed) {
-      throw new Error('ChatService disposed');
-    }
-    if (this.isBusy()) {
-      Logger.warn(LOG_TAG, 'Regenerate | eligibility_denied | busy');
-      return;
-    }
-    if (this.lastAssistantMessageId.length === 0) {
-      Logger.warn(LOG_TAG, 'Regenerate | eligibility_denied | missing_assistant_message');
-      return;
-    }
-    if (this.swipePersistenceService === null) {
-      Logger.warn(LOG_TAG, 'Regenerate | eligibility_denied | missing_swipe_state');
-      return;
-    }
-    if (this.lastCallbacks === null) {
-      Logger.warn(LOG_TAG, 'Regenerate | eligibility_denied | missing_callbacks');
-      return;
-    }
-
-    this.generationOperationId++;
-    // 占用 swipe 操作互斥锁(保护 appendCandidate + reloadCurrentSession 期间不被并发)
-    this.swipeOperationInProgress = true;
-
-    const assistantMessageId: string = this.lastAssistantMessageId;
-    const operationId: number = this.generationOperationId;
-    const chatId: string = this.currentChatId !== undefined ? this.currentChatId : '';
-
-    // 检查候选数量上限
-    const summary: MessageSwipeSummary | undefined = this.getSummaryForMessage(assistantMessageId);
-    let nextIndex: number = 0;
-    if (summary !== undefined) {
-      nextIndex = summary.candidateCount;
-      if (nextIndex >= MAX_SWIPE_CANDIDATES) {
-        Logger.warn(LOG_TAG, 'Regenerate | eligibility_denied | candidate_limit');
-        this.swipeOperationInProgress = false;
-        this.lastCallbacks.onError('该回复已达到候选数量上限');
-        return;
-      }
-    }
-
-    // 创建新候选(Streaming)并激活
-    // T-6.4A-R6: 必须使用 appendCandidate 实际返回的 newIndex,
-    // 不能使用 nextIndex(当 summary===undefined 时 nextIndex=0,
-    // 但 ensureSwipeState 会先创建 Candidate 0,appendCandidate 实际创建 Candidate 1)
-    let actualNewIndex: number = nextIndex;
-    try {
-      await this.swipePersistenceService.appendCandidate(
-        assistantMessageId,
-        {
-          content: '',
-          status: ChatMessageStatus.Streaming,
-          isStreaming: true
-        },
-        true // activate
-      );
-      // T-6.4A-R6: appendCandidate 返回的 candidates 可能是事务内旧快照,
-      // 不包含刚插入的 Candidate。事务已提交,重新查询获取最新数据。
-      const freshState: MessageSwipeState | null =
-        await this.swipePersistenceService.getSwipeState(assistantMessageId);
-      if (freshState !== null) {
-        let maxIdx: number = 0;
-        for (let i = 0; i < freshState.candidates.length; i++) {
-          if (freshState.candidates[i].candidateIndex > maxIdx) {
-            maxIdx = freshState.candidates[i].candidateIndex;
-          }
-        }
-        actualNewIndex = maxIdx;
-      }
-    } catch (e) {
-      const msg: string = e instanceof Error ? e.message : String(e);
-      Logger.error(LOG_TAG, 'Regenerate | failed | appendCandidate: ' + msg);
-      this.swipeOperationInProgress = false;
-      this.lastCallbacks.onError('创建候选回复失败: ' + msg);
-      return;
-    }
-
-    // 更新 swipeSummaries(使用 actualNewIndex)
-    if (summary !== undefined) {
-      this.swipeSummaries = this.swipeSummaries.map(
-        (s: MessageSwipeSummary): MessageSwipeSummary => {
-          if (s.assistantMessageId === assistantMessageId) {
-            return {
-              assistantMessageId: s.assistantMessageId,
-              activeCandidateIndex: actualNewIndex,
-              candidateCount: actualNewIndex + 1,
-              isGeneratingCandidate: true
-            };
-          }
-          return s;
-        }
-      );
-    } else {
-      this.swipeSummaries.push({
-        assistantMessageId: assistantMessageId,
-        activeCandidateIndex: actualNewIndex,
-        candidateCount: actualNewIndex + 1,
-        isGeneratingCandidate: true
-      });
-    }
-
-    // 建立 SwipeCandidate 活动上下文(替代旧 ActiveSwipeGeneration)
-    this.activeGeneration = {
-      operationId: operationId,
-      kind: ChatGenerationKind.SwipeCandidate,
-      chatId: chatId,
-      assistantMessageId: assistantMessageId,
-      swipeCandidateIndex: actualNewIndex
-    };
-
-    // 候选创建 + summary 更新完成,释放 swipe 操作锁;
-    // 后续生成期间通过 activeGeneration 与 isBusy()(state=Sending/Streaming)互斥
-    this.swipeOperationInProgress = false;
-
-    // T-6.4A: 不再调用 reloadCurrentSession()。
-    // 原因:reloadCurrentSession → loadSessionInternal → normalizeInterruptedMessages
-    // 会把刚物化的 Streaming 候选改为 Cancelled,导致 DB 与内存状态不一致,
-    // 重新进入页面时目标 Assistant 显示为空内容(旧历史"消失"Bug 根因)。
-    // 正确做法:直接在完整内存历史中替换目标 Assistant 为 Streaming + 空 content,
-    // 保留所有其他消息不变。
-    this.replaceAssistantMessageInFullHistory(assistantMessageId);
-
-    // 更新状态
-    this.currentAssistantId = assistantMessageId;
-    this.setState(ChatState.Sending, this.lastCallbacks);
-    this.emitMessages(this.lastCallbacks);
-
-    // 启动流式请求(携带 SwipeCandidate 上下文)
-    this.lastPersistedContentLength = 0;
-    this.pendingPersistAssistantId = assistantMessageId;
-    this.doStream(assistantMessageId, this.lastCallbacks, this.activeGeneration);
+    return this.swipeController.generateAlternativeCandidate();
   }
 
   // ===== Swipe 内部辅助方法 =====
@@ -3670,40 +3560,6 @@ export class ChatService {
       this.messages = session.messages.slice();
       this.currentChat = session.chat;
       this.currentSequenceNumber = session.maxSequenceNumber;
-    }
-  }
-
-  /**
-   * T-6.4A: 在完整页面历史中按 Message ID 查找目标 Assistant,
-   * 只替换该消息为 Streaming + 空 content(用于重新生成候选),
-   * 保留所有其他消息的 ID、内容、顺序、sequenceNumber 不变。
-   *
-   * 要求:
-   * 1. 在完整页面历史中按 Message ID 查找;
-   * 2. 只替换一项;
-   * 3. 保留其他所有项;
-   * 4. 返回新数组引用;
-   * 5. 找不到时抛安全错误;
-   * 6. 不使用请求裁剪后的数组更新 UI。
-   */
-  private replaceAssistantMessageInFullHistory(assistantMessageId: string): void {
-    let found: boolean = false;
-    this.messages = this.messages.map((msg: ChatMessage): ChatMessage => {
-      if (msg.id === assistantMessageId) {
-        found = true;
-        // 完整不可变复制:使用 mergeChatMessage 保留所有字段
-        return mergeChatMessage(msg, {
-          content: '',
-          updatedAt: Date.now(),
-          isStreaming: true,
-          errorMessage: undefined,
-          status: ChatMessageStatus.Streaming
-        });
-      }
-      return msg;
-    });
-    if (!found) {
-      throw new Error('replaceAssistantMessageInFullHistory: target assistant not found');
     }
   }
 
