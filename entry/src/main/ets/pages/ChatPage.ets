@@ -33,9 +33,7 @@ import { LorebookPanelBook, LorebookPanelData } from '../viewmodels/ChatViewMode
 import { ChatMessageSource } from '../models/ChatMessageSource';
 import { ChatMessageRenderState } from '../models/ChatMessageRenderState';
 import { MessageSwipeSummary, MAX_SWIPE_CANDIDATES } from '../models/MessageSwipe';
-import { MessageSwipeControls } from '../components/MessageSwipeControls';
 import { HistoricalMessageEditDialog } from '../components/HistoricalMessageEditDialog';
-import { ChatMessageBubble } from '../components/ChatMessageBubble';
 import { ImpersonateCandidatesPanel } from '../components/ImpersonateCandidatesPanel';
 import { ChatMessageDataSource } from '../components/ChatMessageDataSource';
 import { ChatMessageActionSheet, MessageAction } from '../components/ChatMessageActionSheet';
@@ -43,6 +41,7 @@ import { ChatMoreMenuSheet } from '../components/ChatMoreMenuSheet';
 import { CharacterImageView } from '../components/CharacterImageView';
 import { ColorWheelPicker } from '../components/ColorWheelPicker';
 import { ChatForkPicker } from '../components/ChatForkPicker';
+import { ChatMessageList } from '../components/ChatMessageList';
 import { promptAction, router, window, mediaquery, display } from '@kit.ArkUI';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { common } from '@kit.AbilityKit';
@@ -991,7 +990,76 @@ struct ChatPage {
             } else if (this.messages.length === 0) {
               this.emptyStateView()
             } else {
-              this.messageList()
+              ChatMessageList({
+                effectiveTheme: this.effectiveTheme,
+                isDarkMode: this.isDarkMode,
+                bubbleOpacity: this.chatBubbleOpacity,
+                colorTheme: this.getCurrentColorTheme(),
+                chatTextStyle: this.chatTextStyle,
+                characterAvatarUri: this.character !== null ? this.character!.avatarUri : '',
+                characterName: this.viewModel !== null ? this.viewModel!.characterName : '',
+                characterId: this.character !== null ? this.character!.id : '',
+                statusBarHeight: this.statusBarHeight,
+                navigationBarHeight: this.navigationBarHeight,
+                keyboardHeight: this.keyboardHeight,
+                impersonatePanelActive: this.viewModel !== null
+                  && (this.viewModel!.impersonateCandidates.length > 0
+                    || this.viewModel!.isImpersonateGenerating),
+                ttsEnabled: this.ttsService.readMode !== TtsReadMode.Off,
+                isGenerating: this.viewModel !== null && this.viewModel!.isGenerating,
+                swipeControlsAvailable: this.viewModel !== null,
+                dataSource: this.dataSource,
+                scroller: this.scroller,
+                onRequestAutoScroll: (): void => {
+                  this.autoScrollToBottom();
+                },
+                onUserScrolledToBottom: (): void => {
+                  if (this.viewModel !== null) {
+                    this.viewModel!.userScrolledUp = false;
+                  }
+                },
+                onInteractiveAction: (text: string): void => {
+                  this.handleInteractiveAction(text);
+                },
+                onLongPressMessage: (message: ChatMessage): void => {
+                  this.actionSheetMsg = message;
+                  this.showActionSheet = true;
+                },
+                onTtsPlayRequest: (content: string): void => {
+                  this.handleTtsPlay(content);
+                },
+                canRegenerate: (messageId: string): boolean => {
+                  return this.viewModel !== null
+                    && this.viewModel!.canRegenerateAssistantMessage(messageId);
+                },
+                onRegenerate: (messageId: string): void => {
+                  this.regenerateAssistantMessage(messageId);
+                },
+                getSwipeActiveIndex: (messageId: string): number => {
+                  return this.getSwipeActiveIndex(messageId);
+                },
+                getCandidateCount: (messageId: string): number => {
+                  return this.getCandidateCount(messageId);
+                },
+                canOperateSwipe: (messageId: string): boolean => {
+                  return this.viewModel !== null && this.viewModel!.canOperateSwipe(messageId);
+                },
+                onSwipePrevious: (messageId: string): void => {
+                  if (this.viewModel !== null) {
+                    this.viewModel!.swipePrevious(messageId);
+                  }
+                },
+                onSwipeNext: (messageId: string): void => {
+                  if (this.viewModel !== null) {
+                    this.viewModel!.swipeNext(messageId);
+                  }
+                },
+                onSwipeStop: (): void => {
+                  if (this.viewModel !== null) {
+                    this.viewModel!.stop();
+                  }
+                }
+              })
             }
 
             // 顶部擦除遮罩: 用 DST_IN alpha 渐变擦除消息顶部, 背景图和模型透出
@@ -3462,156 +3530,6 @@ struct ChatPage {
     })
   }
 
-  @Builder
-  messageList() {
-    Scroll(this.scroller) {
-      Column() {
-        LazyForEach(this.dataSource, (state: ChatMessageRenderState, _index: number) => {
-          if (state.role !== ChatRole.System || state.senderType === 'narrator') {
-            Column() {
-              ChatMessageBubble({
-                renderState: state,
-                characterAvatarUri: this.character !== null ? this.character!.avatarUri : '',
-                characterName: this.viewModel !== null ? this.viewModel!.characterName : '',
-                showAvatar: state.source !== ChatMessageSource.CharacterFirstMessage,
-                settings: this.chatTextStyle,
-                senderCharacterId: this.character !== null ? this.character!.id : '',
-                colorTheme: this.getCurrentColorTheme(),
-                bubbleOpacity: this.chatBubbleOpacity,
-                isDarkMode: this.isDarkMode,
-                onInteractiveAction: (text: string): void => {
-                  this.handleInteractiveAction(text);
-                },
-                onLongPress: (target: ChatMessage): void => {
-                  this.actionSheetMsg = target;
-                  this.showActionSheet = true;
-                },
-                onTtsPlay: state.role === ChatRole.Assistant
-                  && this.ttsService.readMode !== TtsReadMode.Off
-                  ? (): void => {
-                    if (this.ttsIsSpeaking) {
-                      if (this.ttsEngine === TtsEngine.Edge) {
-                        this.edgeTtsService.stop();
-                      } else {
-                        this.ttsService.stop();
-                      }
-                      this.ttsIsSpeaking = false;
-                    } else {
-                      const onComplete = (): void => { this.ttsIsSpeaking = false; };
-                      const onStart = (): void => { this.ttsIsSpeaking = true; };
-                      if (this.ttsEngine === TtsEngine.Edge) {
-                        const onError = (msg: string): void => {
-                          this.ttsIsSpeaking = false;
-                          promptAction.showToast({ message: msg, duration: 2500 });
-                        };
-                        this.edgeTtsService.speak(state.displayContent, onComplete, onStart, onError);
-                      } else {
-                        this.ttsService.speak(state.displayContent, onComplete, onStart);
-                      }
-                      this.ttsIsSpeaking = true;
-                    }
-                  }
-                  : undefined,
-                onRegenerate: state.role === ChatRole.Assistant
-                  && this.viewModel !== null
-                  && this.viewModel!.canRegenerateAssistantMessage(state.messageId)
-                  ? (): void => {
-                    this.regenerateAssistantMessage(state.messageId);
-                  }
-                  : undefined,
-              })
-
-              // 分支切换控件(仅 Assistant 非首条消息)
-              if (state.role === ChatRole.Assistant
-                && state.source !== ChatMessageSource.CharacterFirstMessage
-                && this.viewModel !== null) {
-                MessageSwipeControls({
-                  activeCandidateIndex: this.getSwipeActiveIndex(state.messageId),
-                  candidateCount: this.getCandidateCount(state.messageId),
-                  isGenerating: this.viewModel!.isGenerating,
-                  isOperable: this.viewModel!.canOperateSwipe(state.messageId),
-                  onPrevious: (): void => {
-                    this.viewModel!.swipePrevious(state.messageId);
-                  },
-                  onNext: (): void => {
-                    this.viewModel!.swipeNext(state.messageId);
-                  },
-                  onStop: (): void => {
-                    this.viewModel!.stop();
-                  }
-                })
-              }
-
-              // 失败重试按钮
-              if (state.status === ChatMessageStatus.Failed
-                && this.viewModel !== null
-                && this.viewModel!.canRegenerateAssistantMessage(state.messageId)) {
-                Row() {
-                  Button({ type: ButtonType.Normal, stateEffect: false }) {
-                    Row() {
-                      SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-                        .fontSize(14)
-                        .fontColor([ThemePalette.accentColor(this.effectiveTheme)])
-                      Text($r('app.string.chat_regenerate'))
-                        .fontSize($r('app.float.app_font_caption'))
-                        .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-                        .margin({ left: 4 })
-                    }
-                  }
-                  .backgroundColor(this.computeRegenerateButtonColor())
-                  .borderRadius(14)
-                  .height(28)
-                  .padding({ left: 12, right: 12 })
-                  .margin({ top: 4, bottom: 4 })
-                  .onClick(() => {
-                    this.regenerateAssistantMessage(state.messageId);
-                  })
-                }
-                .width('100%')
-                .justifyContent(FlexAlign.Start)
-                .margin({ left: 0 })
-              }
-            }
-            .width('100%')
-          }
-        }, (state: ChatMessageRenderState) => state.messageId)
-        // 底部空白占位:高度等于悬浮输入栏占用空间(输入栏 56 + bottom padding 12 + navBar 12),
-        // 让 scrollEdge(Bottom) 时最后一条消息显示在悬浮输入栏上方,不被遮挡。
-        // 键盘弹起时输入栏上移到键盘上方,占位同步增加 keyboardHeight,避免最后一条消息被遮挡。
-        // 代写候选面板出现时额外增加高度,避免面板遮挡最后一条消息。
-        Blank().height(120 + this.navigationBarHeight + this.keyboardHeight
-          + (this.viewModel !== null
-            && (this.viewModel!.impersonateCandidates.length > 0
-              || this.viewModel!.isImpersonateGenerating) ? 150 : 0))
-      }
-      .width('100%')
-      .padding({
-        left: $r('app.float.app_spacing_12'),
-        right: $r('app.float.app_spacing_12'),
-        top: this.statusBarHeight + 12,
-        bottom: 0
-      })
-      .onAreaChange(() => {
-        this.autoScrollToBottom();
-      })
-    }
-    .scrollable(ScrollDirection.Vertical)
-    .scrollBar(BarState.Off)
-    .edgeEffect(EdgeEffect.Spring)
-    .width('100%')
-    .height('100%')
-    .onScrollEdge((side: Edge) => {
-      if (side === Edge.Bottom && this.viewModel !== null) {
-        this.viewModel!.userScrolledUp = false;
-      }
-    })
-    .onScrollEnd(() => {
-      if (this.viewModel !== null && this.scroller.isAtEnd()) {
-        this.viewModel!.userScrolledUp = false;
-      }
-    })
-  }
-
   /**
    * 同步最新消息到稳定 RenderState 列表。
    *
@@ -6043,15 +5961,31 @@ struct ChatPage {
   }
 
   /**
-   * 重新生成按钮背景色:RGB 保持 surface_2 浅色/深色值,Alpha = chatBubbleOpacity。
-   * light: #F0F1F4, dark: #3A3A3A
+   * 播放/停止消息 TTS(自 messageList 抽取,行为不变)。
+   * 正在播放时停止;否则按当前引擎(Edge 在线 / 本地)朗读指定内容。
    */
-  private computeRegenerateButtonColor(): string {
-    const rgb: string = this.isDarkMode ? '3A3A3A' : 'F0F1F4';
-    const clamped: number = Math.max(0, Math.min(255, Math.round(this.chatBubbleOpacity * 255)));
-    const hex: string = clamped.toString(16).toUpperCase();
-    const alphaHex: string = hex.length === 1 ? '0' + hex : hex;
-    return '#' + alphaHex + rgb;
+  private handleTtsPlay(content: string): void {
+    if (this.ttsIsSpeaking) {
+      if (this.ttsEngine === TtsEngine.Edge) {
+        this.edgeTtsService.stop();
+      } else {
+        this.ttsService.stop();
+      }
+      this.ttsIsSpeaking = false;
+    } else {
+      const onComplete = (): void => { this.ttsIsSpeaking = false; };
+      const onStart = (): void => { this.ttsIsSpeaking = true; };
+      if (this.ttsEngine === TtsEngine.Edge) {
+        const onError = (msg: string): void => {
+          this.ttsIsSpeaking = false;
+          promptAction.showToast({ message: msg, duration: 2500 });
+        };
+        this.edgeTtsService.speak(content, onComplete, onStart, onError);
+      } else {
+        this.ttsService.speak(content, onComplete, onStart);
+      }
+      this.ttsIsSpeaking = true;
+    }
   }
 
   private openEditUserDialog(messageId: string, originalContent: string): void {
