@@ -4,10 +4,15 @@
  * T-4.5 Chat Session List MVP 的 UI 组件。
  * 以全屏覆盖层形式展示当前聊天上下文下的会话列表。
  *
- * 设计:
- * - 通过 @ObjectLink 引用 ChatViewModel(@Observed)
- * - 不直接访问 Repository / DbHelper / 网络
- * - 不持有 chatId 选择状态(由 ViewModel 持有)
+ * 设计(组件不持有 VM/服务,依赖全部经 @Prop 值 + 回调上抛):
+ * - 数据:@Prop sessions / worldGroups / characterName / sessionError /
+ *   isLoadingSessions / canOperateSessions / showDeleteSessionConfirm
+ * - 查询:isCurrentSession / getSessionTitle / getSessionSubtitle /
+ *   getChapterLabel / getWorldName(由页面转发 viewModel)
+ * - 业务动作:全部回调上抛(新建/切换/删除会话、分组增删改移)
+ * - 折叠状态持久化:fetchCollapsedWorldIds / onPersistCollapsedWorldIds(页面实现)
+ * - 不直接访问 Repository / DbHelper / 网络 / 服务
+ * - 不持有 chatId 选择状态(由页面 ViewModel 持有)
  * - 删除前显示确认对话框(同组件内覆盖)
  *
  * 行为:
@@ -22,16 +27,11 @@
  * - 自动适配深色模式
  */
 
-import { ChatViewModel } from '../viewmodels/ChatViewModel';
 import { Chat } from '../models/Chat';
 import { WorldGroup } from '../models/WorldGroup';
 import { ThemePalette } from '../theme/ThemePalette';
 import { AppDialog } from './ui/AppDialog';
-import { AppServices } from '../services/AppServices';
 import { promptAction } from '@kit.ArkUI';
-
-/** v49: 会话列表面板分组折叠状态持久化 key(逗号分隔的 worldId 列表) */
-const SESSION_LIST_COLLAPSED_WORLD_IDS_KEY: string = 'session_list_collapsed_world_ids';
 
 /** 会话列表展示行模型:分组头 或 会话行 */
 class SessionListRowModel {
@@ -51,9 +51,64 @@ class SessionListRowModel {
 
 @Component
 export struct ChatSessionListPanel {
-  @ObjectLink viewModel: ChatViewModel;
   /** 当前有效主题 */
   @StorageProp('effectiveTheme') effectiveTheme: string = 'dark';
+
+  // ===== 数据(页面传入,对应 viewModel 同名字段) =====
+  /** 当前上下文下的会话列表 */
+  @Prop sessions: Chat[] = [];
+  /** 世界分组(章节文件夹) */
+  @Prop worldGroups: WorldGroup[] = [];
+  /** 当前角色名(空=普通聊天) */
+  @Prop characterName: string = '';
+  /** 会话操作错误消息(空=无错误) */
+  @Prop sessionError: string = '';
+  /** 会话列表加载中 */
+  @Prop isLoadingSessions: boolean = false;
+  /** 会话是否可操作(生成中/操作中/未就绪时置灰) */
+  @Prop canOperateSessions: boolean = false;
+  /** 删除确认对话框是否可见(页面 viewModel.showDeleteSessionConfirm) */
+  @Prop showDeleteSessionConfirm: boolean = false;
+
+  // ===== 查询(由页面转发 viewModel) =====
+  /** 指定会话是否为当前会话(高亮"当前"徽标) */
+  isCurrentSession: (chatId: string) => boolean = (_: string) => false;
+  /** 会话标题(标题 → "新对话") */
+  getSessionTitle: (chat: Chat) => string = (_: Chat) => '';
+  /** 会话副标题(最后消息时间) */
+  getSessionSubtitle: (chat: Chat) => string = (_: Chat) => '';
+  /** 组内章节标签("第N章";未分组返回空) */
+  getChapterLabel: (chatId: string) => string = (_: string) => '';
+  /** 分组名(未知分组返回兜底文案) */
+  getWorldName: (worldId: string) => string = (_: string) => '';
+
+  // ===== 动作(全部由页面执行) =====
+  /** 关闭面板(遮罩点击 / 关闭按钮) */
+  onClose: () => void = () => {};
+  /** 新建对话 */
+  onCreateNewSession: () => void = () => {};
+  /** 切换会话 */
+  onSelectSession: (chatId: string) => void = (_: string) => {};
+  /** 请求删除会话(弹出确认) */
+  onRequestDeleteSession: (chatId: string) => void = (_: string) => {};
+  /** 取消删除 */
+  onCancelDeleteSession: () => void = () => {};
+  /** 确认删除 */
+  onConfirmDeleteSession: () => void = () => {};
+  /** 新建分组;返回错误消息(空字符串=成功) */
+  onCreateWorldGroup: (name: string) => Promise<string> = (_: string) => Promise.resolve('');
+  /** 重命名分组;返回错误消息(空字符串=成功) */
+  onRenameWorldGroup: (worldId: string, name: string) => Promise<string> =
+    (_: string, _n: string) => Promise.resolve('');
+  /** 删除分组(仅解除关联);返回错误消息(空字符串=成功) */
+  onDeleteWorldGroup: (worldId: string) => Promise<string> = (_: string) => Promise.resolve('');
+  /** 移动会话到分组(空字符串=不分组);返回错误消息(空字符串=成功) */
+  onMoveChatToWorld: (chatId: string, worldId: string) => Promise<string> =
+    (_: string, _w: string) => Promise.resolve('');
+  /** 读取分组折叠状态(页面从 Preferences 读取;失败返回空数组) */
+  fetchCollapsedWorldIds: () => Promise<string[]> = () => Promise.resolve([]);
+  /** 持久化分组折叠状态(页面写入 Preferences,fire-and-forget) */
+  onPersistCollapsedWorldIds: (ids: string[]) => void = (_: string[]) => {};
 
   // ===== v42 世界分组(章节)状态 =====
   /** 已折叠的世界分组 id 列表 */
@@ -86,8 +141,8 @@ export struct ChatSessionListPanel {
         .height('100%')
         .backgroundColor('rgba(0,0,0,0.5)')
         .onClick(() => {
-          if (!this.viewModel.showDeleteSessionConfirm) {
-            this.viewModel.closeSessionList();
+          if (!this.showDeleteSessionConfirm) {
+            this.onClose();
           }
         })
 
@@ -95,8 +150,8 @@ export struct ChatSessionListPanel {
       Column() {
         this.headerBar();
         this.contextBar();
-        if (this.viewModel.sessionError.length > 0) {
-          Text(this.viewModel.sessionError)
+        if (this.sessionError.length > 0) {
+          Text(this.sessionError)
             .fontSize(12)
             .fontColor($r('app.color.app_danger'))
             .width('100%')
@@ -104,9 +159,9 @@ export struct ChatSessionListPanel {
         }
         Divider().color(ThemePalette.dividerColor(this.effectiveTheme)).height(1).width('100%')
 
-        if (this.viewModel.isLoadingSessions) {
+        if (this.isLoadingSessions) {
           this.loadingState();
-        } else if (this.viewModel.sessions.length === 0) {
+        } else if (this.sessions.length === 0) {
           this.emptyState();
         } else {
           this.sessionList();
@@ -155,18 +210,18 @@ export struct ChatSessionListPanel {
 
       Button($r('app.string.tab_sessions_new_chat'))
         .fontSize(13)
-        .backgroundColor(this.viewModel.canOperateSessions
+        .backgroundColor(this.canOperateSessions
           ? ThemePalette.accentColor(this.effectiveTheme)
           : ThemePalette.surface2Color(this.effectiveTheme))
-        .fontColor(this.viewModel.canOperateSessions
+        .fontColor(this.canOperateSessions
           ? $r('app.color.app_on_accent')
           : ThemePalette.textTertiaryColor(this.effectiveTheme))
         .borderRadius(16)
         .height(36)
         .padding({ left: 12, right: 12 })
-        .enabled(this.viewModel.canOperateSessions)
+        .enabled(this.canOperateSessions)
         .onClick(() => {
-          this.viewModel.createNewSession();
+          this.onCreateNewSession();
         })
 
       Button({ type: ButtonType.Circle, stateEffect: false }) {
@@ -179,7 +234,7 @@ export struct ChatSessionListPanel {
       .backgroundColor(Color.Transparent)
       .margin({ left: 4 })
       .onClick(() => {
-        this.viewModel.closeSessionList();
+        this.onClose();
       })
     }
     .width('100%')
@@ -193,8 +248,8 @@ export struct ChatSessionListPanel {
       Text('当前上下文:')
         .fontSize(12)
         .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-      Text(this.viewModel.characterName.length > 0
-        ? this.viewModel.characterName
+      Text(this.characterName.length > 0
+        ? this.characterName
         : '普通聊天')
         .fontSize(12)
         .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
@@ -233,9 +288,9 @@ export struct ChatSessionListPanel {
         .borderRadius(20)
         .height(36)
         .padding({ left: 20, right: 20 })
-        .enabled(this.viewModel.canOperateSessions)
+        .enabled(this.canOperateSessions)
         .onClick(() => {
-          this.viewModel.createNewSession();
+          this.onCreateNewSession();
         })
     }
     .width('100%')
@@ -298,7 +353,7 @@ export struct ChatSessionListPanel {
     const rows: SessionListRowModel[] = [];
     const grouped: Map<string, Chat[]> = new Map<string, Chat[]>();
     const flat: Chat[] = [];
-    const sessions: Chat[] = this.viewModel.sessions;
+    const sessions: Chat[] = this.sessions;
     for (let i = 0; i < sessions.length; i++) {
       const chat: Chat = sessions[i];
       if (chat.worldId.length > 0) {
@@ -315,7 +370,7 @@ export struct ChatSessionListPanel {
     // 分组顺序:优先按已加载分组的 createdAt 升序,未知分组排最后
     const knownOrder: string[] = [];
     const unknownWorldIds: string[] = [];
-    const vmGroups: WorldGroup[] = this.viewModel.getWorldGroups();
+    const vmGroups: WorldGroup[] = this.worldGroups;
     const vmGroupsSorted: WorldGroup[] = vmGroups.slice();
     vmGroupsSorted.sort((a: WorldGroup, b: WorldGroup): number => a.createdAt - b.createdAt);
     for (let i = 0; i < vmGroupsSorted.length; i++) {
@@ -338,7 +393,7 @@ export struct ChatSessionListPanel {
       const header: SessionListRowModel = new SessionListRowModel();
       header.isHeader = true;
       header.worldId = worldId;
-      header.worldName = this.viewModel.getWorldName(worldId);
+      header.worldName = this.getWorldName(worldId);
       header.chatCount = list.length;
       header.isCollapsed = this.isWorldCollapsed(worldId);
       rows.push(header);
@@ -380,26 +435,18 @@ export struct ChatSessionListPanel {
     this.persistCollapsedWorldIds(next);
   }
 
-  /** v49: 加载上次保存的分组折叠状态(无记录时全展开) */
+  /** v49: 加载上次保存的分组折叠状态(无记录时全展开;读取实现由页面提供) */
   private async loadCollapsedWorldIds(): Promise<void> {
     try {
-      const prefs = AppServices.getAppPreferences();
-      const raw: string = await prefs.getString(SESSION_LIST_COLLAPSED_WORLD_IDS_KEY, '');
-      if (raw.length === 0) {
-        this.collapsedWorldIds = [];
-        return;
-      }
-      this.collapsedWorldIds = raw.split(',').filter((id: string): boolean => id.length > 0);
+      this.collapsedWorldIds = await this.fetchCollapsedWorldIds();
     } catch (_e) {
       this.collapsedWorldIds = [];
     }
   }
 
-  /** v49: 持久化分组折叠状态(fire-and-forget) */
+  /** v49: 持久化分组折叠状态(fire-and-forget;写入实现由页面提供) */
   private persistCollapsedWorldIds(ids: string[]): void {
-    const prefs = AppServices.getAppPreferences();
-    prefs.putString(SESSION_LIST_COLLAPSED_WORLD_IDS_KEY, ids.join(','))
-      .catch((_e: Object): void => {});
+    this.onPersistCollapsedWorldIds(ids);
   }
 
   /** 分组头行:分组名 + 章节数 + 折叠箭头 + 管理按钮 */
@@ -447,7 +494,7 @@ export struct ChatSessionListPanel {
 
   /** 打开分组管理弹窗(重命名/删除) */
   private openGroupManageDialog(worldId: string): void {
-    const groups: WorldGroup[] = this.viewModel.getWorldGroups();
+    const groups: WorldGroup[] = this.worldGroups;
     for (let i = 0; i < groups.length; i++) {
       if (groups[i].id === worldId) {
         this.renameGroupTarget = groups[i];
@@ -463,7 +510,7 @@ export struct ChatSessionListPanel {
       Column() {
         Row() {
           if (chat.worldId.length > 0) {
-            Text(this.viewModel.getChapterLabel(chat.id))
+            Text(this.getChapterLabel(chat.id))
               .fontSize(10)
               .fontColor(ThemePalette.accentColor(this.effectiveTheme))
               .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
@@ -471,7 +518,7 @@ export struct ChatSessionListPanel {
               .padding({ left: 4, right: 4, top: 1, bottom: 1 })
               .margin({ right: 6 })
           }
-          Text(this.viewModel.getSessionTitle(chat))
+          Text(this.getSessionTitle(chat))
             .fontSize(15)
             .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
             .maxLines(1)
@@ -481,7 +528,7 @@ export struct ChatSessionListPanel {
         .width('100%')
         .alignItems(VerticalAlign.Center)
 
-        Text(this.viewModel.getSessionSubtitle(chat))
+        Text(this.getSessionSubtitle(chat))
           .fontSize(12)
           .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
           .margin({ top: 2 })
@@ -490,7 +537,7 @@ export struct ChatSessionListPanel {
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
 
-      if (this.viewModel.isCurrentSession(chat.id)) {
+      if (this.isCurrentSession(chat.id)) {
         Text($r('app.string.chat_branch_current_badge'))
           .fontSize(12)
           .fontColor(ThemePalette.accentColor(this.effectiveTheme))
@@ -503,7 +550,7 @@ export struct ChatSessionListPanel {
         .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
         .height(32)
         .padding({ left: 8, right: 8 })
-        .enabled(this.viewModel.canOperateSessions)
+        .enabled(this.canOperateSessions)
         .onClick(() => {
           this.openMoveChatDialog(chat);
         })
@@ -514,9 +561,9 @@ export struct ChatSessionListPanel {
         .fontColor($r('app.color.app_danger'))
         .height(32)
         .padding({ left: 8, right: 8 })
-        .enabled(this.viewModel.canOperateSessions)
+        .enabled(this.canOperateSessions)
         .onClick(() => {
-          this.viewModel.requestDeleteSession(chat.id);
+          this.onRequestDeleteSession(chat.id);
         })
     }
     .width('100%')
@@ -526,8 +573,8 @@ export struct ChatSessionListPanel {
     .margin({ top: 4, bottom: 4 })
     .alignItems(VerticalAlign.Center)
     .onClick(() => {
-      if (this.viewModel.canOperateSessions) {
-        this.viewModel.selectSession(chat.id);
+      if (this.canOperateSessions) {
+        this.onSelectSession(chat.id);
       }
     })
   }
@@ -535,7 +582,7 @@ export struct ChatSessionListPanel {
   @Builder
   deleteConfirmDialog() {
     AppDialog({
-      visible: this.viewModel.showDeleteSessionConfirm,
+      visible: this.showDeleteSessionConfirm,
       title: '',
       layout: 'center',
       actions: [
@@ -544,20 +591,20 @@ export struct ChatSessionListPanel {
           style: 'secondary',
           enabled: true,
           onTap: () => {
-            this.viewModel.cancelDeleteSession();
+            this.onCancelDeleteSession();
           }
         },
         {
           label: $r('app.string.character_action_delete'),
           style: 'danger',
-          enabled: this.viewModel.canOperateSessions,
+          enabled: this.canOperateSessions,
           onTap: () => {
-            this.viewModel.confirmDeleteSession();
+            this.onConfirmDeleteSession();
           }
         }
       ],
       onClose: () => {
-        this.viewModel.cancelDeleteSession();
+        this.onCancelDeleteSession();
       }
     }) {
       Column() {
@@ -584,11 +631,11 @@ export struct ChatSessionListPanel {
       return;
     }
     this.showCreateGroupDialog = false;
-    const ok: boolean = await this.viewModel.createWorldGroup(name);
-    if (ok) {
+    const error: string = await this.onCreateWorldGroup(name);
+    if (error.length === 0) {
       promptAction.showToast({ message: '已创建分组', duration: 1500 });
     } else {
-      promptAction.showToast({ message: this.viewModel.sessionError, duration: 2000 });
+      promptAction.showToast({ message: error, duration: 2000 });
     }
   }
 
@@ -604,11 +651,11 @@ export struct ChatSessionListPanel {
       return;
     }
     this.renameGroupTarget = null;
-    const ok: boolean = await this.viewModel.renameWorldGroup(target.id, name);
-    if (ok) {
+    const error: string = await this.onRenameWorldGroup(target.id, name);
+    if (error.length === 0) {
       promptAction.showToast({ message: '已重命名分组', duration: 1500 });
     } else {
-      promptAction.showToast({ message: this.viewModel.sessionError, duration: 2000 });
+      promptAction.showToast({ message: error, duration: 2000 });
     }
   }
 
@@ -619,11 +666,11 @@ export struct ChatSessionListPanel {
       return;
     }
     this.deleteGroupTarget = null;
-    const ok: boolean = await this.viewModel.deleteWorldGroup(target.id);
-    if (ok) {
+    const error: string = await this.onDeleteWorldGroup(target.id);
+    if (error.length === 0) {
       promptAction.showToast({ message: '已删除分组,会话未受影响', duration: 1500 });
     } else {
-      promptAction.showToast({ message: this.viewModel.sessionError, duration: 2000 });
+      promptAction.showToast({ message: error, duration: 2000 });
     }
   }
 
@@ -641,13 +688,11 @@ export struct ChatSessionListPanel {
     }
     this.moveTarget = null;
     const worldId: string = this.moveSelectedWorldId;
-    const ok: boolean = await this.viewModel.moveChatToWorld(
-      target.id, worldId.length > 0 ? worldId : null
-    );
-    if (ok) {
+    const error: string = await this.onMoveChatToWorld(target.id, worldId);
+    if (error.length === 0) {
       promptAction.showToast({ message: '已移动会话', duration: 1500 });
     } else {
-      promptAction.showToast({ message: this.viewModel.sessionError, duration: 2000 });
+      promptAction.showToast({ message: error, duration: 2000 });
     }
   }
 
@@ -865,7 +910,7 @@ export struct ChatSessionListPanel {
             .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
             .margin({ bottom: 8 })
 
-          Text(this.moveTarget !== null ? this.viewModel.getSessionTitle(this.moveTarget!) : '')
+          Text(this.moveTarget !== null ? this.getSessionTitle(this.moveTarget!) : '')
             .fontSize(13)
             .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
             .maxLines(1)
@@ -899,7 +944,7 @@ export struct ChatSessionListPanel {
               Divider().color(ThemePalette.dividerColor(this.effectiveTheme))
 
               // 分组列表
-              ForEach(this.viewModel.getWorldGroups(), (g: WorldGroup) => {
+              ForEach(this.worldGroups, (g: WorldGroup) => {
                 Row() {
                   Radio({ value: g.id, group: 'moveWorldPanel' })
                     .checked(this.moveSelectedWorldId === g.id)
@@ -924,7 +969,7 @@ export struct ChatSessionListPanel {
                 })
               }, (g: WorldGroup) => g.id)
 
-              if (this.viewModel.getWorldGroups().length === 0) {
+              if (this.worldGroups.length === 0) {
                 Text('暂无分组,请先点击"新建分组"创建')
                   .fontSize(13)
                   .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
