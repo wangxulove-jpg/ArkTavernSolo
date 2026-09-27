@@ -105,8 +105,9 @@
   - 装配：宿主契约 `LorebookPanelHost`（函数属性 `isDisposed` / `getCharacter` / `getRecentMessages` / `setPanelData`）构造期箭头填充；服务取用沿用 `AppServices.getXxx()` 静态（零改写）
   - **保留 `lorebookPanelData` 字段**（ArkUI 绑定，写入经 `setPanelData` 回调）+ 4 个公开薄包装 → 公开 API 面零差异；`refreshLorebookPinNow` / `aiModifyStatus` 非面板逻辑，留原处
   - 校验：搬运体逐行等价（**唯一差异 = 9 处宿主间接行**：disposed ×4、getCharacter ×2、getRecentMessages ×1、setPanelData ×2）；公开 API 面 **131 → 131 零差异**；编译 BUILD SUCCESSFUL；**ChatViewModel 1,660 → 1,479 行**（P3-1 累计 1,698 → 1,479，-219）
-- [ ] **③ 会话分组桥：已核实无重复，无需动作** —— P1-4 ③ 已随死 UI 删除 ChatViewModel 的世界分组 API；全仓 `getWorldName/getChapterLabel/createWorldGroup/renameWorldGroup/deleteWorldGroup/moveChatToWorld` 现仅存于 `ChatSessionListViewModel`（+ `ChatSessionRootView` 调用），ChatViewModel **0 命中**
-- **机械校验**：公开 API 面 diff（抽取全部非 private 声明行，`Compare-Object` HEAD 前后）；**唯一预期差异 = 2 个类型声明行迁出**（其余类成员零差异，含 `async` 修饰符）
+- [x] **③ 会话分组桥：已核实无重复，无需动作** ✅ —— P1-4 ③ 已随死 UI 删除 ChatViewModel 的世界分组 API；全仓 `getWorldName/getChapterLabel/createWorldGroup/renameWorldGroup/deleteWorldGroup/moveChatToWorld` 现仅存于 `ChatSessionListViewModel`（+ `ChatSessionRootView` 调用），ChatViewModel **0 命中**（0 调用证据充分，唯一实现保留）
+- **P3-1 收官**：ChatViewModel **1,698 → 1,479 行（-219，-12.9%）**；新增 `viewmodels/ChatErrorMapper.ets` + `viewmodels/LorebookPanelVM.ets` + `models/LorebookPanel.ets`；两接缝公开 API 面均 131 → 131 零差异；附加收益：组件层 `ChatStatusWorldPanel` 的 viewmodels 类型引用偏差已消除
+- **机械校验**：公开 API 面 diff（抽取全部非 private 类成员声明行，`Compare-Object` HEAD 前后）→ 两接缝均 **零差异**（含 `async` 修饰符）
 
 ## 3. 环境事实（防重复踩坑）
 
@@ -172,6 +173,10 @@
   6. 消息"计入记忆"开关（`9f13ce4`）：长按/菜单切换该条消息的 includeInMemory 并持久化（重进会话仍生效）
   7. Swipe 生成标志与分支刷新（`29f8f45`）：重新生成候选时摘要箭头的生成中状态正常；分支面板数据刷新正常
   - 回滚锚点：`29f8f45` / `9f13ce4` / `1ab7a8c` / `f0ee661` / `fa44f58`（各自独立）
+- **P3-1 待冒烟（"搬运不改行为"）**：
+  1. 错误映射（`a1c0478`）：未配置模型 / 禁用模型 / API Key 缺失 / 401 / 429 / 超时 / 网络失败 / 5xx / 解析失败 的提示文案不变；会话切换/新建/删除失败提示文案不变（"会话不存在或已删除"等）
+  2. 世界书面板（`38dc6a3`）：聊天页状态/世界书面板打开后角色专属世界书条目列出（按 priority 降序、同级按名）；条目启停开关切换后列表刷新；AI 世界书"修改/提取"生成变更预览、套用（新增/更新/删除）后列表刷新；以上失败路径仅日志告警、面板数据回退 null
+  - 回滚锚点：`38dc6a3`（P3-1②）/ `a1c0478`（P3-1①，各自独立）
 - **本轮附加验证（2026-09-27，host 侧）**：本地单元测试套件已在本机执行通过 —— `hvigorw test`（`entry/src/test`，16 个测试类 / **96 用例全部 Success，0 失败 0 忽略**；结果落盘 `entry/.test/default/intermediates/test/coverage_data/test_result.txt`）。覆盖：ChatTextContract 纯函数（前端交互缓冲 / 粘滞提醒文本 / 状态段拆分 —— P2-1、P2-3 搬运过的纯函数）、PromptSegment 段序、状态 schema 解析、世界书激活与粘滞服务、ChapterMemoryIndexer、MemoryLoadRefService、ContextBudgetEstimator、Lorebook 模式、Gemini 模型过滤、前端契约 v2；**不含**会话 / Swipe / 分支 / 流式簇（依赖 DB/网络，只能真机冒烟）。命令：`hvigorw test --mode module -p module=entry@default -p product=default -p buildMode=debug --no-daemon`
 - **API 面等价校验（2026-09-27，机械对比）**：以 tag `refactor-baseline` 为基准，抽取 ChatService 全部非 private 声明（方法 / 访问器）逐行对比 → 修复后 **89 项签名与基线完全一致**（含 `async` 修饰符）。过程中发现并修复 1 处搬运残留：`refreshLorebookPinNow` 的 `async` 修饰符在 P2-7 薄包装时丢失（调用侧行为等价，但签名不同）→ 已恢复（commit `36d809c`，编译通过）。新模块分层抽查：`ChatSessionService` / `ChatMessageSender` / `ChatUserIdentityService` 无 viewmodels / pages / components 越层导入
 - **已作废冒烟项**（相关代码已删除）：会话列表面板（`726efec` / `958b43b` 的面板侧）——面板与 ChatViewModel 会话列表 API 已随 P1-4 ③ 删除，不必再测
