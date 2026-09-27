@@ -146,5 +146,5 @@ docs/handover/
 
 - 基线：`refactor-baseline` tag（2026-09-27 建立）
 - 已完成：全项目只读审计（286 文件 / 112,801 行）、交接文档体系重建、`tools/` 与开发截图清理
-- P1 进度：P1-1 死代码清理 ✅ · P1-2 ChatService 重复逻辑消除 ✅ · P1-3 ChatPage 组件抽取（5 个）✅ · P1-5 组件越层修复 ✅ · P1-6 不可变性 ✅；**下一步：P1-4 会话列表去重**（分相执行，合并方向需先对齐）
+- P1 进度：P1-1 死代码清理 ✅ · P1-2 ChatService 重复逻辑消除 ✅ · P1-3 ChatPage 组件抽取（5 个）✅ · P1-5 组件越层修复 ✅ · P1-6 不可变性 ✅ · P1-4 会话列表去重：低风险相 ✅（`utils/SessionListCollapseState` 折叠纯函数 + `components/SessionGroupDialogs` 共享弹窗，"单组件 + 布局参数"的合并方向待与用户对齐后动工）
 - 验证状态：代码改动均编译通过；真机冒烟按批次进行，清单与回滚锚点见 `docs/handover/CURRENT.md` §4；路线图见 `docs/handover/2026-09-27-audit-and-roadmap.md` §6
