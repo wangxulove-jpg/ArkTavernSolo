@@ -150,8 +150,8 @@ docs/handover/
 - 基线：`refactor-baseline` tag（2026-09-27 建立）
 - 已完成：全项目只读审计（286 文件 / 112,801 行）、交接文档体系重建、`tools/` 与开发截图清理
 - **P1 批次全部完成**：P1-1 死代码清理 ✅ · P1-2 ChatService 重复逻辑消除 ✅ · P1-3 ChatPage 组件抽取（5 个）✅ · P1-4 会话列表去重 ✅（共享折叠纯函数 + 共享分组弹窗 + **删除不可达的会话列表面板**，≈-1069 行）· P1-5 组件越层修复 ✅ · P1-6 不可变性 ✅
-- **P2 批次收官（ChatService 瘦身，6,735 → 4,305 行，-2,430）**：P2-1 ✅（`ChatTextContract` / `ChatRequestPlan` / `ChatRequestBuilder` 615 行）；P2-2 ✅（`models/ChatServiceContract` + `ChatOneShotGenerator` 513 行）；P2-3 ✅（`ChatStatusService` 状态簇 597 行 + 5 状态字段随迁）；P2-4 ✅（`models/ChatGenerationContext` + `ChatSwipeController` 浏览/切换 151 行 + 生成族 176 行）；P2-5 ✅（`ConversationBranchService` 查询/判定 252 行，fork+stream 族暂留）
-- ChatService 存量（审计范围内"暂留"，动前须用户拍板）：流式核心 / 会话生命周期 / 消息 CRUD / 记忆与世界书胶水段；**下一步候选（P3，审计 §6）**：ChatViewModel 拆分 → MemoryService 拆分 → DatabaseSchema 分域
+- **P2 路线 + 扩展已完成（ChatService 瘦身，6,735 → 3,315 行，-3,420）**：P2-1 ✅（`ChatTextContract` / `ChatRequestPlan` / `ChatRequestBuilder` 615 行）；P2-2 ✅（`models/ChatServiceContract` + `ChatOneShotGenerator` 513 行）；P2-3 ✅（`ChatStatusService` 597 行 + 5 状态字段）；P2-4 ✅（`models/ChatGenerationContext` + `ChatSwipeController` 327 行）；P2-5 ✅（`ConversationBranchService` 查询/判定 252 行）；**P2-6 ✅**（`ChatMessageService` 113 行）；**P2-7 ✅**（`ChatContextMaintenanceService` 291 行）；**P2-8 ✅**（branch 切换/重载 103 行 + 生成族 676 行）
+- ChatService 剩余可拆簇（须用户拍板）：会话生命周期 ≈600 行、生成入口 ≈300 行；**流式核心 ≈750 行审计明示不动，现实下限约 2,300~2,500 行**；**下一步候选（P3，审计 §6）**：ChatViewModel 拆分 → MemoryService 拆分 → DatabaseSchema 分域
 - P2 装配范式（后续接缝直接复用）：服务依赖构造期注入；跨类状态与宿主私有能力经**函数属性**回调（`ChatRequestHost` 式）读写——读走 getter、写走 setter（`ChatOneShotHost` / `ChatStatusHost` / `ChatSwipeHost` 含 `doStream` 委托），类内同名 getter/setter/方法转发 → 搬运代码零改写、读写语义不变；自带状态的簇可将状态随类迁出（见 `ChatStatusService`）。参考实现：`entry/src/main/ets/services/` 下 `ChatRequestBuilder.ets` / `ChatOneShotGenerator.ets` / `ChatStatusService.ets` / `ChatSwipeController.ets` / `ConversationBranchService.ets`
-- 后续接缝：P2 路线已走完；下一批次（P3）与"ChatService 继续瘦身（审计外项）"以用户拍板为准
+- 后续接缝：P2 路线 + 扩展（P2-6..P2-8）已走完；剩余"会话生命周期 / 生成入口"簇与 P3 批次以用户拍板为准（流式核心不动）
 - 验证状态：代码改动均编译通过；真机冒烟按批次进行，清单与回滚锚点见 `docs/handover/CURRENT.md` §4；路线图见 `docs/handover/2026-09-27-audit-and-roadmap.md` §6
