@@ -40,6 +40,7 @@
 | P-26 | **用"派生值"给兄弟节点命名 → 必然同名** | 分支地图原用「第 N 轮分支」(N = 分叉点前的用户消息数)作标题,**同一句话分叉的两条分支 N 相同 → 同名**,用户完全分不清(实测出现两对同名分支)。规则:同一父节点下的兄弟**必须**带**兄弟序号**(按 createdAt 排序的 ①②③);主标题用**与兄弟的差异**(分歧首句),派生值(轮次)降级为副标题;无差异内容的分支显式标"尚无新内容" |
 | P-27 | **用整体降透明度表达"非当前项"** | 原分支地图给非活跃分支整节点 `opacity(0.7)`,文字一起变淡 → 用户反馈"看不清"。规则:**只降线/点/边框的颜色**(改中性色),文字保持 `--text-primary`;状态用**颜色与形状**区分,不用透明度 |
 | P-28 | 同一行内既有"整行点击进 A"又有"行内按钮做 B"（模型列表行：点行进编辑页、点「切换」立即切换当前配置） | **不要用父子嵌套 `onClick`** —— 那样是否误触取决于事件冒泡语义，不可靠。做法：把两个点击区做成**兄弟节点**——左列（`layoutWeight(1)`）承载"整行"点击，右胶囊单独 `onClick`，两者互不包含；**行容器本身不带 `onClick`**（见 `ModelSettingsPage.configListItem`） |
+| P-29 | 把居中模态弹框改成 `bindSheet` 上滑面板后**没有上滑动画**（仍旧直接出现） | `bindSheet` 的开关若在**节点首次挂载时就为 true**，面板会直接出现、没有进场过渡。必须**两段式**：外层 `if (showXxx)` 挂载一个 0 高节点 → 该节点 `onAppear` 里把 `sheetShow` 置真 → 由 `false→true` 触发上滑。**关闭时只置 `sheetShow = false`**，再由 `bindSheet.onDisappear` 去置 `showXxx = false` 卸载，这样才有下滑动画。范式见 `components/ChatMoreMenuSheet.ets`、`ChatPage` 的 `memoryModeSheetContent` / `userNameSheetContent` / `personaSheetContent` / `chapterSheetContent` |
 
 ## 3. 分层与架构
 

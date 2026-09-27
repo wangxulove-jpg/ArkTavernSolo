@@ -159,6 +159,13 @@ struct ChatPage {
   @State chapterGreetingPool: string[] = [];
   /** v42: 新建章节进行中(防止重复点击) */
   @State chapterCreateBusy: boolean = false;
+  /** 上滑面板显示开关:挂载后由 onAppear 置真,驱动 bindSheet 的上滑动画 */
+  @State memoryModeSheetShow: boolean = false;
+  @State userNameSheetShow: boolean = false;
+  @State personaSheetShow: boolean = false;
+  @State chapterSheetShow: boolean = false;
+  /** 用户身份面板当前分段:0=用户身份,1=性格总结 */
+  @State personaSheetTab: number = 0;
   /** 是否显示 Fork 模式选择弹窗 */
   @State showForkModePicker: boolean = false;
   /** Fork 操作目标消息 ID */
@@ -1387,24 +1394,89 @@ struct ChatPage {
           this.deleteMessageConfirmDialog()
         }
 
-        // v9: 本对话称呼覆盖编辑弹窗
+        // v9: 本对话称呼(上滑面板)
         if (this.showUserNameOverrideDialog) {
-          this.userNameOverrideDialog()
+          Column()
+            .width('100%')
+            .height(0)
+            .backgroundColor(Color.Transparent)
+            .bindSheet(this.userNameSheetShow, this.userNameSheetContent(), {
+              height: SheetSize.FIT_CONTENT,
+              dragBar: false,
+              showClose: false,
+              backgroundColor: ThemePalette.surface1Color(this.effectiveTheme),
+              onDisappear: (): void => {
+                this.userNameSheetShow = false;
+                this.showUserNameOverrideDialog = false;
+              }
+            })
+            .onAppear(() => {
+              this.userNameSheetShow = true;
+            })
         }
 
-        // v50: 记忆模式选择弹窗
+        // v50: 记忆模式选择(上滑面板)
         if (this.showMemoryModeDialog) {
-          this.memoryModeDialog()
+          Column()
+            .width('100%')
+            .height(0)
+            .backgroundColor(Color.Transparent)
+            .bindSheet(this.memoryModeSheetShow, this.memoryModeSheetContent(), {
+              height: SheetSize.FIT_CONTENT,
+              dragBar: false,
+              showClose: false,
+              backgroundColor: ThemePalette.surface1Color(this.effectiveTheme),
+              onDisappear: (): void => {
+                this.memoryModeSheetShow = false;
+                this.showMemoryModeDialog = false;
+              }
+            })
+            .onAppear(() => {
+              this.memoryModeSheetShow = true;
+            })
         }
 
-        // Persona 选择弹窗
+        // Persona 选择(上滑面板)
         if (this.showPersonaPicker) {
-          this.personaPickerSheet()
+          Column()
+            .width('100%')
+            .height(0)
+            .backgroundColor(Color.Transparent)
+            .bindSheet(this.personaSheetShow, this.personaSheetContent(), {
+              height: SheetSize.FIT_CONTENT,
+              dragBar: false,
+              showClose: false,
+              backgroundColor: ThemePalette.surface1Color(this.effectiveTheme),
+              onDisappear: (): void => {
+                this.personaSheetShow = false;
+                this.showPersonaPicker = false;
+              }
+            })
+            .onAppear(() => {
+              this.personaSheetShow = true;
+            })
         }
 
-        // v42: 新建章节开场白选择弹窗
+        // v42: 新建章节开场白选择(上滑面板)
         if (this.showChapterGreetingPicker) {
-          this.chapterGreetingPickerDialog()
+          Column()
+            .width('100%')
+            .height(0)
+            .backgroundColor(Color.Transparent)
+            .bindSheet(this.chapterSheetShow, this.chapterSheetContent(), {
+              height: SheetSize.FIT_CONTENT,
+              dragBar: false,
+              showClose: false,
+              backgroundColor: ThemePalette.surface1Color(this.effectiveTheme),
+              onDisappear: (): void => {
+                this.chapterSheetShow = false;
+                this.showChapterGreetingPicker = false;
+                this.chapterGreetingPool = [];
+              }
+            })
+            .onAppear(() => {
+              this.chapterSheetShow = true;
+            })
         }
 
         // Fork 模式选择弹窗
@@ -2991,6 +3063,7 @@ struct ChatPage {
       return;
     }
     this.userNameOverrideDraft = this.viewModel!.getCurrentChatUserNameOverride();
+    this.userNameSheetShow = false;
     this.showUserNameOverrideDialog = true;
   }
 
@@ -3012,6 +3085,7 @@ struct ChatPage {
       this.memoryModeIsAuto = false;
       this.memoryModeChapterCount = 4;
     }
+    this.memoryModeSheetShow = false;
     this.showMemoryModeDialog = true;
   }
 
@@ -3020,7 +3094,7 @@ struct ChatPage {
    */
   private async saveMemoryMode(): Promise<void> {
     if (this.viewModel === null) {
-      this.showMemoryModeDialog = false;
+      this.memoryModeSheetShow = false;
       return;
     }
     try {
@@ -3028,9 +3102,9 @@ struct ChatPage {
       await this.viewModel!.setChapterInjectCount(this.memoryModeChapterCount);
       await this.refreshMemoryModeDisplay();
     } catch (_e) {
-      // 失败时只关闭对话框,不阻塞后续操作
+      // 失败时只关闭面板,不阻塞后续操作
     }
-    this.showMemoryModeDialog = false;
+    this.memoryModeSheetShow = false;
   }
 
   /**
@@ -3048,144 +3122,78 @@ struct ChatPage {
     }
   }
 
+  /** 记忆模式面板内容(上滑 Sheet):模式选择 + 章节注入数 */
   @Builder
-  memoryModeDialog() {
-    Stack() {
+  memoryModeSheetContent() {
+    Column() {
+      Text('记忆模式')
+        .fontSize($r('app.float.app_font_title'))
+        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        .width('100%')
+        .padding({ left: 4, top: 8, bottom: 2 })
+
+      this.sheetSectionCaption('模式')
       Column() {
-        Column() {
-          Text('记忆模式')
-            .fontSize(17)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .margin({ bottom: 16 })
-
-          // 模式选项:手动总结
-          Row() {
-            Column() {
-              Text('手动总结')
-                .fontSize(15)
-                .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-              Text('在记忆管理页手动生成章节摘要,完全可控')
-                .fontSize(12)
-                .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-                .margin({ top: 2 })
-            }
-            .layoutWeight(1)
-            .alignItems(HorizontalAlign.Start)
-
-            if (!this.memoryModeIsAuto) {
-              Text('✓')
-                .fontSize(16)
-                .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-            }
-          }
-          .width('100%')
-          .padding(12)
-          .borderRadius(12)
-          .backgroundColor(this.memoryModeIsAuto
-            ? ThemePalette.surface2Color(this.effectiveTheme)
-            : ThemePalette.accentColor(this.effectiveTheme) + '22')
-          .onClick(() => {
+        this.sheetChoiceRow('手动总结', '在记忆管理页手动生成章节摘要,完全可控',
+          !this.memoryModeIsAuto, false, (): void => {
             this.memoryModeIsAuto = false;
           })
-
-          // 模式选项:自动归档
-          Row() {
-            Column() {
-              Text('自动归档')
-                .fontSize(15)
-                .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-              Text('未归档消息达 50 条或 2 万字符时,回复完成后自动生成章节摘要;只在归档时刻一次性重建缓存前缀')
-                .fontSize(12)
-                .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-                .margin({ top: 2 })
-            }
-            .layoutWeight(1)
-            .alignItems(HorizontalAlign.Start)
-
-            if (this.memoryModeIsAuto) {
-              Text('✓')
-                .fontSize(16)
-                .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-            }
-          }
-          .width('100%')
-          .padding(12)
-          .borderRadius(12)
-          .margin({ top: 8 })
-          .backgroundColor(this.memoryModeIsAuto
-            ? ThemePalette.surface2Color(this.effectiveTheme)
-            : ThemePalette.accentColor(this.effectiveTheme) + '22')
-          .onClick(() => {
+        this.sheetChoiceRow('自动归档', '未归档满 50 条或 2 万字符时,回复完成后自动生成',
+          this.memoryModeIsAuto, true, (): void => {
             this.memoryModeIsAuto = true;
           })
-
-          // 章节注入数
-          Row() {
-            Text('注入最近章节数')
-              .fontSize(14)
-              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-              .layoutWeight(1)
-            Text(String(this.memoryModeChapterCount))
-              .fontSize(14)
-              .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-          }
-          .width('100%')
-          .margin({ top: 16, bottom: 2 })
-
-          Slider({ value: this.memoryModeChapterCount, min: 1, max: 20, step: 1 })
-            .width('100%')
-            .height(28)
-            .onChange((value: number) => {
-              this.memoryModeChapterCount = Math.round(value);
-            })
-
-          Text('每章约 2000-3000 字,章节数越多上下文占用越大(默认 4)')
-            .fontSize(11)
-            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-            .width('100%')
-
-          Row() {
-            Button('取消')
-              .fontSize(15)
-              .backgroundColor(Color.Transparent)
-              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-              .height(40)
-              .layoutWeight(1)
-              .onClick(() => {
-                this.showMemoryModeDialog = false;
-              })
-            Button('保存')
-              .fontSize(15)
-              .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
-              .fontColor($r('app.color.app_on_accent'))
-              .borderRadius($r('app.float.app_radius_sm'))
-              .height(40)
-              .layoutWeight(1)
-              .margin({ left: 12 })
-              .onClick(() => {
-                void this.saveMemoryMode();
-              })
-          }
-          .width('100%')
-          .margin({ top: 16 })
-        }
-        .width('88%')
-        .padding(20)
-        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
-        .borderRadius($r('app.float.app_radius_lg'))
       }
       .width('100%')
-      .height('100%')
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
+      .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+      .borderRadius($r('app.float.app_radius_md'))
+
+      this.sheetSectionCaption('章节注入')
+      Column() {
+        Row() {
+          Text('注入最近章节数')
+            .fontSize($r('app.float.app_font_body'))
+            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+            .layoutWeight(1)
+          Text(String(this.memoryModeChapterCount))
+            .fontSize($r('app.float.app_font_body'))
+            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+        }
+        .width('100%')
+        .padding({ left: 12, right: 12, top: 10 })
+
+        Slider({ value: this.memoryModeChapterCount, min: 1, max: 20, step: 1 })
+          .width('100%')
+          .height(28)
+          .padding({ left: 12, right: 12 })
+          .onChange((value: number) => {
+            this.memoryModeChapterCount = Math.round(value);
+          })
+
+        Text('每章约 2000-3000 字,章节数越多上下文占用越大(默认 4)')
+          .fontSize($r('app.float.app_font_caption'))
+          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+          .width('100%')
+          .padding({ left: 12, right: 12, bottom: 10 })
+      }
+      .width('100%')
+      .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+      .borderRadius($r('app.float.app_radius_md'))
+
+      Button('保存')
+        .fontSize($r('app.float.app_font_body'))
+        .fontWeight(FontWeight.Medium)
+        .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
+        .fontColor($r('app.color.app_on_accent'))
+        .borderRadius($r('app.float.app_radius_sm'))
+        .height(44)
+        .width('100%')
+        .margin({ top: 16 })
+        .onClick(() => {
+          void this.saveMemoryMode();
+        })
     }
     .width('100%')
-    .height('100%')
-    .backgroundColor('rgba(0,0,0,0.5)')
-    .onClick(() => {
-      this.showMemoryModeDialog = false;
-    })
+    .padding({ left: 12, right: 12, bottom: 8 })
   }
 
   /**
@@ -3229,7 +3237,7 @@ struct ChatPage {
   }
 
   /**
-   * 打开 Persona 选择 ActionSheet。
+   * 打开 Persona 选择面板(上滑)。
    * 加载所有 Persona 并展示选择列表。
    */
   private async openPersonaPicker(): Promise<void> {
@@ -3238,6 +3246,8 @@ struct ChatPage {
       this.personaOptions = await service.list();
       // 获取当前生效的身份名称
       await this.refreshPersonaDisplay();
+      this.personaSheetTab = 0;
+      this.personaSheetShow = false;
       this.showPersonaPicker = true;
     } catch (e) {
       Logger.error(LOG_TAG, 'openPersonaPicker failed: ' + String(e));
@@ -3250,7 +3260,7 @@ struct ChatPage {
    */
   private async selectPersonaForChat(personaId: string): Promise<void> {
     if (this.viewModel === null) {
-      this.showPersonaPicker = false;
+      this.personaSheetShow = false;
       return;
     }
     try {
@@ -3263,7 +3273,7 @@ struct ChatPage {
     } catch (e) {
       Logger.error(LOG_TAG, 'selectPersonaForChat failed: ' + String(e));
     }
-    this.showPersonaPicker = false;
+    this.personaSheetShow = false;
   }
 
   /**
@@ -3303,6 +3313,7 @@ struct ChatPage {
       return;
     }
     this.chapterGreetingPool = pool;
+    this.chapterSheetShow = false;
     this.showChapterGreetingPicker = true;
   }
 
@@ -3318,8 +3329,7 @@ struct ChatPage {
     try {
       const newChatId: string = await this.viewModel!.createChapter(index);
       if (newChatId.length > 0) {
-        this.showChapterGreetingPicker = false;
-        this.chapterGreetingPool = [];
+        this.chapterSheetShow = false;
         this.refreshUserNameDisplay();
         promptAction.showToast({ message: '已创建新章节,原对话可切回', duration: 2000 });
       } else {
@@ -3335,110 +3345,189 @@ struct ChatPage {
     }
   }
 
-  /** 关闭"新建章节"开场白选择器 */
-  private closeChapterGreetingPicker(): void {
-    if (this.chapterCreateBusy) {
-      return;
-    }
-    this.showChapterGreetingPicker = false;
-    this.chapterGreetingPool = [];
-  }
-
-  /** 开场白选择弹窗:列表显示每项前 100 字预览 */
+  /** 新建章节面板内容(上滑 Sheet):开场白列表 + 创建按钮 */
   @Builder
-  chapterGreetingPickerDialog() {
-    Stack() {
+  chapterSheetContent() {
+    Column() {
+      Text('新建章节')
+        .fontSize($r('app.float.app_font_title'))
+        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        .width('100%')
+        .padding({ left: 4, top: 8, bottom: 2 })
+
+      Text('新章节将加入同一世界分组,原对话保留可切回')
+        .fontSize($r('app.float.app_font_caption'))
+        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+        .width('100%')
+        .padding({ left: 4 })
+
+      this.sheetSectionCaption('选择开场白')
       Column() {
-        Column() {
-          Row() {
-            Text('新建章节 · 选择开场白')
-              .fontSize(17)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            Blank()
-            Button('取消')
-              .fontSize(14)
-              .backgroundColor(Color.Transparent)
-              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-              .height(36)
-              .enabled(!this.chapterCreateBusy)
-              .onClick(() => {
-                this.closeChapterGreetingPicker();
-              })
-          }
-          .width('100%')
-          .alignItems(VerticalAlign.Center)
-          .margin({ bottom: 4 })
-
-          Text('新章节将加入同一世界分组,原对话保留可切回')
-            .fontSize(12)
-            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-            .width('100%')
-            .margin({ bottom: 8 })
-
-          Scroll() {
+        ForEach(this.chapterGreetingPool, (greeting: string, index: number) => {
+          Column() {
+            if (index > 0) {
+              Divider()
+                .color(ThemePalette.dividerColor(this.effectiveTheme))
+                .margin({ left: 12, right: 12 })
+            }
             Column() {
-              ForEach(this.chapterGreetingPool, (greeting: string, index: number) => {
-                Column() {
-                  Text('开场白 ' + (index + 1).toString())
-                    .fontSize(12)
-                    .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-                    .width('100%')
-                  Text(this.greetingPreview(greeting))
-                    .fontSize(13)
-                    .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-                    .width('100%')
-                    .margin({ top: 2 })
-                    .maxLines(4)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
-                }
+              Text('开场白 ' + (index + 1).toString())
+                .fontSize($r('app.float.app_font_caption'))
+                .fontColor(ThemePalette.accentColor(this.effectiveTheme))
                 .width('100%')
-                .padding(12)
-                .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-                .borderRadius(8)
-                .margin({ bottom: 8 })
-                .alignItems(HorizontalAlign.Start)
-                .onClick(() => {
-                  this.selectChapterGreeting(index);
-                })
-              }, (greeting: string, index: number) => 'greeting_' + index.toString())
+              Text(this.greetingPreview(greeting))
+                .fontSize($r('app.float.app_font_caption'))
+                .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+                .width('100%')
+                .margin({ top: 2 })
+                .maxLines(2)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
             }
             .width('100%')
-          }
-          .height(300)
-          .scrollBar(BarState.Auto)
-
-          Divider().color(ThemePalette.dividerColor(this.effectiveTheme)).margin({ top: 4, bottom: 4 })
-
-          Button(this.chapterCreateBusy ? '正在创建章节...' : '创建章节')
-            .fontSize(15)
-            .fontColor($r('app.color.app_on_accent'))
-            .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
-            .borderRadius($r('app.float.app_radius_sm'))
-            .width('100%')
-            .height(44)
-            .enabled(!this.chapterCreateBusy)
+            .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+            .alignItems(HorizontalAlign.Start)
             .onClick(() => {
-              if (!this.chapterCreateBusy && this.chapterGreetingPool.length > 0) {
-                this.selectChapterGreeting(0);
-              }
+              this.selectChapterGreeting(index);
             })
-        }
-        .width('88%')
-        .padding(16)
-        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
-        .borderRadius($r('app.float.app_radius_lg'))
+          }
+          .width('100%')
+        }, (greeting: string, index: number) => 'greeting_' + index.toString())
       }
       .width('100%')
-      .height('100%')
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
+      .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+      .borderRadius($r('app.float.app_radius_md'))
+
+      Button(this.chapterCreateBusy ? '正在创建章节...' : '创建章节')
+        .fontSize($r('app.float.app_font_body'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.app_on_accent'))
+        .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
+        .borderRadius($r('app.float.app_radius_sm'))
+        .width('100%')
+        .height(44)
+        .margin({ top: 16 })
+        .enabled(!this.chapterCreateBusy)
+        .onClick(() => {
+          if (!this.chapterCreateBusy && this.chapterGreetingPool.length > 0) {
+            this.selectChapterGreeting(0);
+          }
+        })
     }
     .width('100%')
-    .height('100%')
-    .backgroundColor('rgba(0,0,0,0.5)')
+    .padding({ left: 12, right: 12, bottom: 8 })
+  }
+
+  /**
+   * 上滑面板分区小标题(与行内文字左对齐:面板内边距 12 + 标题内边距 4)
+   */
+  @Builder
+  sheetSectionCaption(text: string) {
+    Text(text)
+      .fontSize($r('app.float.app_font_caption'))
+      .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+      .width('100%')
+      .padding({ left: 4, top: 14, bottom: 6 })
+  }
+
+  /**
+   * 上滑面板选择行:名称 + 说明(可空) + 选中标记。
+   * @param showDivider 是否在行顶画分隔线(卡片内非首行传 true)
+   */
+  @Builder
+  sheetChoiceRow(label: string, desc: string, selected: boolean, showDivider: boolean, onClick: () => void) {
+    Column() {
+      if (showDivider) {
+        Divider()
+          .color(ThemePalette.dividerColor(this.effectiveTheme))
+          .margin({ left: 12, right: 12 })
+      }
+      Row() {
+        Column() {
+          Text(label)
+            .fontSize($r('app.float.app_font_body'))
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .width('100%')
+          if (desc.length > 0) {
+            Text(desc)
+              .fontSize($r('app.float.app_font_caption'))
+              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+              .width('100%')
+              .margin({ top: 2 })
+              .maxLines(2)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        if (selected) {
+          Text('✓')
+            .fontSize(16)
+            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+            .margin({ left: 8 })
+        }
+      }
+      .width('100%')
+      .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+      .alignItems(VerticalAlign.Center)
+    }
+    .width('100%')
     .onClick(() => {
-      this.closeChapterGreetingPicker();
+      onClick();
+    })
+  }
+
+  /**
+   * 上滑面板动作行:名称 + 右侧动作胶囊(忙碌时替换为进度环)。
+   * @param dangerous 是否危险色标签
+   * @param showDivider 是否在行顶画分隔线
+   */
+  @Builder
+  sheetActionRow(label: string, actionText: string, busy: boolean, dangerous: boolean, showDivider: boolean,
+    onClick: () => void) {
+    Column() {
+      if (showDivider) {
+        Divider()
+          .color(ThemePalette.dividerColor(this.effectiveTheme))
+          .margin({ left: 12, right: 12 })
+      }
+      Row() {
+        Text(label)
+          .fontSize($r('app.float.app_font_body'))
+          .fontColor(dangerous
+            ? $r('app.color.app_danger')
+            : ThemePalette.textPrimaryColor(this.effectiveTheme))
+          .layoutWeight(1)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+        if (busy) {
+          LoadingProgress()
+            .width(18)
+            .height(18)
+            .color(ThemePalette.accentColor(this.effectiveTheme))
+        } else {
+          Text(actionText)
+            .fontSize($r('app.float.app_font_caption'))
+            .fontColor(dangerous
+              ? $r('app.color.app_danger')
+              : ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+            .borderRadius($r('app.float.app_radius_sm'))
+            .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+        }
+      }
+      .width('100%')
+      .height(44)
+      .padding({ left: 12, right: 12 })
+      .alignItems(VerticalAlign.Center)
+    }
+    .width('100%')
+    .onClick(() => {
+      if (busy) {
+        return;
+      }
+      onClick();
     })
   }
 
@@ -3451,285 +3540,187 @@ struct ChatPage {
     return trimmed.substring(0, 100) + '…';
   }
 
+  /** 本对话称呼面板内容(上滑 Sheet):输入覆盖值 + 保存 */
   @Builder
-  userNameOverrideDialog() {
-    Stack() {
-      Column() {
-        Column() {
-          Text($r('app.string.chat_user_name_override_menu_title'))
-            .fontSize(17)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .margin({ bottom: 8 })
+  userNameSheetContent() {
+    Column() {
+      Text($r('app.string.chat_user_name_override_menu_title'))
+        .fontSize($r('app.float.app_font_title'))
+        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        .width('100%')
+        .padding({ left: 4, top: 8, bottom: 2 })
 
-          Text($r('app.string.chat_user_name_override_hint'))
-            .fontSize($r('app.float.app_font_caption'))
-            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-            .textAlign(TextAlign.Center)
-            .margin({ bottom: 16 })
+      Text($r('app.string.chat_user_name_override_hint'))
+        .fontSize($r('app.float.app_font_caption'))
+        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+        .width('100%')
+        .padding({ left: 4, top: 4, bottom: 6 })
 
-          TextInput({
-            placeholder: $r('app.string.chat_user_name_override_placeholder'),
-            text: this.userNameOverrideDraft
-          })
-            .fontSize($r('app.float.app_font_body'))
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-            .borderRadius($r('app.float.app_radius_md'))
-            .height(48)
-            .padding({ left: 16, right: 16 })
-            .width('100%')
-            .onChange((value: string) => {
-              this.userNameOverrideDraft = value;
-            })
+      TextInput({
+        placeholder: $r('app.string.chat_user_name_override_placeholder'),
+        text: this.userNameOverrideDraft
+      })
+        .fontSize($r('app.float.app_font_body'))
+        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+        .borderRadius($r('app.float.app_radius_sm'))
+        .height(44)
+        .padding({ left: 12, right: 12 })
+        .width('100%')
+        .onChange((value: string) => {
+          this.userNameOverrideDraft = value;
+        })
 
-          Row() {
-            Button('取消')
-              .fontSize(15)
-              .backgroundColor(Color.Transparent)
-              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-              .height(40)
-              .layoutWeight(1)
-              .onClick(() => {
-                this.showUserNameOverrideDialog = false;
-              })
-            Button($r('app.string.character_edit_save'))
-              .fontSize(15)
-              .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
-              .fontColor($r('app.color.app_on_accent'))
-              .borderRadius($r('app.float.app_radius_sm'))
-              .height(40)
-              .layoutWeight(1)
-              .margin({ left: 12 })
-              .onClick(() => {
-                this.saveUserNameOverride();
-              })
-          }
-          .width('100%')
-          .margin({ top: 16 })
-        }
-        .width('80%')
-        .padding(20)
-        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
-        .borderRadius($r('app.float.app_radius_lg'))
-      }
-      .width('100%')
-      .height('100%')
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
+      Button($r('app.string.character_edit_save'))
+        .fontSize($r('app.float.app_font_body'))
+        .fontWeight(FontWeight.Medium)
+        .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
+        .fontColor($r('app.color.app_on_accent'))
+        .borderRadius($r('app.float.app_radius_sm'))
+        .height(44)
+        .width('100%')
+        .margin({ top: 16 })
+        .onClick(() => {
+          this.saveUserNameOverride().catch(() => {});
+        })
     }
     .width('100%')
-    .height('100%')
-    .backgroundColor('rgba(0,0,0,0.5)')
-    .onClick(() => {
-      this.showUserNameOverrideDialog = false;
-    })
+    .padding({ left: 12, right: 12, bottom: 8 })
   }
 
+  /** 用户身份面板内容(上滑 Sheet):分段切换「用户身份 / 性格总结」 */
   @Builder
-  personaPickerSheet() {
-    Stack() {
-      Column() {
-        Column() {
-          Text('切换用户身份')
-            .fontSize(17)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .margin({ bottom: 12 })
+  personaSheetContent() {
+    Column() {
+      Text('切换用户身份')
+        .fontSize($r('app.float.app_font_title'))
+        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        .width('100%')
+        .padding({ left: 4, top: 8, bottom: 2 })
 
-          Scroll() {
-            Column() {
-              // "清除锁定"选项
-              Row() {
-                Column() {
-                  Text('跟随默认')
-                    .fontSize(15)
-                    .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-                  Text('使用角色或全局默认身份')
-                    .fontSize(12)
-                    .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-                    .margin({ top: 2 })
-                }
-                .layoutWeight(1)
-                .alignItems(HorizontalAlign.Start)
-
-                if (this.viewModel !== null && this.viewModel!.getCurrentChatPersonaId().length === 0) {
-                  Text('✓')
-                    .fontSize(16)
-                    .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-                }
-              }
-              .width('100%')
-              .padding({ top: 10, bottom: 10 })
-              .alignItems(VerticalAlign.Center)
-              .onClick(() => {
-                this.selectPersonaForChat('');
-              })
-
-              Divider().color(ThemePalette.dividerColor(this.effectiveTheme))
-
-              // Persona 列表
-              ForEach(this.personaOptions, (persona: Persona) => {
-                Row() {
-                  Column() {
-                    Text(persona.name)
-                      .fontSize(15)
-                      .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-                    if (persona.description.length > 0) {
-                      Text(persona.description)
-                        .fontSize(12)
-                        .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-                        .maxLines(3)
-                        .textOverflow({ overflow: TextOverflow.Ellipsis })
-                        .margin({ top: 2 })
-                    }
-                  }
-                  .layoutWeight(1)
-                  .alignItems(HorizontalAlign.Start)
-
-                  if (this.viewModel !== null && this.viewModel!.getCurrentChatPersonaId() === persona.id) {
-                    Text('✓')
-                      .fontSize(16)
-                      .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-                  }
-                }
-                .width('100%')
-                .padding({ top: 10, bottom: 10 })
-                .alignItems(VerticalAlign.Center)
-                .onClick(() => {
-                  this.selectPersonaForChat(persona.id);
-                })
-              }, (persona: Persona) => persona.id)
-
-              if (this.personaOptions.length === 0) {
-                Text('暂无身份，请先在设置中创建')
-                  .fontSize(13)
-                  .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-                  .margin({ top: 12 })
-              }
-            }
-            .width('100%')
-          }
-          .height(280)
-          .scrollBar(BarState.Auto)
-
-          Divider()
-            .color(ThemePalette.dividerColor(this.effectiveTheme))
-            .margin({ top: 8, bottom: 8 })
-
-          Column() {
-            Text('用户性格总结')
-              .fontSize(15)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-              .margin({ bottom: 6 })
-
-            if (this.viewModel !== null && this.viewModel!.userPersonaSummary.length > 0) {
-              Text(this.viewModel!.userPersonaSummary)
-                .fontSize(13)
-                .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-                .maxLines(8)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-                .width('100%')
-                .margin({ bottom: 8 })
-            } else {
-              Text('尚未生成。点击下方按钮从角色卡提取或从对话总结。')
-                .fontSize(13)
-                .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-                .margin({ bottom: 8 })
-            }
-
-            Row() {
-              Button('从角色卡提取')
-                .fontSize(13)
-                .height(34)
-                .padding({ left: 12, right: 12 })
-                .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-                .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-                .enabled(this.viewModel !== null && !this.viewModel!.isExtractingUserPersona)
-                .onClick(() => {
-                  if (this.viewModel !== null) {
-                    this.viewModel!.extractUserFromCharacter();
-                  }
-                })
-              Button('从对话总结')
-                .fontSize(13)
-                .height(34)
-                .padding({ left: 12, right: 12 })
-                .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-                .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-                .margin({ left: 8 })
-                .enabled(this.viewModel !== null && !this.viewModel!.isSummarizingUserPersona)
-                .onClick(() => {
-                  if (this.viewModel !== null) {
-                    this.viewModel!.summarizeUserPersona();
-                  }
-                })
-
-              Blank()
-
-              if (this.viewModel !== null && this.viewModel!.userPersonaSummary.length > 0) {
-                Button() {
-                  SymbolGlyph($r('sys.symbol.trash'))
-                    .fontSize(18)
-                    .fontColor([$r('app.color.app_danger')])
-                }
-                .type(ButtonType.Circle)
-                .width(34)
-                .height(34)
-                .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-                .margin({ left: 8 })
-                .onClick(() => {
-                  if (this.viewModel !== null) {
-                    this.viewModel!.clearUserPersonaSummary();
-                  }
-                })
-              }
-            }
-            .width('100%')
-            .alignItems(VerticalAlign.Center)
-
-            if (this.viewModel !== null &&
-              (this.viewModel!.isExtractingUserPersona || this.viewModel!.isSummarizingUserPersona)) {
-              LoadingProgress()
-                .width(20)
-                .height(20)
-                .color(ThemePalette.accentColor(this.effectiveTheme))
-                .margin({ top: 8 })
-            }
-          }
-          .width('100%')
-
-          Row() {
-            Button('取消')
-              .fontSize(15)
-              .backgroundColor(Color.Transparent)
-              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-              .height(40)
-              .layoutWeight(1)
-              .onClick(() => {
-                this.showPersonaPicker = false;
-              })
-          }
-          .width('100%')
-          .margin({ top: 8 })
-        }
-        .width('85%')
-        .padding(20)
-        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
-        .borderRadius($r('app.float.app_radius_lg'))
+      Row() {
+        this.personaTabItem(0, '用户身份')
+        this.personaTabItem(1, '性格总结')
       }
       .width('100%')
-      .height('100%')
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
+      .padding(2)
+      .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+      .borderRadius($r('app.float.app_radius_sm'))
+      .margin({ top: 10, bottom: 4 })
+
+      if (this.personaSheetTab === 0) {
+        this.personaListSection()
+      } else {
+        this.personaSummarySection()
+      }
     }
     .width('100%')
-    .height('100%')
-    .backgroundColor('rgba(0,0,0,0.5)')
-    .onClick(() => {
-      this.showPersonaPicker = false;
-    })
+    .padding({ left: 12, right: 12, bottom: 8 })
+  }
+
+  /** 身份面板分段项 */
+  @Builder
+  personaTabItem(tab: number, label: string) {
+    Text(label)
+      .fontSize($r('app.float.app_font_caption'))
+      .fontWeight(this.personaSheetTab === tab ? FontWeight.Medium : FontWeight.Normal)
+      .fontColor(this.personaSheetTab === tab
+        ? ThemePalette.textPrimaryColor(this.effectiveTheme)
+        : ThemePalette.textSecondaryColor(this.effectiveTheme))
+      .textAlign(TextAlign.Center)
+      .backgroundColor(this.personaSheetTab === tab
+        ? ThemePalette.surface1Color(this.effectiveTheme)
+        : Color.Transparent)
+      .borderRadius($r('app.float.app_radius_sm'))
+      .height(32)
+      .layoutWeight(1)
+      .onClick(() => {
+        this.personaSheetTab = tab;
+      })
+  }
+
+  /** 身份分段:一张卡承载「跟随默认 + 全部身份」 */
+  @Builder
+  personaListSection() {
+    Column() {
+      this.sheetChoiceRow('跟随默认', '使用角色或全局默认身份',
+        this.viewModel !== null && this.viewModel!.getCurrentChatPersonaId().length === 0,
+        false, (): void => {
+          this.selectPersonaForChat('');
+        })
+
+      ForEach(this.personaOptions, (persona: Persona) => {
+        this.sheetChoiceRow(persona.name, persona.description,
+          this.viewModel !== null && this.viewModel!.getCurrentChatPersonaId() === persona.id,
+          true, (): void => {
+            this.selectPersonaForChat(persona.id);
+          })
+      }, (persona: Persona) => persona.id)
+
+      if (this.personaOptions.length === 0) {
+        Text('暂无身份,请先在「设置 → 用户身份」中创建')
+          .fontSize($r('app.float.app_font_caption'))
+          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+          .width('100%')
+          .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+      }
+    }
+    .width('100%')
+    .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+    .borderRadius($r('app.float.app_radius_md'))
+  }
+
+  /** 性格总结分段:摘要卡 + 操作卡 */
+  @Builder
+  personaSummarySection() {
+    Column({ space: 8 }) {
+      Column() {
+        if (this.viewModel !== null && this.viewModel!.userPersonaSummary.length > 0) {
+          Text(this.viewModel!.userPersonaSummary)
+            .fontSize($r('app.float.app_font_caption'))
+            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+            .width('100%')
+            .padding(12)
+            .maxLines(10)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        } else {
+          Text('尚未生成。可用下方按钮从角色卡提取,或从对话总结。')
+            .fontSize($r('app.float.app_font_caption'))
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            .width('100%')
+            .padding(12)
+        }
+      }
+      .width('100%')
+      .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+      .borderRadius($r('app.float.app_radius_md'))
+
+      Column() {
+        this.sheetActionRow('从角色卡提取', '生成',
+          this.viewModel !== null && this.viewModel!.isExtractingUserPersona, false, false, (): void => {
+            if (this.viewModel !== null) {
+              this.viewModel!.extractUserFromCharacter();
+            }
+          })
+        this.sheetActionRow('从对话总结', '生成',
+          this.viewModel !== null && this.viewModel!.isSummarizingUserPersona, false, true, (): void => {
+            if (this.viewModel !== null) {
+              this.viewModel!.summarizeUserPersona();
+            }
+          })
+        if (this.viewModel !== null && this.viewModel!.userPersonaSummary.length > 0) {
+          this.sheetActionRow('清除性格总结', '清除', false, true, true, (): void => {
+            if (this.viewModel !== null) {
+              this.viewModel!.clearUserPersonaSummary();
+            }
+          })
+        }
+      }
+      .width('100%')
+      .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+      .borderRadius($r('app.float.app_radius_md'))
+    }
+    .width('100%')
   }
 
   // ===== 辅助方法 =====
