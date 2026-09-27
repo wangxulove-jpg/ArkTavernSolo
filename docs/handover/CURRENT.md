@@ -58,9 +58,14 @@
   - 装配：3 服务构造注入（persistenceService / swipePersistenceService / appPreferences，与 ChatService 字段同名）；宿主 `ChatSessionHost` 共 38 项回调（读 getter + 写 setter + 委托：初始化四态、状态同步、偏好加载、flush/emit/setState、互斥标志；worldGroup 走 AppServices 静态调用保持原样）；类内同名 getter/setter/方法转发 → 搬运代码零改写
   - 偏差记录：5 处 private → 默认可见（跨类调用，方法体未动）；`dispose` **有意留在 ChatService**（触及流式核心 currentHandle/定时器/回调面，性价比低）；日志 tag 改为 `ChatSessionService`
   - **ChatService 3,315 → 2,780 行**
-- **P2 扩展进展（P2-6..P2-9，审计外接缝，服务于审计"千行级门面"总目标）**：ChatService **4,305 → 2,780 行**；**累计 6,735 → 2,780 行（-3,955，-59%）**；模块总数 11（`ChatRequestBuilder` / `ChatOneShotGenerator` / `ChatStatusService` / `ChatSwipeController` / `ConversationBranchService` / `ChatMessageService` / `ChatContextMaintenanceService` / `ChatSessionService` + `ChatTextContract` / `ChatServiceContract` / `ChatGenerationContext`）
-  - **剩余可拆簇**：生成入口（sendMessage / narratorMessage / narratorMessageOnly / stopGeneration / clearConversation ≈300 行，P2-10 计划中）
-  - **现实下限约束**：流式核心（doStream + finalize + delta 持久化 ≈750 行）为审计 §8 明示"不动"，故 ChatService 现实下限约 2,300~2,500 行；**千行级须突破该约束（需用户显式授权）**
+- [x] **P2-10 `ChatMessageSender`**（commit `fa44f58`）：消息发起入口 **四块 231 行逐字搬出**（sendMessage / narratorMessage / narratorMessageOnly / clearConversation）；宿主 `ChatSendHost` 22 项（含 `doStream` 委托，流式核心未动）；`stopGeneration` 属流式核心取消路径（currentHandle/定时器）**有意留 ChatService**；**2,780 → 2,618 行**
+- [x] **P2-11 `ChatUserIdentityService`**（commit `f0ee661`）：用户称呼与 Persona **124 行逐字搬出**（resolveUserName / updateCurrentChatUserNameOverride / updateCurrentChatPersonaId / updateCurrentChatUserPersonaSummary / getCharacterDefaultPersonaId / resolveEffectivePersona）；`DEFAULT_USER_NAME` 常量随迁；未用导入清理（`GLOBAL_USER_NAME_KEY` / `AppServices` / `WorldGroupService` / `WorldGroup`）；**2,618 → 2,532 行**
+- [x] **P2-12 Preset 请求快照迁入 `ChatRequestBuilder`**（commit `1ab7a8c`）：`createPresetRequestSnapshot` **77 行逐字搬出**；`ChatRequestBuilderDeps` 扩 2 项（`modelService` 保持非空类型、`promptPresetService`）；ChatService 留私有薄包装（oneShot 宿主与 doStream 调用点不变）；偏差记录：编译修正 1 处（初版误标 `modelService` 可空，已对齐宿主非空语义）；**2,532 → 2,457 行**
+- [x] **P2-13 消息记忆标记迁入 `ChatMessageService`**（commit `9f13ce4`）：`markMessageIncludeInMemory` + `findMessageIndexById` **31 行逐字搬出**；`findMessageIndexById` 由宿主转发改为类内实现（删除宿主项与转发器，3 个既有调用点不受影响）；**2,457 → 2,426 行**
+- [x] **P2-14 `reloadCurrentSession` 迁入 `ChatSessionService`**（commit `29f8f45`）：**15 行逐字搬出**；Swipe/Branch 两处宿主箭头改指 `sessionService`；**2,426 → 2,413 行**
+- **P2 扩展进展（P2-6..P2-14，服务于审计"千行级门面"总目标）**：ChatService **4,305 → 2,413 行**；**累计 6,735 → 2,413 行（-4,322，-64%）**；`services/` 模块 12 个（`ChatRequestBuilder` / `ChatOneShotGenerator` / `ChatStatusService` / `ChatSwipeController` / `ConversationBranchService` / `ChatMessageService` / `ChatContextMaintenanceService` / `ChatSessionService` / `ChatMessageSender` / `ChatUserIdentityService` + `ChatTextContract` / `ChatRequestPlan`）+ `models/` 2 个（`ChatServiceContract` / `ChatGenerationContext`）
+  - **停止点（本次决策，主动放弃剩余 ≈77 行）**：剩余内容中 `constructor`（≈450 行宿主装配，组合根本体）、公开薄包装（≈200 行，对外 API 面）、流式核心簇（≈900 行：`doStream` 214 / `finalizeAssistantTurn` 100 / delta 持久化族 / 句柄与定时器 / `isCurrentGeneration` / `updateRequestPlan` + 预算缓存）、核心内联辅助（`findMessageById` / `updateLastAssistantMessageId` / `updateSwipeSummaryGeneratingFlag`——均被 doStream/finalize 直接调用，不可搬）→ **现实下限 ≈2,350~2,400 行**；仅剩可搬的 `updateRequestPlan` + 估算查询（≈77 行）因缓存字段被核心读写、搬出需回环回调，ROI 为负，**主动放弃**
+  - **千行级须突破审计 §8"流式核心不动"约束（需用户显式授权）**；若授权，建议方向：delta 持久化/收尾族（appendDelta / finalizeAssistant / markAssistant / schedulePersistenceFlush / flushPersistence* / persistFinalAssistant / persistWithRetry ≈300 行）→ `GenerationPersistence`；句柄与定时器（currentHandle / startStartTimer / clearStartTimer ≈80 行）→ `GenerationRuntime`；`updateRequestPlan` + 估算缓存（≈77 行）→ `BudgetPlanner`
 - [ ] 「聊天主路径冒烟清单」：发送/流式/停止 → 重生成 → 分支切换 → Swipe → 旁白 → 代写 → 记忆生成/查看 → 世界书注入 → 会话增删切换 → 归档导出导入 → 深浅色
 
 ## 2b. 已完成（P1 批次，全部收官）
@@ -136,6 +141,15 @@
   4. 新建章节（开场白选择器）：世界分组自动创建/移入、标题"第N章·…"、状态配置继承、创建后自动切到新会话
   5. 初始化失败路径提示不变（数据库异常等文案由 ViewModel 呈现一次）
   - 回滚锚点：`891de45` / `1f09346` / `cc32bfc`（9b/9c 依赖 9a 的 ChatSessionService 基座，回滚需成组）
+- **P2-10..P2-14 待冒烟（"搬运不改行为"，**主链路重点**）**：
+  1. 发送消息（`fa44f58`）：输入发送 → 用户消息 + 流式回复（打字机、停止按钮、完成/取消/失败状态）；持久化失败提示"消息保存失败,请重试"不变；生成中重复发送被拒（日志 `ChatMessageSender`）
+  2. 旁白两种模式：旁白（AI 以叙述者身份回复）与"仅插入旁白"（不触发请求）；会话未初始化时提示"会话未初始化"
+  3. 清空对话：菜单"清空对话"后列表为空、状态复位（生成中先停止）
+  4. 用户称呼（`f0ee661`）：聊天页"用户称呼"弹窗读写（对话级覆盖/清空）；角色卡默认 Persona 与锁定 Persona 生效；代写/请求构建中的用户称呼与 Persona 注入不变（日志 tag `ChatUserIdentityService`）
+  5. 请求预设快照（`1ab7a8c`）：发送/重生成/代写均按当前选中预设出请求（日志 `createPresetRequestSnapshot: selected preset count=N`）；预设读取异常提示"无法读取当前提示词预设，请重试"不变
+  6. 消息"计入记忆"开关（`9f13ce4`）：长按/菜单切换该条消息的 includeInMemory 并持久化（重进会话仍生效）
+  7. Swipe 生成标志与分支刷新（`29f8f45`）：重新生成候选时摘要箭头的生成中状态正常；分支面板数据刷新正常
+  - 回滚锚点：`29f8f45` / `9f13ce4` / `1ab7a8c` / `f0ee661` / `fa44f58`（各自独立）
 - **已作废冒烟项**（相关代码已删除）：会话列表面板（`726efec` / `958b43b` 的面板侧）——面板与 ChatViewModel 会话列表 API 已随 P1-4 ③ 删除，不必再测
 - **需回归确认**（删除相影响面）：聊天页正常打开/发送/停止/重生成；更多菜单"新建章节(切换开场白)"创建后提示与当前会话不变；从"对话记录"Tab 点会话进入聊天页仍能切到指定会话（`pendingChatId` → `selectSession` 路径未动，但 `refreshSessions` 已移除，建议确认切换后列表/消息正常）
 - `APK-reference/`（约 100MB 反编译参考资料）暂保留，未清理
@@ -158,3 +172,4 @@
 | 2026-09-27 | P2-5 开工 + P2 批次收官 | `ConversationBranchService` 查询/判定 ✅（d798259，三区 252 行逐字一致；fork+stream 族暂留 P3）；**ChatService 4,484 → 4,305 行，P2 合计 6,735 → 4,305（-2,430）**；P2 路线（P2-1..P2-5）全部完成；编译通过；待用户真机冒烟 + 决定 P3 走向 |
 | 2026-09-27 | P2 扩展（P2-6..P2-8） | `ChatMessageService`（01361d0）/ `ChatContextMaintenanceService`（b4fc54f）/ branch 切换与重载（bbbfcda）/ branch 生成族七碎片（e272d9b）——合计 **1,183 行逐字搬出**（均 byte 级一致）；**ChatService 4,305 → 3,315 行（累计 6,735 → 3,315，-3,420）**；每步编译通过；待真机冒烟 |
 | 2026-09-27 | P2-9（会话生命周期） | `ChatSessionService` 三段抽取：工具/查询族（cc32bfc，6 碎片 144 行）→ 初始化族（1f09346，四块 214 行）→ 操作族（891de45，五块 248 行）——合计 **606 行逐字搬出**（均 byte 级一致），清理 4 个死包装；宿主 38 项回调；`dispose` 有意留 ChatService 并已记录；**ChatService 3,315 → 2,780 行（累计 6,735 → 2,780，-3,955，-59%）**；每步编译通过；待真机冒烟 |
+| 2026-09-27 | P2-10..P2-14（收官） | ① `ChatMessageSender` 消息发起入口（fa44f58，四块 231 行，`stopGeneration` 有意留 ChatService）；② `ChatUserIdentityService` 用户称呼与 Persona（f0ee661，124 行）；③ Preset 快照迁入 `ChatRequestBuilder`（1ab7a8c，77 行 + 2 依赖，编译修正 1 处）；④ 消息记忆标记迁入 `ChatMessageService`（9f13ce4，31 行 + 宿主项收口）；⑤ `reloadCurrentSession` 迁入 `ChatSessionService`（29f8f45，15 行）——合计 **478 行逐字搬出**（均 byte 级一致）；**ChatService 2,780 → 2,413 行（累计 6,735 → 2,413，-4,322，-64%）**；**主动停止**：现实下限 ≈2,350~2,400（剩余仅 `updateRequestPlan`+估算 ≈77 行，因核心共享缓存 ROI 为负）；千行级需突破"流式核心不动"约束（待用户授权）；每步编译通过；待真机冒烟 |
