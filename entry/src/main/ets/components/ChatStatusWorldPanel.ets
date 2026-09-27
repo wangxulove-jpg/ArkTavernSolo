@@ -3,7 +3,7 @@
  *
  * 设计:组件不持有 VM/服务,依赖全部经 @Prop 值 + @Link + 回调上抛:
  * - 渲染态:effectiveTheme / aiMode / aiLoading / pendingChangeSet / lorebookPanelData / lorebookPanelVersion
- *   (LorebookPanelBook/Data 仅类型引用自 ChatViewModel,不在组件内持有 VM 实例)
+ *   (LorebookPanelBook/Data 仅类型引用自 models/LorebookPanel,不在组件内持有 VM 实例)
  * - 双向:statusPanelVisible(关闭按钮) / aiEntryVisible(AI 入口切换) / aiPromptText(AI 指令输入框)
  * - 组件内 UI 状态:expandedEntryId / expandedAiPreviewKey(仅影响本面板展开态,不跨页面)
  * - 业务动作:全部回调上抛,由页面执行(viewModel 调用、变更应用、激活刷新)
@@ -11,7 +11,7 @@
 import { ThemePalette } from '../theme/ThemePalette';
 import { LorebookEntry } from '../models/Lorebook';
 import { AiLorebookChangeSet, AiLorebookAdd, AiLorebookUpdate, AiLorebookDelete } from '../models/LorebookAiTypes';
-import { LorebookPanelBook, LorebookPanelData } from '../viewmodels/ChatViewModel';
+import { LorebookPanelBook, LorebookPanelData } from '../models/LorebookPanel';
 
 @Component
 export struct ChatStatusWorldPanel {

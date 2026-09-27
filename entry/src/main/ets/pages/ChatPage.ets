@@ -29,7 +29,7 @@ import { ChatRole } from '../models/ChatRole';
 import { ChatStatusState, ChatStatusEntry } from '../models/ChatStatusState';
 import { AiLorebookChangeSet } from '../models/LorebookAiTypes';
 import { AiLorebookMode } from '../services/ai/AiLorebookService';
-import { LorebookPanelData } from '../viewmodels/ChatViewModel';
+import { LorebookPanelData } from '../models/LorebookPanel';
 import { ChatMessageSource } from '../models/ChatMessageSource';
 import { ChatMessageRenderState } from '../models/ChatMessageRenderState';
 import { MessageSwipeSummary, MAX_SWIPE_CANDIDATES } from '../models/MessageSwipe';

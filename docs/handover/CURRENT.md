@@ -100,10 +100,11 @@
 
 - [x] **① `ChatErrorMapper`（纯函数收口）** ✅：`toUserError`（40 行）+ `toSessionOpError`（16 行）均为纯函数，调用点仅本文件（`toUserError` × 17、`toSessionOpError` × 2），**0 外部引用** → 新增 `viewmodels/ChatErrorMapper.ets`（两函数逐字搬出，函数名不变）；ChatViewModel 删除两私有方法、19 处调用点改直连（`this.x(` → `x(`）；映射分支零改动
   - 校验：搬运体**逐行等价（归一空白后 DIFF=0）**；公开 API 面 **131 → 131，零差异**；编译 BUILD SUCCESSFUL；**ChatViewModel 1,698 → 1,660 行**（-38）
-- [ ] **② `LorebookPanelVM`（世界书面板逻辑抽离）**：面板逻辑 = `loadLorebookPanelData` / `buildPanelBook`(private) / `aiProposeWorldbookChanges` / `applyLorebookChangeSet` / `toggleLorebookEntryEnabled` / `getAiLorebookService`(private) + `aiLorebookService` 字段
-  - 类型 `LorebookPanelBook` / `LorebookPanelData` 迁入 **新增 `models/LorebookPanel.ets`**（引用方 ChatViewModel / ChatPage / ChatStatusWorldPanel 改路径；**顺带消除 `ChatStatusWorldPanel` 对 viewmodels 的类型引用偏差**）
-  - 装配：宿主契约 `LorebookPanelHost`（函数属性：`isDisposed` / `getCharacter` / `getRecentMessages` / `setPanelData`），ChatViewModel 构造期用箭头填充；服务取用沿用 `AppServices.getXxx()` 静态（与现状一致）
-  - **保留 `lorebookPanelData` 字段**（ArkUI 绑定）+ 4 个公开薄包装 → 公开 API 面零差异；`refreshLorebookPinNow` / `aiModifyStatus` 非面板逻辑，留原处
+- [x] **② `LorebookPanelVM`（世界书面板逻辑抽离）** ✅：新增 `viewmodels/LorebookPanelVM.ets`，6 方法搬出（`loadLorebookPanelData` 21 行 / `buildPanelBook` 15 / `aiProposeWorldbookChanges` 27 / `applyLorebookChangeSet` 72 / `toggleLorebookEntryEnabled` 17 / `getAiLorebookService` 9）+ `aiLorebookService` 字段随迁
+  - 类型 `LorebookPanelBook` / `LorebookPanelData` 迁入 **新增 `models/LorebookPanel.ets`**（ChatViewModel / ChatPage / ChatStatusWorldPanel 三处引用改路径；**消除 `ChatStatusWorldPanel` 对 viewmodels 的类型引用偏差**——组件层现无任何 viewmodels 引用）
+  - 装配：宿主契约 `LorebookPanelHost`（函数属性 `isDisposed` / `getCharacter` / `getRecentMessages` / `setPanelData`）构造期箭头填充；服务取用沿用 `AppServices.getXxx()` 静态（零改写）
+  - **保留 `lorebookPanelData` 字段**（ArkUI 绑定，写入经 `setPanelData` 回调）+ 4 个公开薄包装 → 公开 API 面零差异；`refreshLorebookPinNow` / `aiModifyStatus` 非面板逻辑，留原处
+  - 校验：搬运体逐行等价（**唯一差异 = 9 处宿主间接行**：disposed ×4、getCharacter ×2、getRecentMessages ×1、setPanelData ×2）；公开 API 面 **131 → 131 零差异**；编译 BUILD SUCCESSFUL；**ChatViewModel 1,660 → 1,479 行**（P3-1 累计 1,698 → 1,479，-219）
 - [ ] **③ 会话分组桥：已核实无重复，无需动作** —— P1-4 ③ 已随死 UI 删除 ChatViewModel 的世界分组 API；全仓 `getWorldName/getChapterLabel/createWorldGroup/renameWorldGroup/deleteWorldGroup/moveChatToWorld` 现仅存于 `ChatSessionListViewModel`（+ `ChatSessionRootView` 调用），ChatViewModel **0 命中**
 - **机械校验**：公开 API 面 diff（抽取全部非 private 声明行，`Compare-Object` HEAD 前后）；**唯一预期差异 = 2 个类型声明行迁出**（其余类成员零差异，含 `async` 修饰符）
 

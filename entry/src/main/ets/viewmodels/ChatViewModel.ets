@@ -39,39 +39,17 @@ import { MessageSwipeSummary } from '../models/MessageSwipe';
 import { TokenBudget } from '../models/TokenBudget';
 import { AppServices } from '../services/AppServices';
 import { ChatMemoryMode } from '../services/ChatMemoryModeService';
-import { LorebookService } from '../services/LorebookService';
-import { Lorebook, LorebookEntry, LorebookPosition, LorebookEntryUpdates } from '../models/Lorebook';
-import { AiLorebookService, AiLorebookMode, AiLorebookInput } from '../services/ai/AiLorebookService';
-import {
-  AiLorebookChangeSet,
-  AiLorebookAdd,
-  AiLorebookUpdate,
-  AiLorebookDelete
-} from '../models/LorebookAiTypes';
+import { AiLorebookMode } from '../services/ai/AiLorebookService';
+import { AiLorebookChangeSet } from '../models/LorebookAiTypes';
 import {
   ConversationBranchSummary,
   ConversationRecordCounts
 } from '../models/ConversationBranch';
+import { LorebookPanelData } from '../models/LorebookPanel';
 import { toUserError, toSessionOpError } from './ChatErrorMapper';
+import { LorebookPanelVM } from './LorebookPanelVM';
 
 const LOG_TAG: string = 'ChatViewModel';
-
-/**
- * 世界书面板单本书展示数据。
- */
-export interface LorebookPanelBook {
-  readonly lorebookId: string;
-  readonly name: string;
-  readonly isCharacterBook: boolean;
-  readonly entries: LorebookEntry[];
-}
-
-/**
- * 世界书面板展示数据(角色专属书在前,全局书在后)。
- */
-export interface LorebookPanelData {
-  readonly books: LorebookPanelBook[];
-}
 
 @Observed
 export class ChatViewModel {
@@ -125,7 +103,7 @@ export class ChatViewModel {
   private characterService: CharacterService;
   private promptPresetService: PromptPresetService;
   private disposed: boolean = false;
-  private aiLorebookService: AiLorebookService | null = null;
+  private lorebookPanelVM: LorebookPanelVM;
 
   // ===== 流式 UI 节流(避免高频 delta 在同一事件循环 tick 内被 ArkUI 合并) =====
   private flushTimerId: number = -1;
@@ -188,6 +166,14 @@ export class ChatViewModel {
     this.modelService = modelService;
     this.characterService = characterService;
     this.promptPresetService = promptPresetService;
+    this.lorebookPanelVM = new LorebookPanelVM({
+      isDisposed: (): boolean => this.disposed,
+      getCharacter: (): Character | null => this.chatService.getCharacter(),
+      getRecentMessages: (): ChatMessage[] => this.messages,
+      setPanelData: (data: LorebookPanelData | null): void => {
+        this.lorebookPanelData = data;
+      }
+    });
   }
 
   get canSend(): boolean {
@@ -1267,25 +1253,7 @@ export class ChatViewModel {
   // ===== 状态/世界书滑动面板(T-7.x) =====
 
   async loadLorebookPanelData(): Promise<void> {
-    if (this.disposed) {
-      return;
-    }
-    try {
-      const lorebookService: LorebookService = AppServices.getLorebookService();
-      let characterBook: Lorebook | null = null;
-      const character: Character | null = this.chatService.getCharacter();
-      if (character !== null && character.characterBookId.length > 0) {
-        characterBook = await lorebookService.getById(character.characterBookId);
-      }
-      const books: LorebookPanelBook[] = [];
-      if (characterBook !== null) {
-        books.push(this.buildPanelBook(characterBook, true));
-      }
-      this.lorebookPanelData = books.length > 0 ? { books: books } : null;
-    } catch (e) {
-      Logger.warn(LOG_TAG, 'loadLorebookPanelData failed: ' + String(e));
-      this.lorebookPanelData = null;
-    }
+    return this.lorebookPanelVM.loadLorebookPanelData();
   }
 
   /**
@@ -1304,22 +1272,6 @@ export class ChatViewModel {
     }
   }
 
-  private buildPanelBook(book: Lorebook, isCharacterBook: boolean): LorebookPanelBook {
-    const sorted: LorebookEntry[] = book.entries.slice();
-    sorted.sort((a: LorebookEntry, b: LorebookEntry): number => {
-      if (a.priority !== b.priority) {
-        return b.priority - a.priority;
-      }
-      return a.name.localeCompare(b.name);
-    });
-    return {
-      lorebookId: book.id,
-      name: book.name,
-      isCharacterBook: isCharacterBook,
-      entries: sorted
-    };
-  }
-
   async aiModifyStatus(prompt: string): Promise<boolean> {
     if (this.disposed) {
       return false;
@@ -1336,101 +1288,11 @@ export class ChatViewModel {
     mode: AiLorebookMode,
     instruction: string
   ): Promise<AiLorebookChangeSet | null> {
-    if (this.disposed) {
-      return null;
-    }
-    try {
-      const lorebookService: LorebookService = AppServices.getLorebookService();
-      let characterBook: Lorebook | null = null;
-      const character: Character | null = this.chatService.getCharacter();
-      if (character !== null && character.characterBookId.length > 0) {
-        characterBook = await lorebookService.getById(character.characterBookId);
-      }
-      const input: AiLorebookInput = {
-        globalBook: null,
-        characterBook: characterBook,
-        recentMessages: this.messages,
-        instruction: instruction,
-        mode: mode
-      };
-      return await this.getAiLorebookService().proposeChanges(input);
-    } catch (e) {
-      Logger.warn(LOG_TAG, 'aiProposeWorldbookChanges failed: ' + String(e));
-      return null;
-    }
+    return this.lorebookPanelVM.aiProposeWorldbookChanges(mode, instruction);
   }
 
   async applyLorebookChangeSet(changes: AiLorebookChangeSet): Promise<boolean> {
-    if (this.disposed) {
-      return false;
-    }
-    let anyFailed: boolean = false;
-    const lorebookService: LorebookService = AppServices.getLorebookService();
-    try {
-      for (let i = 0; i < changes.adds.length; i++) {
-        const a: AiLorebookAdd = changes.adds[i];
-        try {
-          await lorebookService.addEntry(
-            a.lorebookId,
-            a.name,
-            a.keys,
-            [],
-            a.content,
-            true,
-            a.constant,
-            false,
-            a.position === 'AfterCharacter'
-              ? LorebookPosition.AfterCharacter : LorebookPosition.BeforeCharacter,
-            a.priority
-          );
-        } catch (e) {
-          anyFailed = true;
-          Logger.warn(LOG_TAG, 'apply add failed: ' + String(e));
-        }
-      }
-      for (let i = 0; i < changes.updates.length; i++) {
-        const u: AiLorebookUpdate = changes.updates[i];
-        try {
-          const updates: LorebookEntryUpdates = {};
-          if (u.name !== undefined) {
-            updates.name = u.name;
-          }
-          if (u.keys !== undefined) {
-            updates.keys = u.keys;
-          }
-          if (u.content !== undefined) {
-            updates.content = u.content;
-          }
-          if (u.position !== undefined) {
-            updates.position = u.position === 'AfterCharacter'
-              ? LorebookPosition.AfterCharacter : LorebookPosition.BeforeCharacter;
-          }
-          if (u.priority !== undefined) {
-            updates.priority = u.priority;
-          }
-          await lorebookService.updateEntry(u.lorebookId, u.entryId, updates);
-        } catch (e) {
-          anyFailed = true;
-          Logger.warn(LOG_TAG, 'apply update failed: ' + String(e));
-        }
-      }
-      for (let i = 0; i < changes.deletes.length; i++) {
-        const d: AiLorebookDelete = changes.deletes[i];
-        try {
-          await lorebookService.removeEntry(d.lorebookId, d.entryId);
-        } catch (e) {
-          anyFailed = true;
-          Logger.warn(LOG_TAG, 'apply delete failed: ' + String(e));
-        }
-      }
-      if (!anyFailed) {
-        await this.loadLorebookPanelData();
-      }
-    } catch (e) {
-      Logger.warn(LOG_TAG, 'applyLorebookChangeSet failed: ' + String(e));
-      anyFailed = true;
-    }
-    return !anyFailed;
+    return this.lorebookPanelVM.applyLorebookChangeSet(changes);
   }
 
   async toggleLorebookEntryEnabled(
@@ -1438,27 +1300,7 @@ export class ChatViewModel {
     entryId: string,
     enabled: boolean
   ): Promise<void> {
-    if (this.disposed) {
-      return;
-    }
-    try {
-      const lorebookService: LorebookService = AppServices.getLorebookService();
-      const updates: LorebookEntryUpdates = { enabled: enabled };
-      await lorebookService.updateEntry(lorebookId, entryId, updates);
-      await this.loadLorebookPanelData();
-    } catch (e) {
-      Logger.warn(LOG_TAG, 'toggleLorebookEntryEnabled failed: ' + String(e));
-    }
-  }
-
-  private getAiLorebookService(): AiLorebookService {
-    if (this.aiLorebookService === null) {
-      this.aiLorebookService = new AiLorebookService(
-        AppServices.getModelService(),
-        AppServices.getLorebookService()
-      );
-    }
-    return this.aiLorebookService;
+    return this.lorebookPanelVM.toggleLorebookEntryEnabled(lorebookId, entryId, enabled);
   }
 
   get isDisposed(): boolean {
