@@ -61,6 +61,9 @@
 | P-44 | 提取方法体时用简单 end-marker 会**提前截断** | 按**花括号深度**计数提取（`{}` 累加/累减），不要用 `'  }'` 之类的字符串匹配 |
 | P-45 | 只跑编译就宣称"没改坏" | 编译只保证语法；行为等价需 P-40/41/43 + 本地单测；**真机相关只能真机验**（会话/Swipe/分支/流式/DB 迁移） |
 | P-46 | 在文档/TODO 写"真机通过"但没跑过 | **严禁**（AGENTS 约束）；没跑就写"未验证" |
+| P-47 | **以为能靠日志 tag 判定"走到新代码"** | 实测 hilog 缓冲区里应用自身日志**极少**（MIS-AL00/API 24 上本轮只有 `ChatRequestBuilder` 打出 5 行，`ChatService`/`ChatOneShotGenerator`/`ChatSwipeController` 等在常规操作下**无输出**）。日志只能当**辅助**，真机主证据是 `uitest screenCap` 截图 + `uitest dumpLayout` 控件树 |
+| P-48 | **拿截图预览坐标去 `uitest uiInput click`** | 设备是 **1224×2776** 真机像素，截图预览常被缩到 450×1000，直接换算点会偏（本轮在"生成章节"按钮 [54,1954][1170,2103] 上点 2125 落空）。**一律以 `dumpLayout` 的 `bounds` 取中心点**；长按菜单/Sheet 等弹层的项位置**每次重新 dump**，不复用上一屏坐标 |
+| P-49 | `uitest uiInput inputText` 当纯文本注入用 | 它走**输入法**：英文空格会被自动更正成撇号、长句被折成多行（本轮 "smoke test 001" 变 `narration'test` + `001`）。需要确定内容时用**无空格短串**或分段核对 |
 
 ## 5. 数据库
 
@@ -71,6 +74,7 @@
 | P-52 | 行映射硬取列索引 | 用 `getColumnIndex >= 0` **安全回退**，保证旧 schema 兼容 |
 | P-53 | `senderType='character'` 的消息没填 `senderCharacterId` | `MessageRepository` 会抛 `invalid data` |
 | P-54 | 依赖已废弃功能的表（如 `worlds`） | 属**预期残留**（迁移只增不改），**勿依赖** |
+| P-55 | 以为 `bm clean -n <bundle> -d` 只清聊天数据 | 它清**整个应用数据目录**（含 Preferences / Asset KeyStore）→ **模型 API Key 一并丢失**，清数据后所有 AI 相关验证都要先重新配置模型。清数据首启可用来验建库：hilog 里可见 `HandleSchemaDDL … schema<k-1->k>` 逐版跑完且无 error |
 
 ## 6. 领域概念坑
 
