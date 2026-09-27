@@ -126,7 +126,7 @@
   - **边界决策**：`resolveArchivedPosition` 同时被**保留**的 `doGenerateChapter` 使用 → 由策略类持有并公开，MemoryService 调用点改 `this.triggerPolicy.resolveArchivedPosition(...)`
   - 校验：搬运体逐行等价（`shouldTriggerSummary`/`shouldGenerateChapter` **DIFF=0**；`resolveArchivedPosition` 唯一差异 = 1 处宿主间接行 + 日志 tag）；类成员 API 面 **49 → 49 零差异**；编译 BUILD SUCCESSFUL；**MemoryService 1,580 → 1,481 行**
 - [x] **旧兼容 API 死代码核实** ✅（全仓 0 调用证据充分，**删除 3 个**）：`getPersistence`（注释称"供 ChatService 事务内调用"，实际 0 引用）/ `invalidateFromPosition`（"硬删除,旧 API"）/ `softInvalidateFromPosition`（"v12"）→ 类成员 API 面 **49 → 46（有意删除，非回归）**；其余公开方法均确认有调用（`shouldTriggerSummary`←`trySummarize`、`shouldGenerateChapter`←多层/自动章节、`trySummarize`←`tryGenerateMultiLayerMemory`、`updateCoreMemory`←`forceGenerateChapterMemory`/`triggerCoreMemoryUpdateAsync`）
-  - 附带发现（**未处理，留待拍板**）：`MemoryPersistenceService.invalidateFromPosition` / `softInvalidateFromPosition` 仅被上述已删包装引用，现亦无调用者；属 persistence 层 API，删除超出本批范围，登记待议
+  - 附带死链**已按用户指示清除**（用户确认本项目单人使用、不保留历史库）：全仓 0 调用链 4 个方法一并删除 —— `MemoryPersistenceService.invalidateFromPosition` / `softInvalidateFromPosition` + `ChatMemoryRepository.invalidateFromPositionWithStore` / `softInvalidateFromPositionWithStore`（后两者仅被前两者调用）；同步修正 `softInvalidateCoveringPositionWithStore` 文档中指向已删方法的过时引用；无未用导入残留；编译 BUILD SUCCESSFUL
 - **P3-2 收官**：MemoryService **1,953 → 1,451 行（-502，-25.7%）**；新增 `MemoryPromptBuilder` / `WorldMemoryStore` / `MemoryTriggerPolicy`；`ChapterTriggerConfig` + `DEFAULT_CHAPTER_TRIGGER` 下沉 `models/ChatMemory.ets`；编译 BUILD SUCCESSFUL + 单测 **96/96**
 
 ### P3-3 DatabaseSchema（起点 2,879 行）

@@ -483,57 +483,9 @@ export class ChatMemoryRepository {
   }
 
   /**
-   * 删除 Branch 中 endPosition >= threshold 的所有 Memory(用于编辑/切换 Swipe 后使摘要失效)。
-   * 不区分继承/自产,因为失效后需要重新总结。
-   * 注意:这是硬删除。v12 推荐使用 softInvalidateFromPositionWithStore 进行软失效。
-   */
-  async invalidateFromPositionWithStore(
-    store: relationalStore.RdbStore,
-    branchId: string,
-    thresholdPosition: number
-  ): Promise<void> {
-    if (branchId.length === 0) {
-      throw DatabaseError.invalidData('invalidateFromPosition: branchId empty');
-    }
-    const predicates: relationalStore.RdbPredicates =
-      new relationalStore.RdbPredicates(TABLE_CHAT_MEMORIES);
-    predicates.equalTo(COLUMN_MEMORY_BRANCH_ID, branchId);
-    predicates.and();
-    predicates.greaterThanOrEqualTo(COLUMN_MEMORY_END_POSITION, thresholdPosition);
-    await store.delete(predicates);
-  }
-
-  /**
-   * v12: 软失效 Branch 中 endPosition >= threshold 的所有 Memory。
-   * 设置 invalidated=1,不删除数据,保留可追溯性。
-   * 失效记忆不再注入 Prompt,后台按需重建。
-   * 只失效当前 Branch 的记忆,不影响其他 Branch。
-   */
-  async softInvalidateFromPositionWithStore(
-    store: relationalStore.RdbStore,
-    branchId: string,
-    thresholdPosition: number
-  ): Promise<void> {
-    if (branchId.length === 0) {
-      throw DatabaseError.invalidData('softInvalidateFromPosition: branchId empty');
-    }
-    const predicates: relationalStore.RdbPredicates =
-      new relationalStore.RdbPredicates(TABLE_CHAT_MEMORIES);
-    predicates.equalTo(COLUMN_MEMORY_BRANCH_ID, branchId);
-    predicates.and();
-    predicates.greaterThanOrEqualTo(COLUMN_MEMORY_END_POSITION, thresholdPosition);
-    predicates.and();
-    predicates.equalTo(COLUMN_MEMORY_INVALIDATED, 0);
-    const bucket: relationalStore.ValuesBucket = {};
-    bucket[COLUMN_MEMORY_INVALIDATED] = 1;
-    bucket[COLUMN_UPDATED_AT] = nowMillis();
-    await store.update(bucket, predicates);
-  }
-
-  /**
    * 软失效"覆盖了指定消息位置"的 Memory。
    *
-   * 与 softInvalidateFromPosition 的区别:
+   * 与"按 endPosition 阈值整体失效"的区别:
    * - 此处只失效该消息位置落在记忆覆盖范围([startPosition, endPosition])内的记忆
    * - 不误伤范围在指定位置之后的独立章节(章节是过去历史快照,不受后续剧情改变影响)
    * - 用于"重新生成/swipe 切换某条消息"时,仅失效真正受影响的记忆

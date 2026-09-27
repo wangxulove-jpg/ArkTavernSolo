@@ -146,26 +146,6 @@ export class MemoryPersistenceService {
   }
 
   /**
-   * 使 Branch 中 endPosition >= thresholdPosition 的 Memory 失效(硬删除)。
-   * 用于编辑消息或切换 Swipe 后使摘要过期。
-   * v12 推荐使用 softInvalidateFromPosition 进行软失效。
-   */
-  async invalidateFromPosition(branchId: string, thresholdPosition: number): Promise<void> {
-    const store: relationalStore.RdbStore = this.dbHelper.getStore();
-    await this.repository.invalidateFromPositionWithStore(store, branchId, thresholdPosition);
-  }
-
-  /**
-   * v12: 软失效 Branch 中 endPosition >= thresholdPosition 的 Memory。
-   * 设置 invalidated=1,不删除数据,保留可追溯性。
-   * 失效记忆不再注入 Prompt,后台按需重建。
-   */
-  async softInvalidateFromPosition(branchId: string, thresholdPosition: number): Promise<void> {
-    const store: relationalStore.RdbStore = this.dbHelper.getStore();
-    await this.repository.softInvalidateFromPositionWithStore(store, branchId, thresholdPosition);
-  }
-
-  /**
    * v12: 软失效"覆盖了指定消息位置"的 Memory。
    * 只失效 startPosition <= position <= endPosition 的记忆(该消息落在记忆覆盖范围内),
    * 不误伤范围在指定位置之后的独立章节(章节是过去历史快照)。
