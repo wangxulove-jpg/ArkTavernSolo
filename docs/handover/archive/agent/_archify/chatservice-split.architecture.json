@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "ChatService 拆分蓝图",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [1360, 650]
+  },
+  "components": [
+    { "id": "vm", "type": "frontend", "label": "ChatViewModel", "sublabel": "使用方", "pos": [475, 30], "size": [230, 52] },
+    { "id": "svc", "type": "backend", "label": "ChatService", "sublabel": "瘦门面 · 保留编排入口", "tag": "编排门面", "pos": [465, 150], "size": [250, 52] },
+    { "id": "gen", "type": "backend", "label": "GenerationController", "sublabel": "Send/Continue/Regen/Stream", "pos": [60, 290], "size": [230, 52] },
+    { "id": "sess", "type": "backend", "label": "SessionStore", "sublabel": "会话生命周期 + 上下文解析", "pos": [330, 290], "size": [230, 52] },
+    { "id": "mod", "type": "backend", "label": "ModifierAgent", "sublabel": "代写 / 旁白 / 续写", "pos": [600, 290], "size": [230, 52] },
+    { "id": "swipe", "type": "backend", "label": "SwipeController", "sublabel": "候选 / Swipe", "pos": [870, 290], "size": [230, 52] },
+    { "id": "branch", "type": "backend", "label": "BranchController", "sublabel": "分支 / 分叉", "pos": [1130, 290], "size": [200, 52] },
+    { "id": "model", "type": "backend", "label": "ModelService", "sublabel": "AI 唯一出口", "pos": [40, 460], "size": [160, 52] },
+    { "id": "prompt", "type": "backend", "label": "PromptBuilder", "sublabel": "prompt 组装", "pos": [240, 460], "size": [200, 52] },
+    { "id": "content", "type": "backend", "label": "内容服务组", "sublabel": "Character/Lorebook/Preset", "pos": [600, 460], "size": [240, 52] },
+    { "id": "persist", "type": "backend", "label": "持久化组", "sublabel": "Chat/Swipe/Branch", "pos": [330, 568], "size": [230, 52] }
+  ],
+  "connections": [
+    { "id": "vm-to-svc", "from": "vm", "to": "svc", "label": "进入聊天", "variant": "emphasis", "fromSide": "bottom", "toSide": "top", "labelAt": [590, 100] },
+    { "id": "svc-to-gen", "from": "svc", "to": "gen", "label": "委托生成", "fromSide": "bottom", "toSide": "top", "labelAt": [175, 266] },
+    { "id": "svc-to-sess", "from": "svc", "to": "sess", "label": "会话状态", "fromSide": "bottom", "toSide": "top", "labelAt": [445, 266] },
+    { "id": "svc-to-mod", "from": "svc", "to": "mod", "label": "委托辅助", "fromSide": "bottom", "toSide": "top", "labelAt": [715, 266] },
+    { "id": "svc-to-swipe", "from": "svc", "to": "swipe", "label": "委托候选", "fromSide": "bottom", "toSide": "top", "labelAt": [985, 266] },
+    { "id": "svc-to-branch", "from": "svc", "to": "branch", "label": "委托分支", "fromSide": "bottom", "toSide": "top", "labelAt": [1230, 266] },
+    { "id": "gen-to-model", "from": "gen", "to": "model", "label": "streamChat", "variant": "emphasis", "fromSide": "bottom", "toSide": "top", "labelAt": [150, 432] },
+    { "id": "gen-to-prompt", "from": "gen", "to": "prompt", "label": "buildPrompt", "fromSide": "bottom", "toSide": "top", "labelAt": [250, 410] },
+    { "id": "sess-to-persist", "from": "sess", "to": "persist", "label": "会话读写", "fromSide": "bottom", "toSide": "top", "labelAt": [445, 520] },
+    { "id": "mod-to-content", "from": "mod", "to": "content", "label": "读取", "variant": "dashed", "fromSide": "bottom", "toSide": "top", "labelAt": [700, 400] }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "拆分原则", "items": ["按职责子域拆 5 个控制器，各自持有依赖", "瘦门面只做编排与对外契约，不再堆逻辑", "复用既有服务层，不重复造底层"] },
+    { "dot": "violet", "title": "哪些能力被拉走", "items": ["生成：Send/Continue/Regen/Stream", "Modifier：代写/旁白/续写/性格总结", "PromptBuilder 组装时读取内容服务组"] },
+    { "dot": "amber", "title": "仍保持", "items": ["ModelService 仍是 AI 唯一出口", "PromptBuilder 仍集中 prompt 组装", "Swipe/Branch 持久化仍走既有 Persistence"] }
+  ]
+}

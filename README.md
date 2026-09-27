@@ -87,6 +87,8 @@ entry/src/main/ets/
 
 分层约定：`pages → viewmodels → services → repositories → database`，components 与 models 不含业务副作用。
 
+> 开发协作与 Agent 工作流：见 [AGENTS.md](./AGENTS.md)；工作记录与交接文档：见 [docs/handover/](./docs/handover/README.md)。
+
 ## License
 
 [MIT](./LICENSE)

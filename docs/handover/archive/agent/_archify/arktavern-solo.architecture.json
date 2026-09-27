@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "ArkTavernSolo 架构总览",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [1360, 640]
+  },
+  "components": [
+    { "id": "entry", "type": "frontend", "label": "EntryAbility", "sublabel": "UIAbility · 生命周期", "pos": [70, 30], "size": [190, 52] },
+    { "id": "index", "type": "frontend", "label": "Index 首页", "sublabel": "HdsTabs · 4 Tab", "pos": [600, 30], "size": [250, 52] },
+    { "id": "pages", "type": "frontend", "label": "pages/ 页面", "sublabel": "23 条路由 + components", "pos": [1120, 30], "size": [180, 52] },
+    { "id": "vms", "type": "frontend", "label": "viewmodels/", "sublabel": "@Observed 状态 · 33 个", "pos": [600, 150], "size": [250, 52] },
+    { "id": "appservices", "type": "backend", "label": "AppServices", "sublabel": "唯一组合根", "tag": "装配中心", "pos": [80, 270], "size": [190, 52] },
+    { "id": "services", "type": "backend", "label": "services/ 业务编排", "sublabel": "Model/Memory/Sync/Lorebook", "pos": [600, 270], "size": [300, 52] },
+    { "id": "chatservice", "type": "backend", "label": "ChatService", "sublabel": "聊天编排核心 · 5000+ 行", "pos": [1155, 270], "size": [160, 52] },
+    { "id": "repos", "type": "backend", "label": "repositories/", "sublabel": "表级 CRUD + 映射", "pos": [60, 390], "size": [190, 52] },
+    { "id": "storage", "type": "backend", "label": "storage/", "sublabel": "Preferences · KeyStore", "pos": [310, 390], "size": [190, 52] },
+    { "id": "parser", "type": "backend", "label": "parser/", "sublabel": "角色卡 / PNG / 归档", "pos": [560, 390], "size": [190, 52] },
+    { "id": "network", "type": "backend", "label": "network/", "sublabel": "HTTP · SSE 流式 · Provider", "pos": [810, 390], "size": [230, 52] },
+    { "id": "rdb", "type": "database", "label": "RDB 数据库", "sublabel": "arktavern_solo.db · v38", "pos": [60, 520], "size": [210, 52] },
+    { "id": "webdav", "type": "external", "label": "WebDAV", "sublabel": "坚果云同步", "pos": [1120, 550], "size": [180, 52] },
+    { "id": "ai", "type": "external", "label": "AI Providers", "sublabel": "OpenAI 兼容 · SSE", "pos": [1120, 470], "size": [210, 52] },
+    { "id": "chub", "type": "external", "label": "Chub 市场", "sublabel": "角色卡市场", "pos": [1120, 390], "size": [180, 52] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "UI 表现层", "wraps": ["entry", "index", "pages", "vms"] },
+    { "kind": "region", "label": "业务编排层", "wraps": ["appservices", "services", "chatservice"] },
+    { "kind": "region", "label": "数据与基础设施", "wraps": ["repos", "storage", "network", "parser", "rdb"] },
+    { "kind": "region", "label": "外部系统", "wraps": ["webdav", "ai", "chub"] }
+  ],
+  "connections": [
+    { "id": "entry-to-index", "from": "entry", "to": "index", "label": "loadContent", "variant": "emphasis", "fromSide": "right", "toSide": "left" },
+    { "id": "index-to-pages", "from": "index", "to": "pages", "label": "router.pushUrl", "variant": "dashed", "fromSide": "right", "toSide": "left" },
+    { "id": "pages-to-vms", "from": "pages", "to": "vms", "label": "新建 VM / 状态绑定", "fromSide": "bottom", "toSide": "top", "labelAt": [900, 118] },
+    { "id": "vms-to-appservices", "from": "vms", "to": "appservices", "label": "取单例 / 依赖注入", "fromSide": "left", "toSide": "top", "labelAt": [400, 232] },
+    { "id": "app-to-services", "from": "appservices", "to": "services", "label": "装配组合根", "fromSide": "right", "toSide": "left" },
+    { "id": "services-to-chat", "from": "services", "to": "chatservice", "label": "编排（page 级）", "fromSide": "right", "toSide": "left" },
+    { "id": "services-to-repos", "from": "services", "to": "repos", "label": "编排 → CRUD", "fromSide": "bottom", "toSide": "top", "labelAt": [200, 376] },
+    { "id": "services-to-storage", "from": "services", "to": "storage", "label": "偏好/密钥读写", "fromSide": "bottom", "toSide": "top", "labelAt": [440, 376] },
+    { "id": "services-to-parser", "from": "services", "to": "parser", "label": "解析", "fromSide": "bottom", "toSide": "top", "labelAt": [700, 376] },
+    { "id": "services-to-network", "from": "services", "to": "network", "label": "ModelService 出口", "fromSide": "bottom", "toSide": "top", "labelAt": [960, 376] },
+    { "id": "repos-to-rdb", "from": "repos", "to": "rdb", "label": "SQL · DbHelper", "variant": "emphasis", "fromSide": "bottom", "toSide": "top", "labelAt": [300, 508] },
+    { "id": "network-to-ai", "from": "network", "to": "ai", "label": "SSE 流式", "fromSide": "right", "toSide": "left", "labelAt": [1075, 482] },
+    { "id": "network-to-chub", "from": "network", "to": "chub", "label": "Chub", "fromSide": "right", "toSide": "left", "labelAt": [1075, 402] },
+    { "id": "network-to-webdav", "from": "network", "to": "webdav", "label": "WebDAV 协议", "fromSide": "bottom", "toSide": "left", "via": [[925, 470], [1035, 470], [1035, 576], [1120, 576]], "labelAt": [1085, 566] }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "UI 表现层", "items": ["pages → viewmodels 唯一业务桥梁", "@Observed + @StorageProp（State V1）"] },
+    { "dot": "emerald", "title": "业务编排层", "items": ["AppServices 唯一组合根 · ChatService 由 createChatService 创建", "ModelService 为 AI 请求唯一出口"] },
+    { "dot": "violet", "title": "数据与基础设施", "items": ["RDB v38 版本化迁移 · 网络/SSE/加密自研，近零三方依赖"] }
+  ]
+}
