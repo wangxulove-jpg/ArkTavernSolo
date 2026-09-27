@@ -121,8 +121,13 @@
   - 依赖 `MemoryPersistenceService` 构造期注入（字段同名 → **8/8 DIFF=0**）；无可变状态，无需宿主回调；5 个公开方法保留薄包装 → 公开 API 面零差异
   - **边界决策**：`listWorldSessions`（会话记忆去重列表）依赖加载簇的 `dedupeWorldSessionMemories`（该私有方法被 `resolveWorldSessionMemories` 共用），**保留在 MemoryService**，避免跨簇依赖
   - 校验：搬运体逐行等价（**8/8 DIFF=0**）；MemoryService 真实类成员 API 面 **49 → 49 零差异**（注：此前口径 63 含 14 行顶层接口/常量的缩进行，属误计，已澄清）；编译 BUILD SUCCESSFUL；**MemoryService 1,664 → 1,580 行**（P3-2 累计 1,953 → 1,580，-373）
-- [ ] **③ `MemoryTriggerPolicy`**（触发检查：shouldTriggerSummary / shouldGenerateChapter / resolveArchivedPosition / 阈值配置）
-- [ ] **旧兼容 API 死代码核实**（审计 L249/273/657 附近，行号已过期；P1-1 已删 `getEffectiveMemory`/`getInjectionContext`，`trySummarize` 已复核保留）
+- [x] **③ `MemoryTriggerPolicy`（触发检查 + 归档边界）** ✅：新增 `services/MemoryTriggerPolicy.ets`，3 方法**逐字搬出**（`shouldTriggerSummary` 31 行 / `shouldGenerateChapter` 33 / `resolveArchivedPosition` 41）+ `ArchivedPosition` 类型随迁
+  - 依赖 `memoryPersistence` + `triggerConfig` + `chapterConfig` 构造期注入（字段同名）；`resolveWorldIdByChat` 属宿主私有能力，经 `MemoryTriggerHost` **函数属性回调**（P2 范式）
+  - **边界决策**：`resolveArchivedPosition` 同时被**保留**的 `doGenerateChapter` 使用 → 由策略类持有并公开，MemoryService 调用点改 `this.triggerPolicy.resolveArchivedPosition(...)`
+  - 校验：搬运体逐行等价（`shouldTriggerSummary`/`shouldGenerateChapter` **DIFF=0**；`resolveArchivedPosition` 唯一差异 = 1 处宿主间接行 + 日志 tag）；类成员 API 面 **49 → 49 零差异**；编译 BUILD SUCCESSFUL；**MemoryService 1,580 → 1,481 行**
+- [x] **旧兼容 API 死代码核实** ✅（全仓 0 调用证据充分，**删除 3 个**）：`getPersistence`（注释称"供 ChatService 事务内调用"，实际 0 引用）/ `invalidateFromPosition`（"硬删除,旧 API"）/ `softInvalidateFromPosition`（"v12"）→ 类成员 API 面 **49 → 46（有意删除，非回归）**；其余公开方法均确认有调用（`shouldTriggerSummary`←`trySummarize`、`shouldGenerateChapter`←多层/自动章节、`trySummarize`←`tryGenerateMultiLayerMemory`、`updateCoreMemory`←`forceGenerateChapterMemory`/`triggerCoreMemoryUpdateAsync`）
+  - 附带发现（**未处理，留待拍板**）：`MemoryPersistenceService.invalidateFromPosition` / `softInvalidateFromPosition` 仅被上述已删包装引用，现亦无调用者；属 persistence 层 API，删除超出本批范围，登记待议
+- **P3-2 收官**：MemoryService **1,953 → 1,451 行（-502，-25.7%）**；新增 `MemoryPromptBuilder` / `WorldMemoryStore` / `MemoryTriggerPolicy`；`ChapterTriggerConfig` + `DEFAULT_CHAPTER_TRIGGER` 下沉 `models/ChatMemory.ets`；编译 BUILD SUCCESSFUL + 单测 **96/96**
 
 ## 3. 环境事实（防重复踩坑）
 
@@ -192,6 +197,12 @@
   1. 错误映射（`a1c0478`）：未配置模型 / 禁用模型 / API Key 缺失 / 401 / 429 / 超时 / 网络失败 / 5xx / 解析失败 的提示文案不变；会话切换/新建/删除失败提示文案不变（"会话不存在或已删除"等）
   2. 世界书面板（`38dc6a3`）：聊天页状态/世界书面板打开后角色专属世界书条目列出（按 priority 降序、同级按名）；条目启停开关切换后列表刷新；AI 世界书"修改/提取"生成变更预览、套用（新增/更新/删除）后列表刷新；以上失败路径仅日志告警、面板数据回退 null
   - 回滚锚点：`38dc6a3`（P3-1②）/ `a1c0478`（P3-1①，各自独立）
+- **P3-2 待冒烟（"搬运不改行为" + 死代码删除）**：
+  1. 记忆生成（`7ebc2e1` / `bfb1114` / ③）：多层记忆手动/自动总结产出章节/核心/会话记忆；聊天页状态·记忆面板"生成摘要"成功；会话记忆生成（记忆管理页）正文与结构不变
+  2. 词条召回与手工记忆（`bfb1114`）：文件夹记忆根页/详情页新增·编辑·删除手工记忆；聊天注入的世界池记忆与关键词召回命中行为不变
+  3. 触发阈值（③）：长会话达到阈值自动触发章节/rolling 总结的时机不变（日志 tag 现为 `MemoryTriggerPolicy`）
+  4. 死代码删除回归：无 UI 入口（`getPersistence`/`invalidateFromPosition`/`softInvalidateFromPosition` 均无调用方）；确认"重新生成/Swipe 切换后记忆软失效"仍走 `softInvalidateCoveringPosition`（未动）
+  - 回滚锚点：`7ebc2e1`（P3-2①）/ `bfb1114`（P3-2②）/ ③+死代码（各自独立）
 - **本轮附加验证（2026-09-27，host 侧）**：本地单元测试套件已在本机执行通过 —— `hvigorw test`（`entry/src/test`，16 个测试类 / **96 用例全部 Success，0 失败 0 忽略**；结果落盘 `entry/.test/default/intermediates/test/coverage_data/test_result.txt`）。覆盖：ChatTextContract 纯函数（前端交互缓冲 / 粘滞提醒文本 / 状态段拆分 —— P2-1、P2-3 搬运过的纯函数）、PromptSegment 段序、状态 schema 解析、世界书激活与粘滞服务、ChapterMemoryIndexer、MemoryLoadRefService、ContextBudgetEstimator、Lorebook 模式、Gemini 模型过滤、前端契约 v2；**不含**会话 / Swipe / 分支 / 流式簇（依赖 DB/网络，只能真机冒烟）。命令：`hvigorw test --mode module -p module=entry@default -p product=default -p buildMode=debug --no-daemon`
 - **API 面等价校验（2026-09-27，机械对比）**：以 tag `refactor-baseline` 为基准，抽取 ChatService 全部非 private 声明（方法 / 访问器）逐行对比 → 修复后 **89 项签名与基线完全一致**（含 `async` 修饰符）。过程中发现并修复 1 处搬运残留：`refreshLorebookPinNow` 的 `async` 修饰符在 P2-7 薄包装时丢失（调用侧行为等价，但签名不同）→ 已恢复（commit `36d809c`，编译通过）。新模块分层抽查：`ChatSessionService` / `ChatMessageSender` / `ChatUserIdentityService` 无 viewmodels / pages / components 越层导入
 - **已作废冒烟项**（相关代码已删除）：会话列表面板（`726efec` / `958b43b` 的面板侧）——面板与 ChatViewModel 会话列表 API 已随 P1-4 ③ 删除，不必再测

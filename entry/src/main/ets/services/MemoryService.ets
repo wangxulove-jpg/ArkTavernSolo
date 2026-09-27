@@ -61,6 +61,7 @@ import { generateUuid } from '../utils/Uuid';
 import { nowMillis } from '../utils/Time';
 import { MemoryPromptBuilder } from './MemoryPromptBuilder';
 import { WorldMemoryStore } from './WorldMemoryStore';
+import { MemoryTriggerPolicy, ArchivedPosition } from './MemoryTriggerPolicy';
 
 const LOG_TAG: string = 'MemoryService';
 
@@ -113,12 +114,6 @@ export const MEMORY_CHAPTER_PROMPT_CUSTOM_KEY: string = 'memory_chapter_prompt_c
 /** v48: 自定义会话记忆总结方向 Preferences key(留空使用默认提示词) */
 export const MEMORY_SESSION_PROMPT_CUSTOM_KEY: string = 'memory_session_prompt_custom';
 
-/** v45: 归档边界解析结果(最新 chapter/rolling 的 endPosition 与其摘要)。 */
-interface ArchivedPosition {
-  readonly position: number;
-  readonly prevSummary: string;
-}
-
 export class MemoryService {
   private readonly memoryPersistence: MemoryPersistenceService;
   private readonly modelService: ModelService;
@@ -135,6 +130,8 @@ export class MemoryService {
   private readonly promptBuilder: MemoryPromptBuilder;
   /** P3-2②: 世界级手工记忆与关键词召回 */
   private readonly worldMemoryStore: WorldMemoryStore;
+  /** P3-2③: 记忆触发策略(阈值判定 + 归档边界解析) */
+  private readonly triggerPolicy: MemoryTriggerPolicy;
 
   constructor(
     memoryPersistence: MemoryPersistenceService,
@@ -156,11 +153,9 @@ export class MemoryService {
     this.appPreferences = appPreferences;
     this.promptBuilder = new MemoryPromptBuilder(summaryPoints, chapterConfig);
     this.worldMemoryStore = new WorldMemoryStore(memoryPersistence);
-  }
-
-  /** 获取 MemoryPersistenceService(供 ChatService 事务内调用) */
-  getPersistence(): MemoryPersistenceService {
-    return this.memoryPersistence;
+    this.triggerPolicy = new MemoryTriggerPolicy(memoryPersistence, triggerConfig, chapterConfig, {
+      resolveWorldIdByChat: (chatId: string): Promise<string> => this.resolveWorldIdByChat(chatId)
+    });
   }
 
   /**
@@ -411,32 +406,7 @@ export class MemoryService {
     branchId: string,
     branchMessages: ChatMessage[]
   ): Promise<boolean> {
-    if (branchMessages.length === 0) {
-      return false;
-    }
-    try {
-      const latest: ChatMemory | null = await this.memoryPersistence.getLatestByBranch(branchId);
-      const summarizedPos: number = latest !== null ? latest.endPosition : -1;
-      // 统计未总结的消息数和字符数
-      let unsummarizedCount: number = 0;
-      let unsummarizedChars: number = 0;
-      for (let i = 0; i < branchMessages.length; i++) {
-        if (i > summarizedPos) {
-          unsummarizedCount++;
-          unsummarizedChars += branchMessages[i].content.length;
-        }
-      }
-      if (unsummarizedCount >= this.triggerConfig.messageCountThreshold) {
-        return true;
-      }
-      if (unsummarizedChars >= this.triggerConfig.charLengthThreshold) {
-        return true;
-      }
-      return false;
-    } catch (e) {
-      Logger.warn(LOG_TAG, 'shouldTriggerSummary failed: ' + String(e));
-      return false;
-    }
+    return await this.triggerPolicy.shouldTriggerSummary(branchId, branchMessages);
   }
 
   /**
@@ -459,81 +429,7 @@ export class MemoryService {
     branchMessages: ChatMessage[],
     chatId: string = ''
   ): Promise<boolean> {
-    if (branchMessages.length === 0) {
-      return false;
-    }
-    try {
-      const archived: ArchivedPosition =
-        await this.resolveArchivedPosition(branchId, chatId);
-      const archivedPos: number = archived.position;
-
-      let unarchivedCount: number = 0;
-      let unarchivedChars: number = 0;
-      for (let i = 0; i < branchMessages.length; i++) {
-        if (i > archivedPos) {
-          unarchivedCount++;
-          unarchivedChars += branchMessages[i].content.length;
-        }
-      }
-      if (unarchivedCount >= this.chapterConfig.messageCountThreshold) {
-        return true;
-      }
-      if (unarchivedChars >= this.chapterConfig.charLengthThreshold) {
-        return true;
-      }
-      return false;
-    } catch (e) {
-      Logger.warn(LOG_TAG, 'shouldGenerateChapter failed: ' + String(e));
-      return false;
-    }
-  }
-
-  /**
-   * v45: 解析归档边界(最新 chapter/rolling 的 endPosition)与其摘要。
-   * - 优先读本 Branch 的有效记忆
-   * - 世界分组会话(chatId 非空)补充"同会话"的世界共享 chapter/rolling
-   *   (跨会话 position 不可比,只认本会话;修复 fork 后归档边界丢失)
-   */
-  private async resolveArchivedPosition(
-    branchId: string,
-    chatId: string
-  ): Promise<ArchivedPosition> {
-    const allValid: ChatMemory[] = await this.memoryPersistence.listValidByBranch(branchId);
-    let archivedPos: number = -1;
-    let prevSummary: string = '';
-    for (let i = 0; i < allValid.length; i++) {
-      const m: ChatMemory = allValid[i];
-      if (m.memoryType === 'chapter' || m.memoryType === 'rolling') {
-        if (m.endPosition > archivedPos) {
-          archivedPos = m.endPosition;
-          prevSummary = m.summary;
-        }
-      }
-    }
-    if (chatId.length > 0) {
-      const worldId: string = await this.resolveWorldIdByChat(chatId);
-      if (worldId.length > 0) {
-        const worldChapters: ChatMemory[] =
-          await this.memoryPersistence.listValidByWorldAndType(worldId, 'chapter');
-        const worldRolling: ChatMemory[] =
-          await this.memoryPersistence.listValidByWorldAndType(worldId, 'rolling');
-        for (let i = 0; i < worldChapters.length; i++) {
-          const m: ChatMemory = worldChapters[i];
-          if (m.chatId === chatId && m.endPosition > archivedPos) {
-            archivedPos = m.endPosition;
-            prevSummary = m.summary;
-          }
-        }
-        for (let i = 0; i < worldRolling.length; i++) {
-          const m: ChatMemory = worldRolling[i];
-          if (m.chatId === chatId && m.endPosition > archivedPos) {
-            archivedPos = m.endPosition;
-            prevSummary = m.summary;
-          }
-        }
-      }
-    }
-    return { position: archivedPos, prevSummary: prevSummary };
+    return await this.triggerPolicy.shouldGenerateChapter(branchId, branchMessages, chatId);
   }
 
   // ===== 增量总结(rolling,旧 API 兼容) =====
@@ -825,7 +721,7 @@ export class MemoryService {
     try {
       // 找到最新 chapter/rolling 的 endPosition 作为章节起点(世界感知)
       const archived: ArchivedPosition =
-        await this.resolveArchivedPosition(branchId, chatId);
+        await this.triggerPolicy.resolveArchivedPosition(branchId, chatId);
       const archivedPos: number = archived.position;
       let prevSummary: string = archived.prevSummary;
 
@@ -1371,31 +1267,6 @@ export class MemoryService {
   }
 
   // ===== 过期标记 =====
-
-  /**
-   * 使 Branch 中 endPosition >= thresholdPosition 的 Memory 失效(硬删除,旧 API)。
-   * 用于编辑消息或切换 Swipe 后。
-   * v12 推荐使用 softInvalidateFromPosition 进行软失效。
-   */
-  async invalidateFromPosition(branchId: string, thresholdPosition: number): Promise<void> {
-    try {
-      await this.memoryPersistence.invalidateFromPosition(branchId, thresholdPosition);
-    } catch (e) {
-      Logger.warn(LOG_TAG, 'invalidateFromPosition failed: ' + String(e));
-    }
-  }
-
-  /**
-   * v12: 软失效 Branch 中 endPosition >= thresholdPosition 的 Memory。
-   * 设置 invalidated=1,保留数据可追溯,不再注入 Prompt。
-   */
-  async softInvalidateFromPosition(branchId: string, thresholdPosition: number): Promise<void> {
-    try {
-      await this.memoryPersistence.softInvalidateFromPosition(branchId, thresholdPosition);
-    } catch (e) {
-      Logger.warn(LOG_TAG, 'softInvalidateFromPosition failed: ' + String(e));
-    }
-  }
 
   /**
    * v12: 软失效"覆盖了指定消息位置"的 Memory。
