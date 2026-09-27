@@ -27,6 +27,12 @@ import { EmptyStateView } from '../../components/EmptyStateView';
 import { PressableCard } from '../../components/PressableCard';
 import { AppTopBar } from '../../components/ui/AppTopBar';
 import { CharacterImageView } from '../../components/CharacterImageView';
+import {
+  SessionGroupCreateDialog,
+  SessionGroupRenameDialog,
+  SessionGroupDeleteDialog,
+  SessionGroupMoveDialog
+} from '../../components/SessionGroupDialogs';
 import { promptAction, router, componentUtils } from '@kit.ArkUI';
 
 import { Character, resolveCharacterDisplayName } from '../../models/Character';
@@ -113,22 +119,12 @@ export struct ChatSessionRootView {
   @State collapsedWorldIds: string[] = [];
   /** 是否显示新建分组弹窗 */
   @State showCreateGroupDialog: boolean = false;
-  /** 新建分组输入 */
-  @State newGroupName: string = '';
-  /** 重命名分组目标(空时不显示) */
+  /** 重命名分组目标(空时不显示;弹窗初始名取自本对象) */
   @State renameGroupTarget: WorldGroup | null = null;
-  /** 重命名分组输入 */
-  @State renameGroupInput: string = '';
   /** 删除分组确认目标(空时不显示) */
   @State deleteGroupTarget: WorldGroup | null = null;
-  /** 移动会话到分组的目标会话(空时不显示) */
+  /** 移动会话到分组的目标会话(空时不显示;弹窗初始选中取自 item.worldId) */
   @State moveTarget: ChatSessionListItem | null = null;
-  /** 移动弹窗中选中的分组 id(空字符串=不分组) */
-  @State moveSelectedWorldId: string = '';
-  /** 移动弹窗:是否展开"新建文件夹"输入 */
-  @State showMoveNewFolderInput: boolean = false;
-  /** 移动弹窗:"新建文件夹"输入值 */
-  @State moveNewFolderInput: string = '';
 
   // ===== 手动拖拽重排 =====
   /** 是否正在拖拽 */
@@ -409,24 +405,73 @@ export struct ChatSessionRootView {
         this.deleteConfirmDialog()
       }
 
-      // v42: 新建分组弹窗
+      // v42: 新建文件夹弹窗(与聊天页会话列表面板共用组件)
       if (this.showCreateGroupDialog) {
-        this.createGroupDialog()
+        SessionGroupCreateDialog({
+          title: '新建文件夹',
+          placeholder: '文件夹名称',
+          onCancel: (): void => {
+            this.showCreateGroupDialog = false;
+          },
+          onConfirm: (name: string): void => {
+            this.confirmCreateGroup(name);
+          }
+        })
       }
 
-      // v42: 重命名分组弹窗
+      // v42: 分组管理(重命名/删除入口)弹窗
       if (this.renameGroupTarget !== null) {
-        this.renameGroupDialog()
+        SessionGroupRenameDialog({
+          initialName: this.renameGroupTarget!.name,
+          onCancel: (): void => {
+            this.renameGroupTarget = null;
+          },
+          onConfirm: (name: string): void => {
+            this.confirmRenameGroup(name);
+          },
+          onRequestDelete: (): void => {
+            const target: WorldGroup | null = this.renameGroupTarget;
+            if (target !== null) {
+              this.renameGroupTarget = null;
+              this.deleteGroupTarget = target;
+            }
+          }
+        })
       }
 
-      // v42: 删除分组确认弹窗
+      // v42: 删除文件夹确认弹窗
       if (this.deleteGroupTarget !== null) {
-        this.deleteGroupDialog()
+        SessionGroupDeleteDialog({
+          noun: '文件夹',
+          groupName: this.deleteGroupTarget!.name,
+          onCancel: (): void => {
+            this.deleteGroupTarget = null;
+          },
+          onConfirm: (): void => {
+            this.confirmDeleteGroup();
+          }
+        })
       }
 
-      // v42: 移动会话到分组弹窗
+      // v42: 移动会话到文件夹弹窗(含"新建文件夹并移入";初始选中 = 会话当前文件夹)
       if (this.moveTarget !== null) {
-        this.moveChatDialog()
+        SessionGroupMoveDialog({
+          title: '移动到文件夹',
+          targetTitle: this.getSessionTitle(this.moveTarget!),
+          groups: this.viewModel !== null ? this.viewModel!.worldGroups : [],
+          initialWorldId: this.moveTarget!.worldId,
+          enableNewFolder: true,
+          canCreateFolder: this.viewModel !== null && !this.viewModel!.isGroupOperating,
+          onCancel: (): void => {
+            this.moveTarget = null;
+          },
+          onConfirmMove: (worldId: string): void => {
+            this.confirmMoveChat(worldId);
+          },
+          onCreateFolderAndMove: (name: string): void => {
+            this.confirmCreateFolderAndMove(name);
+          }
+        })
       }
 
       // T-CHAT.1: 长按导出选择弹窗
@@ -479,7 +524,6 @@ export struct ChatSessionRootView {
             .padding({ left: 12, right: 12 })
             .enabled(this.viewModel !== null && !this.viewModel!.isGroupOperating)
             .onClick(() => {
-              this.newGroupName = '';
               this.showCreateGroupDialog = true;
             })
         }
@@ -772,7 +816,6 @@ export struct ChatSessionRootView {
     for (let i = 0; i < groups.length; i++) {
       if (groups[i].id === worldId) {
         this.renameGroupTarget = groups[i];
-        this.renameGroupInput = groups[i].name;
         return;
       }
     }
@@ -1404,8 +1447,8 @@ export struct ChatSessionRootView {
   // ===== v42 世界分组管理 =====
 
   /** 确认新建分组 */
-  private async confirmCreateGroup(): Promise<void> {
-    const name: string = this.newGroupName.trim();
+  private async confirmCreateGroup(input: string): Promise<void> {
+    const name: string = input.trim();
     if (name.length === 0) {
       promptAction.showToast({ message: '分组名称不能为空', duration: 2000 });
       return;
@@ -1423,12 +1466,12 @@ export struct ChatSessionRootView {
   }
 
   /** 确认重命名分组 */
-  private async confirmRenameGroup(): Promise<void> {
+  private async confirmRenameGroup(input: string): Promise<void> {
     const target: WorldGroup | null = this.renameGroupTarget;
     if (target === null || this.viewModel === null) {
       return;
     }
-    const name: string = this.renameGroupInput.trim();
+    const name: string = input.trim();
     if (name.length === 0) {
       promptAction.showToast({ message: '分组名称不能为空', duration: 2000 });
       return;
@@ -1457,21 +1500,18 @@ export struct ChatSessionRootView {
     }
   }
 
-  /** 打开移动会话到分组弹窗 */
+  /** 打开移动会话到分组弹窗(初始选中与新建输入由弹窗自持,挂载即重置) */
   private openMoveChatDialog(item: ChatSessionListItem): void {
     if (this.viewModel === null) {
       return;
     }
     this.moveTarget = item;
-    this.moveSelectedWorldId = item.worldId;
-    this.showMoveNewFolderInput = false;
-    this.moveNewFolderInput = '';
   }
 
-  /** 新建文件夹并将会话移入(一步到位) */
-  private async confirmCreateFolderAndMove(): Promise<void> {
+  /** 新建文件夹并将会话移入(一步到位;名称来自弹窗输入) */
+  private async confirmCreateFolderAndMove(input: string): Promise<void> {
     const target: ChatSessionListItem | null = this.moveTarget;
-    const name: string = this.moveNewFolderInput.trim();
+    const name: string = input.trim();
     if (target === null || this.viewModel === null) {
       return;
     }
@@ -1488,14 +1528,13 @@ export struct ChatSessionRootView {
     }
   }
 
-  /** 确认移动会话到分组(空字符串=不分组) */
-  private async confirmMoveChat(): Promise<void> {
+  /** 确认移动会话到分组(空字符串=不分组;选中值来自弹窗) */
+  private async confirmMoveChat(worldId: string): Promise<void> {
     const target: ChatSessionListItem | null = this.moveTarget;
     if (target === null || this.viewModel === null) {
       return;
     }
     this.moveTarget = null;
-    const worldId: string = this.moveSelectedWorldId;
     const ok: boolean = await this.viewModel!.moveChatToWorld(
       target.chat.id, worldId.length > 0 ? worldId : null
     );
@@ -1504,386 +1543,6 @@ export struct ChatSessionRootView {
       promptAction.showToast({ message: '已移动会话', duration: 1500 });
       this.bumpListVersion();
     }
-  }
-
-  /** 新建分组弹窗 */
-  @Builder
-  createGroupDialog() {
-    Stack() {
-      Column() {
-        Column() {
-          Text('新建文件夹')
-            .fontSize(17)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .margin({ bottom: 12 })
-
-          TextInput({ placeholder: '文件夹名称', text: this.newGroupName })
-            .fontSize(15)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-            .borderRadius($r('app.float.app_radius_sm'))
-            .height(44)
-            .padding({ left: 12, right: 12 })
-            .onChange((value: string) => {
-              this.newGroupName = value;
-            })
-
-          Row() {
-            Button('取消')
-              .fontSize(15)
-              .backgroundColor(Color.Transparent)
-              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-              .layoutWeight(1)
-              .height(40)
-              .onClick(() => {
-                this.showCreateGroupDialog = false;
-              })
-            Button('创建')
-              .fontSize(15)
-              .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
-              .fontColor($r('app.color.app_on_accent'))
-              .borderRadius($r('app.float.app_radius_sm'))
-              .layoutWeight(1)
-              .height(40)
-              .margin({ left: 12 })
-              .onClick(() => {
-                this.confirmCreateGroup();
-              })
-          }
-          .width('100%')
-          .margin({ top: 20 })
-        }
-        .width('80%')
-        .padding(20)
-        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
-        .borderRadius($r('app.float.app_radius_lg'))
-      }
-      .width('100%')
-      .height('100%')
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
-    }
-    .width('100%')
-    .height('100%')
-    .backgroundColor('rgba(0,0,0,0.5)')
-  }
-
-  /** 分组管理弹窗(重命名 + 删除) */
-  @Builder
-  renameGroupDialog() {
-    Stack() {
-      Column() {
-        Column() {
-          Text('分组管理')
-            .fontSize(17)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .margin({ bottom: 12 })
-
-          TextInput({ placeholder: '分组名称', text: this.renameGroupInput })
-            .fontSize(15)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-            .borderRadius($r('app.float.app_radius_sm'))
-            .height(44)
-            .padding({ left: 12, right: 12 })
-            .onChange((value: string) => {
-              this.renameGroupInput = value;
-            })
-
-          Row() {
-            Button('取消')
-              .fontSize(15)
-              .backgroundColor(Color.Transparent)
-              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-              .layoutWeight(1)
-              .height(40)
-              .onClick(() => {
-                this.renameGroupTarget = null;
-              })
-            Button('重命名')
-              .fontSize(15)
-              .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
-              .fontColor($r('app.color.app_on_accent'))
-              .borderRadius($r('app.float.app_radius_sm'))
-              .layoutWeight(1)
-              .height(40)
-              .margin({ left: 12 })
-              .onClick(() => {
-                this.confirmRenameGroup();
-              })
-          }
-          .width('100%')
-          .margin({ top: 12 })
-
-          Divider().color(ThemePalette.dividerColor(this.effectiveTheme)).margin({ top: 12, bottom: 4 })
-
-          Button('删除分组(仅解除关联,不删会话)')
-            .fontSize(14)
-            .backgroundColor(Color.Transparent)
-            .fontColor($r('app.color.app_danger'))
-            .width('100%')
-            .height(44)
-            .onClick(() => {
-              const target: WorldGroup | null = this.renameGroupTarget;
-              if (target !== null) {
-                this.renameGroupTarget = null;
-                this.deleteGroupTarget = target;
-              }
-            })
-        }
-        .width('80%')
-        .padding(20)
-        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
-        .borderRadius($r('app.float.app_radius_lg'))
-      }
-      .width('100%')
-      .height('100%')
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
-    }
-    .width('100%')
-    .height('100%')
-    .backgroundColor('rgba(0,0,0,0.5)')
-  }
-
-  /** 删除分组确认弹窗 */
-  @Builder
-  deleteGroupDialog() {
-    Stack() {
-      Column() {
-        Column() {
-          Text('删除文件夹')
-            .fontSize(17)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .margin({ bottom: 12 })
-
-          Text('删除文件夹仅解除会话与该文件夹的关联,不会删除任何会话。确定删除"'
-            + (this.deleteGroupTarget !== null ? this.deleteGroupTarget!.name : '')
-            + '"吗?')
-            .fontSize(14)
-            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-            .lineHeight(20)
-            .margin({ bottom: 20 })
-
-          Row() {
-            Button('取消')
-              .fontSize(14)
-              .backgroundColor(Color.Transparent)
-              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-              .layoutWeight(1)
-              .height(40)
-              .onClick(() => {
-                this.deleteGroupTarget = null;
-              })
-
-            Button('删除')
-              .fontSize(14)
-              .backgroundColor($r('app.color.app_danger'))
-              .fontColor(Color.White)
-              .borderRadius($r('app.float.app_radius_sm'))
-              .layoutWeight(1)
-              .height(40)
-              .margin({ left: 12 })
-              .onClick(() => {
-                this.confirmDeleteGroup();
-              })
-          }
-          .width('100%')
-        }
-        .width('80%')
-        .padding(20)
-        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
-        .borderRadius($r('app.float.app_radius_lg'))
-      }
-      .width('100%')
-      .height('100%')
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
-    }
-    .width('100%')
-    .height('100%')
-    .backgroundColor('rgba(0,0,0,0.5)')
-  }
-
-  /** 移动会话到分组弹窗(含"不分组") */
-  @Builder
-  moveChatDialog() {
-    Stack() {
-      Column() {
-        Column() {
-          Text('移动到文件夹')
-            .fontSize(17)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .margin({ bottom: 8 })
-
-          Text(this.moveTarget !== null ? this.getSessionTitle(this.moveTarget!) : '')
-            .fontSize(13)
-            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
-            .margin({ bottom: 12 })
-
-          Scroll() {
-            Column() {
-              // "新建文件夹"入口(展开后输入名称,创建并直接移入)
-              Row() {
-                SymbolGlyph($r('sys.symbol.folder'))
-                  .fontSize(16)
-                  .fontColor([ThemePalette.accentColor(this.effectiveTheme)])
-                Text('+ 新建文件夹')
-                  .fontSize(14)
-                  .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-                  .margin({ left: 8 })
-                Blank()
-                Text(this.showMoveNewFolderInput ? '▾' : '▸')
-                  .fontSize(12)
-                  .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-              }
-              .width('100%')
-              .height(44)
-              .alignItems(VerticalAlign.Center)
-              .onClick(() => {
-                this.showMoveNewFolderInput = !this.showMoveNewFolderInput;
-              })
-
-              if (this.showMoveNewFolderInput) {
-                Row() {
-                  TextInput({ placeholder: '文件夹名称', text: this.moveNewFolderInput })
-                    .fontSize(14)
-                    .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-                    .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-                    .borderRadius(8)
-                    .height(36)
-                    .layoutWeight(1)
-                    .padding({ left: 10, right: 10 })
-                    .onChange((value: string) => {
-                      this.moveNewFolderInput = value;
-                    })
-                  Button('创建并移入')
-                    .fontSize(13)
-                    .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
-                    .fontColor($r('app.color.app_on_accent'))
-                    .borderRadius(8)
-                    .height(36)
-                    .margin({ left: 8 })
-                    .enabled(this.viewModel !== null && !this.viewModel!.isGroupOperating)
-                    .onClick(() => {
-                      this.confirmCreateFolderAndMove();
-                    })
-                }
-                .width('100%')
-                .margin({ bottom: 6 })
-              }
-
-              Divider().color(ThemePalette.dividerColor(this.effectiveTheme))
-
-              // "不分组"选项
-              Row() {
-                Radio({ value: 'none', group: 'moveWorld' })
-                  .checked(this.moveSelectedWorldId.length === 0)
-                  .onChange((checked: boolean) => {
-                    if (checked) {
-                      this.moveSelectedWorldId = '';
-                    }
-                  })
-                Text('不分组')
-                  .fontSize(14)
-                  .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-                  .margin({ left: 8 })
-              }
-              .width('100%')
-              .height(44)
-              .alignItems(VerticalAlign.Center)
-              .onClick(() => {
-                this.moveSelectedWorldId = '';
-              })
-
-              Divider().color(ThemePalette.dividerColor(this.effectiveTheme))
-
-              // 分组列表
-              if (this.viewModel !== null) {
-                ForEach(this.viewModel!.worldGroups, (g: WorldGroup) => {
-                  Row() {
-                    Radio({ value: g.id, group: 'moveWorld' })
-                      .checked(this.moveSelectedWorldId === g.id)
-                      .onChange((checked: boolean) => {
-                        if (checked) {
-                          this.moveSelectedWorldId = g.id;
-                        }
-                      })
-                    Text(g.name)
-                      .fontSize(14)
-                      .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-                      .margin({ left: 8 })
-                      .layoutWeight(1)
-                      .maxLines(1)
-                      .textOverflow({ overflow: TextOverflow.Ellipsis })
-                  }
-                  .width('100%')
-                  .height(44)
-                  .alignItems(VerticalAlign.Center)
-                  .onClick(() => {
-                    this.moveSelectedWorldId = g.id;
-                  })
-                }, (g: WorldGroup) => g.id)
-              }
-
-              if (this.viewModel !== null && this.viewModel!.worldGroups.length === 0) {
-                Text('暂无分组,请先点击"新建分组"创建')
-                  .fontSize(13)
-                  .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-                  .margin({ top: 8 })
-              }
-            }
-            .width('100%')
-          }
-          .height(220)
-          .scrollBar(BarState.Auto)
-
-          Divider().color(ThemePalette.dividerColor(this.effectiveTheme)).margin({ top: 8, bottom: 8 })
-
-          Row() {
-            Button('取消')
-              .fontSize(15)
-              .backgroundColor(Color.Transparent)
-              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-              .layoutWeight(1)
-              .height(40)
-              .onClick(() => {
-                this.moveTarget = null;
-              })
-            Button('移动')
-              .fontSize(15)
-              .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
-              .fontColor($r('app.color.app_on_accent'))
-              .borderRadius($r('app.float.app_radius_sm'))
-              .layoutWeight(1)
-              .height(40)
-              .margin({ left: 12 })
-              .onClick(() => {
-                this.confirmMoveChat();
-              })
-          }
-          .width('100%')
-        }
-        .width('85%')
-        .padding(20)
-        .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
-        .borderRadius($r('app.float.app_radius_lg'))
-      }
-      .width('100%')
-      .height('100%')
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
-    }
-    .width('100%')
-    .height('100%')
-    .backgroundColor('rgba(0,0,0,0.5)')
   }
 
   /** 重命名弹窗(原生 Stack 遮罩 + 输入框) */
