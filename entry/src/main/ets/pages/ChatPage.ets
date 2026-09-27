@@ -42,6 +42,7 @@ import { CharacterImageView } from '../components/CharacterImageView';
 import { ColorWheelPicker } from '../components/ColorWheelPicker';
 import { ChatForkPicker } from '../components/ChatForkPicker';
 import { ChatMessageList } from '../components/ChatMessageList';
+import { ChatInputArea } from '../components/ChatInputArea';
 import { promptAction, router, window, mediaquery, display } from '@kit.ArkUI';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { common } from '@kit.AbilityKit';
@@ -1231,7 +1232,58 @@ struct ChatPage {
             .hitTestBehavior(HitTestMode.Transparent)
           }
 
-          this.inputArea()
+          ChatInputArea({
+            effectiveTheme: this.effectiveTheme,
+            inputText: this.viewModel !== null ? this.viewModel!.inputText : '',
+            canSend: this.canSend(),
+            canStop: this.viewModel !== null && this.viewModel!.canStop,
+            showAiActions: this.viewModel !== null
+              && !this.viewModel!.busy && !this.viewModel!.isGenerating,
+            isSendButtonOnLeft: this.isSendButtonOnLeft(),
+            narratorModeActive: this.narratorModeActive,
+            onInputChange: (value: string): void => {
+              if (this.viewModel !== null) {
+                this.viewModel!.updateInput(value);
+              }
+            },
+            onImpersonate: (): void => {
+              if (this.viewModel !== null && !this.viewModel!.busy) {
+                this.viewModel!.impersonate();
+              }
+            },
+            onAutoContinue: (): void => {
+              if (this.viewModel !== null && !this.viewModel!.busy) {
+                this.viewModel!.autoContinue();
+              }
+            },
+            onSendRequest: (): void => {
+              this.handleInputSend();
+            },
+            onSendNarratorOnly: (): void => {
+              if (this.canSend() && this.viewModel !== null) {
+                this.viewModel!.sendNarratorOnly();
+                this.narratorModeActive = false;
+              }
+            },
+            onSendNarrator: (): void => {
+              if (this.isBudgetExceeded()) {
+                this.notifyBudgetBlocked();
+                return;
+              }
+              if (this.canSend() && this.viewModel !== null) {
+                this.viewModel!.sendNarrator();
+                this.narratorModeActive = false;
+              }
+            },
+            onStop: (): void => {
+              if (this.viewModel !== null) {
+                this.viewModel!.stop();
+              }
+            },
+            onKeyPreImeEvent: (event: KeyEvent): boolean => {
+              return this.handleInputKeyPreIme(event);
+            }
+          })
         }
         .width('100%')
         .height('100%')
@@ -3728,255 +3780,57 @@ struct ChatPage {
     }
   }
 
-  @Builder
-  inputArea() {
-    Column() {
-      // AI 操作按钮行(仅空闲时显示)
-      if (this.viewModel !== null && !this.viewModel!.busy && !this.viewModel!.isGenerating) {
-        Row() {
-          Button({ type: ButtonType.Normal }) {
-            Text('🎭代写')
-              .fontSize(11)
-              .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-          }
-          .height(28)
-          .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-          .borderRadius(14)
-          .padding({ left: 10, right: 10 })
-          .margin({ right: 6 })
-          .onClick(() => {
-            if (this.viewModel !== null && !this.viewModel!.busy) {
-              this.viewModel!.impersonate();
-            }
-          })
-
-          Button({ type: ButtonType.Normal }) {
-            Text('⚡续写')
-              .fontSize(11)
-              .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-          }
-          .height(28)
-          .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-          .borderRadius(14)
-          .padding({ left: 10, right: 10 })
-          .margin({ right: 6 })
-          .onClick(() => {
-            if (this.viewModel !== null && !this.viewModel!.busy) {
-              this.viewModel!.autoContinue();
-            }
-          })
-
-          Button({ type: ButtonType.Normal }) {
-            Text(this.narratorModeActive ? '📖旁白✓' : '📖旁白')
-              .fontSize(11)
-              .fontColor(this.narratorModeActive
-                ? ThemePalette.accentColor(this.effectiveTheme)
-                : ThemePalette.textPrimaryColor(this.effectiveTheme))
-          }
-          .height(28)
-          .backgroundColor(this.narratorModeActive
-            ? '#205B7CFA'
-            : ThemePalette.surface2Color(this.effectiveTheme))
-          .borderRadius(14)
-          .padding({ left: 10, right: 10 })
-          .margin({ right: 6 })
-          .onClick(() => {
-            this.narratorModeActive = !this.narratorModeActive;
-          })
-
-        }
-        .width('100%')
-        .justifyContent(FlexAlign.Start)
-        .padding({ left: 4, right: 4, bottom: 4 })
-      }
-
-      // 旁白模式标签
-      if (this.narratorModeActive) {
-        Row() {
-          Text('[旁白模式]')
-            .fontSize(10)
-            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-            .fontWeight(FontWeight.Bold)
-          Text(' Enter=仅旁白')
-            .fontSize(10)
-            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-        }
-        .padding({ left: 12, bottom: 2 })
-      }
-
-      Row() {
-      if (this.isSendButtonOnLeft()) {
-        this.sendStopButton()
-      }
-
-      TextArea({
-        placeholder: this.narratorModeActive ? '输入旁白叙述…' : $r('app.string.chat_input_placeholder'),
-        text: this.viewModel !== null ? this.viewModel!.inputText : ''
-      })
-        .fontSize($r('app.float.app_font_body'))
-        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-        .backgroundColor(Color.Transparent)
-        .borderRadius($r('app.float.app_radius_md'))
-        .border({ width: 0 })
-        .maxLines(10)
-        .barState(BarState.Auto)
-        .constraintSize({ minHeight: 40, maxHeight: 280 })
-        .layoutWeight(1)
-        .padding({ left: 14, right: 8, top: 8, bottom: 8 })
-        .enterKeyType(EnterKeyType.Send)
-        .onChange((value: string) => {
-          if (this.viewModel !== null) {
-            this.viewModel!.updateInput(value);
-          }
-        })
-        .onSubmit((enterKey: EnterKeyType, event?: SubmitEvent) => {
-          if (this.isBudgetExceeded()) {
-            this.notifyBudgetBlocked();
-          } else if (this.canSend() && this.viewModel !== null) {
-            if (this.narratorModeActive) {
-              this.viewModel!.sendNarratorOnly();
-              this.narratorModeActive = false;
-            } else {
-              this.viewModel!.send();
-            }
-          }
-          event?.keepEditableState();
-        })
-        .onKeyPreIme((event: KeyEvent): boolean => {
-          if (event.type === KeyType.Down
-            && (event.keyCode === KeyCode.KEYCODE_ENTER
-              || event.keyCode === KeyCode.KEYCODE_NUMPAD_ENTER)) {
-            let hasCtrl: boolean = false;
-            try {
-              hasCtrl = event.getModifierKeyState?.(['Ctrl']) ?? false;
-            } catch (_e) {
-              hasCtrl = false;
-            }
-            if (hasCtrl) {
-              return false;
-            }
-            if (this.isBudgetExceeded()) {
-              this.notifyBudgetBlocked();
-              return true;
-            }
-            if (this.canSend() && this.viewModel !== null) {
-              if (this.narratorModeActive) {
-                this.viewModel!.sendNarratorOnly();
-                this.narratorModeActive = false;
-              } else {
-                this.viewModel!.send();
-              }
-              return true;
-            }
-          }
-          return false;
-        })
-
-      if (!this.isSendButtonOnLeft()) {
-        this.sendStopButton()
-      }
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
+  /**
+   * 输入区发送/提交统一入口(自 inputArea 抽取,行为不变):
+   * 预算超限提示;可发送时按旁白模式分支发送。
+   */
+  private handleInputSend(): void {
+    if (this.isBudgetExceeded()) {
+      this.notifyBudgetBlocked();
+      return;
     }
-    .width('100%')
-    .borderRadius(24)
-    .border({ width: 0.5, color: ThemePalette.surface2Color(this.effectiveTheme) })
-    .backgroundBlurStyle(BlurStyle.Regular, {
-      policy: BlurStyleActivePolicy.ALWAYS_ACTIVE
-    })
-    .padding({ left: 4, right: 4, top: 4, bottom: 4 })
+    if (this.canSend() && this.viewModel !== null) {
+      if (this.narratorModeActive) {
+        this.viewModel!.sendNarratorOnly();
+        this.narratorModeActive = false;
+      } else {
+        this.viewModel!.send();
+      }
+    }
   }
 
-  @Builder
-  sendStopButton() {
-    if (this.viewModel !== null && this.viewModel!.canStop) {
-      Stack() {
-        SymbolGlyph($r('sys.symbol.xmark'))
-          .fontSize(16)
-          .fontColor([$r('app.color.app_on_accent')])
+  /**
+   * 输入框 Enter 预处理(自 inputArea 抽取,行为不变):
+   * Ctrl+Enter 放行(换行);否则预算校验/发送,消费事件返回 true。
+   */
+  private handleInputKeyPreIme(event: KeyEvent): boolean {
+    if (event.type === KeyType.Down
+      && (event.keyCode === KeyCode.KEYCODE_ENTER
+        || event.keyCode === KeyCode.KEYCODE_NUMPAD_ENTER)) {
+      let hasCtrl: boolean = false;
+      try {
+        hasCtrl = event.getModifierKeyState?.(['Ctrl']) ?? false;
+      } catch (_e) {
+        hasCtrl = false;
       }
-      .backgroundColor($r('app.color.app_danger'))
-      .borderRadius(20)
-      .height(40)
-      .width(40)
-      .margin({ left: 2, right: 2 })
-      .onClick(() => {
-        this.viewModel!.stop();
-      })
-    } else if (this.narratorModeActive) {
-      Row() {
-        Stack() {
-          Text('📝')
-            .fontSize(14)
-        }
-        .backgroundColor(this.canSend()
-          ? ThemePalette.surface2Color(this.effectiveTheme)
-          : Color.Transparent)
-        .borderRadius(20)
-        .height(36)
-        .width(36)
-        .margin({ left: 1, right: 1 })
-        .onClick(() => {
-          if (this.canSend() && this.viewModel !== null) {
-            this.viewModel!.sendNarratorOnly();
-            this.narratorModeActive = false;
-          }
-        })
-        Stack() {
-          Text('🎬')
-            .fontSize(14)
-        }
-        .backgroundColor(this.canSend()
-          ? ThemePalette.accentColor(this.effectiveTheme)
-          : Color.Transparent)
-        .borderRadius(20)
-        .height(36)
-        .width(36)
-        .margin({ left: 1, right: 1 })
-        .onClick(() => {
-          if (this.isBudgetExceeded()) {
-            this.notifyBudgetBlocked();
-            return;
-          }
-          if (this.canSend() && this.viewModel !== null) {
-            this.viewModel!.sendNarrator();
-            this.narratorModeActive = false;
-          }
-        })
+      if (hasCtrl) {
+        return false;
       }
-    } else {
-      Stack() {
-        SymbolGlyph($r('sys.symbol.arrow_up'))
-          .fontSize(16)
-          .fontColor([
-            this.canSend()
-              ? $r('app.color.app_on_accent')
-              : ThemePalette.textTertiaryColor(this.effectiveTheme)
-          ])
+      if (this.isBudgetExceeded()) {
+        this.notifyBudgetBlocked();
+        return true;
       }
-      .backgroundColor(this.canSend()
-        ? ThemePalette.accentColor(this.effectiveTheme)
-        : Color.Transparent)
-      .borderRadius(20)
-      .height(40)
-      .width(40)
-      .margin({ left: 2, right: 2 })
-      .onClick(() => {
-        if (this.isBudgetExceeded()) {
-          this.notifyBudgetBlocked();
-          return;
+      if (this.canSend() && this.viewModel !== null) {
+        if (this.narratorModeActive) {
+          this.viewModel!.sendNarratorOnly();
+          this.narratorModeActive = false;
+        } else {
+          this.viewModel!.send();
         }
-        if (this.canSend() && this.viewModel !== null) {
-          if (this.narratorModeActive) {
-            this.viewModel!.sendNarratorOnly();
-            this.narratorModeActive = false;
-          } else {
-            this.viewModel!.send();
-          }
-        }
-      })
+        return true;
+      }
     }
+    return false;
   }
 
   // ===== 清空确认弹窗 =====
