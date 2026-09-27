@@ -16,10 +16,14 @@
 
 ## 2. 接手流程（新会话按顺序执行）
 
-1. 读本文件（你在这一步）
+1. 读本文件（你在这一步）—— 尤其 **§3B 给 AI 的工作约束**
 2. 读 `docs/handover/CURRENT.md` —— 当前进度与下一步
-3. `git log --oneline -8` 对照进度；`git status` 确认工作区状态
-4. 跑一次编译（§5）确认环境可用，再动代码
+3. **按任务类型选读**（避免每次全读）：
+   - 改某个功能 → [FEATURE_MAP.md](./docs/handover/FEATURE_MAP.md)（定位，不必检索全仓）
+   - 写新组件 / 工具 / 服务 → [INVENTORY.md](./docs/handover/INVENTORY.md)（先查有没有现成的）
+   - 重构 / 大改动 / 排障 → [PITFALLS.md](./docs/handover/PITFALLS.md)（§3 分层、§4 验证手法）
+4. `git log --oneline -8` 对照进度；`git status` 确认工作区状态
+5. 跑一次编译（§5）确认环境可用，再动代码
 
 ## 3. 架构与分层（硬约束）
 
@@ -38,6 +42,38 @@ components/ 与 models/：无网络、无数据库、无业务副作用
 - ✅ 组件越层已清零（2026-09-27，P3-1②）：`LorebookPanelBook/Data` 迁至 `models/LorebookPanel.ets`，`ChatStatusWorldPanel` 不再引用 `viewmodels/`
 - 组件越层已修复（2026-09-27，P1-5）：`CardFrontendWeb`/`CardFrontendBridge` 依赖 `bridge/CardFrontendBridge.ets` 导出的 `FrontendCardHost` 契约（页面直接传 `host: this.viewModel`）
 - 会话列表面板已删除（2026-09-27，P1-4）：原 `components/ChatSessionListPanel.ets` 为不可达死 UI（`ChatViewModel.openSessionList()` 无调用者），连同 ChatViewModel 的会话列表/分组 API 一并移除；**会话切换统一走首页"对话记录"Tab**（`pages/tabs/ChatSessionRootView.ets` + `components/SessionGroupDialogs`）
+
+## 3B. 给 AI 的工作约束（必守 · 2026-09-27 立）
+
+> 目的：把"靠人反复纠正"变成"环境里写死的规则"。规则**只写能改变行为**的条目；细节见 `docs/handover/`。
+> 分四组：**设计 / 验证 / 诚实 / 文档**。
+
+### 3B.1 设计（"高内聚低耦合"的可执行版）
+
+1. **复用优先**：写任何新组件 / 工具 / 服务 / 模式前，**先查 [INVENTORY.md](./docs/handover/INVENTORY.md)**；若决定新建，提交说明写一句「**为何不能复用现有 X**」。
+2. **不做假想需求**：抽象必须有 **≥2 个真实调用点**；不为"以后可能"加参数层 / 接口层（**高内聚低耦合不是加层的理由**）。
+3. **同一份状态只有一个 owner**；跨层用**显式参数 / 回调**传递，不用全局或隐式共享。
+4. **依赖方向不可逆**（见 §3 红线）；`components/` 与 `models/` 无副作用。
+5. **只在系统边界校验**（用户输入 / 外部 API / DB 读入）；内部调用互相信任，不重复防御。
+6. **改动外科化**：最小 diff，不夹带顺手重构、不做未要求的改进；一次只解决一件事。
+
+### 3B.2 验证（没证据不许说"完成"）
+
+7. 声称"完成"前必须给出**证据**：编译输出片段 / 单测计数 / 机械 diff 结论；**没跑过就写"未验证"**。
+8. 优先把目标做成**可机械验证**的：搬运 → byte 级 diff；对外 API → 声明面 diff；数据产物 → 全量字符串 diff（手法见 [PITFALLS.md](./docs/handover/PITFALLS.md) §4）。
+9. **禁止**在文档 / TODO 里写"真机通过"，除非真机真的跑过。
+10. 一次一操作 → 编译 → 提交；失败立即回滚，**不带病继续**。
+
+### 3B.3 诚实（反谄媚）
+
+11. 用户前提有误，**先说错在哪再干活**；不为礼貌而附和。
+12. 不确定就标注"**未确认**"；**不得编造**文件路径 / 行号 / 结论 / 验证结果。
+13. 文档与代码冲突时**以代码为准**，并当场修正文档。
+
+### 3B.4 文档纪律
+
+14. `AGENTS.md` 只放「**能改变 agent 行为**的规则 + 指针」，细节拆到 `docs/handover/`。不具体 = 无效：`写干净的代码` ✗ / `禁止 console.log，用 utils/Logger` ✓。
+15. 具体的文档职责划分、更新时机、"同一事实只允许出现一次"、"不建 changelog" 等，**以 §10 为准**（此处不重复）。
 
 ## 4. 编码规则（ArkTS 红线）
 
@@ -115,56 +151,49 @@ $env:DEVECO_SDK_HOME = "D:\DevEco_studio\DevEco Studio\sdk"
 - **横竖屏**：尊重系统旋转锁（`module.json5` 保持 `auto_rotation_restricted`）；旋转/尺寸变化后重算悬浮控件钳制位置（600ms 防抖）
 - **交互一致性**：Toast / Loading / 空态 / 确认弹窗使用统一封装，禁止各页面自造
 
-## 9. 功能 → 文件定位（高频速查）
+## 9. 功能 → 文件定位
 
-> 完整定位表（历史，可能过期，仅作起点）：`docs/handover/archive/agent/04_FEATURE_LOCATOR.md`
-
-| 想改… | 第一定位 |
-|---|---|
-| 首页 4 Tab | `pages/Index.ets` → `pages/tabs/*RootView.ets` |
-| 会话列表（切换/重命名/分组/拖拽/归档） | `pages/tabs/ChatSessionRootView.ets` + `components/SessionGroupDialogs.ets` |
-| 聊天主界面 | `pages/ChatPage.ets` → `viewmodels/ChatViewModel.ets` |
-| AI 对话 / 流式 / 分支 / Swipe | `services/ChatService.ets` → `services/ModelService.ets` → `network/providers/` |
-| Prompt 组装 / 宏替换 | `services/PromptBuilder.ets`、`services/MacroReplacer.ets` |
-| 世界书 | `services/LorebookService.ets` → `repositories/LorebookRepository.ets` |
-| 多层记忆 | `services/MemoryService.ets` |
-| 角色卡解析 | `parser/CharacterCardJsonParser.ets` / `PngCharacterCardParser.ets` |
-| 数据库表 / 迁移 | `database/Database{Constants,Schema,Migration}.ets` + `database/schema/Schema{Core,Lorebook,Presets,Swipe,Branch,Memory,World}.ets`（DDL 常量按域，P3-3②） |
-| 云同步 | `services/sync/` → `network/webdav/` |
-| TTS | `services/TtsService.ets`（离线）/ `EdgeTtsService.ets`（在线） |
-| 主题 | `services/ThemeManager.ets` → `theme/ThemePalette.ets` |
-| 日志 | `utils/Logger.ets` |
+> **权威定位表在 [FEATURE_MAP.md](./docs/handover/FEATURE_MAP.md)** —— 功能 → 文件 → 约束，含分层下钻路径、数据模型位置、以及"新增 X 该仿谁"。
+> **改单个功能时先查它，不要检索全仓。** 本文件不再重复维护定位表（同一事实只允许出现一次，见 §10）。
+> 历史版本（已过期，勿作依据）：`docs/handover/archive/agent/04_FEATURE_LOCATOR.md`。
 
 ## 10. 文档体系与维护纪律
 
 ```
-AGENTS.md                            ← 本文件（总指挥，唯一入口）
+AGENTS.md                            ← 本文件（总指挥 + 给 AI 的约束，唯一入口）
 docs/handover/
-├── README.md                        # 交接文档导航
-├── CURRENT.md                       # 当前状态与下一步（**每次会话更新**）
-├── 2026-09-27-audit-and-roadmap.md  # 全项目审计报告 + 重构路线图
+├── README.md                        # 交接文档导航（含各文档职责与更新时机）
+├── CURRENT.md                       # ① 当前状态与下一步 + 里程碑日志(§5) + 冒烟清单(§4b)
+├── FEATURE_MAP.md                   # ② 功能 → 文件 → 约束（权威定位表）
+├── INVENTORY.md                     # ③ 可复用资产清单（写新代码前必查）
+├── PITFALLS.md                      # ④ 踩坑与硬约束累积（编号一条一行）
+├── 2026-09-27-audit-and-roadmap.md  # 全项目审计报告 + 重构路线图（P1~P4）
 └── archive/                         # 过期文档归档（勿作现状依据）
 ```
 
+**每份文档只有一个职责**（见上注释）；**同一事实只允许出现一次**——定位→FEATURE_MAP；资产→INVENTORY；坑→PITFALLS；状态→CURRENT。
+
 **纪律（必须遵守）**：
 
-1. 每解决一个问题 / 踩一个坑 / 做一次决策，**当场**写进文档（不许"以后补"）
+1. 每解决一个问题 / 踩一个坑 / 做一次决策，**当场**写进文档（不许"以后补"）；新坑入 `PITFALLS.md`，编号只增不复用
 2. git 提交跟随里程碑：每完成一个可验证的操作就提交（一次一操作一提交）
 3. 新增功能方法论：定契约（数据结构 / spec）→ 实现 → 编译 + 真机验证 → 收尾三步
 4. 收尾三步：更新 `CURRENT.md` → 清理临时产物 → git 提交
 5. 接手先读文档，禁止凭直觉直接改代码
 6. 发现文档过时：**以代码为准**，当场改文档
+7. **不建 changelog**：变更历史以 git 为准（`git log --grep="P3-2"`）；里程碑记 `CURRENT.md §5`
+8. 代码改动若影响 定位表 / 资产清单 / 踩坑，**同一次提交**内更新对应文档
 
 ## 11. 当前状态与下一步
 
-- 基线：`refactor-baseline` tag（2026-09-27 建立）
-- 已完成：全项目只读审计（286 文件 / 112,801 行）、交接文档体系重建、`tools/` 与开发截图清理
-- **P1 批次全部完成**：P1-1 死代码清理 ✅ · P1-2 ChatService 重复逻辑消除 ✅ · P1-3 ChatPage 组件抽取（5 个）✅ · P1-4 会话列表去重 ✅（共享折叠纯函数 + 共享分组弹窗 + **删除不可达的会话列表面板**，≈-1069 行）· P1-5 组件越层修复 ✅ · P1-6 不可变性 ✅
-- **P2 路线 + 扩展完成（ChatService 瘦身，6,735 → 2,413 行，-4,322，-64%）**：P2-1 ✅（`ChatTextContract` / `ChatRequestPlan` / `ChatRequestBuilder` 615 行）；P2-2 ✅（`models/ChatServiceContract` + `ChatOneShotGenerator` 513 行）；P2-3 ✅（`ChatStatusService` 597 行 + 5 状态字段）；P2-4 ✅（`models/ChatGenerationContext` + `ChatSwipeController` 327 行）；P2-5 ✅（`ConversationBranchService` 查询/判定 252 行）；**P2-6 ✅**（`ChatMessageService` 113 行）；**P2-7 ✅**（`ChatContextMaintenanceService` 291 行）；**P2-8 ✅**（branch 切换/重载 103 行 + 生成族 676 行）；**P2-9 ✅**（`ChatSessionService` 会话生命周期 606 行，dispose 有意留）；**P2-10 ✅**（`ChatMessageSender` 消息发起 231 行，stopGeneration 有意留）；**P2-11 ✅**（`ChatUserIdentityService` 用户称呼与 Persona 124 行）；**P2-12 ✅**（Preset 快照迁入 `ChatRequestBuilder` 77 行）；**P2-13 ✅**（消息记忆标记迁入 `ChatMessageService` 31 行）；**P2-14 ✅**（`reloadCurrentSession` 迁入 `ChatSessionService` 15 行）
-- **P3 批次完成（2026-09-27，中风险拆分 + 治理口径）**：**P3-1 ChatViewModel 1,698 → 1,479 行（-219）**：`ChatErrorMapper`（`a1c0478`）、`LorebookPanelVM` + `models/LorebookPanel`（`38dc6a3`，顺带消除组件层对 viewmodels 的类型引用）；③ 会话分组桥核实无重复（P1-4 已删）。**P3-2 MemoryService 1,953 → 1,451 行（-502，-25.7%）**：`MemoryPromptBuilder`（`7ebc2e1`）、`WorldMemoryStore`（`bfb1114`）、`MemoryTriggerPolicy` + 删 3 个 0 调用公开方法（`bf18dbe`）；`ChapterTriggerConfig`/`DEFAULT_CHAPTER_TRIGGER` 下沉 `models/ChatMemory`。**P3-3 DatabaseSchema 2,879 → 1,443 行（-50%）**：① V38→39/39→40 只读核查（**迁移完整**；`getSchemaStatements` 把 39/40/41 也映射到 V42 快照属潜伏不一致 → **已按"最小修正"改为 39/40/41 → `V41_SCHEMA_STATEMENTS`**，仅这三版输出变化、迁移未动）、② DDL 常量按域拆 7 文件（`2ad376d`）、③ `getSchemaStatements` if 链 → `Map` Registry（`71dd42a`）；**逐版 DDL 逐字节 DIFF=0**。**P3-4**：pages→services 分级（T1 白名单 / T2 待治理 / T3 冻结）与 services→DbHelper 三选项对比（推荐 C 止血 + A 入 P4），**只出方案未落地**（见 `CURRENT.md`）
-- 三条新硬教训（P3 沉淀）：① **ArkTS 禁结构类型**（`arkts-no-structural-typing`）——接口参数必须精确类型，跨模块复用须把类型下沉 `models/`；② 跨模块引用的常量必须 `export`（ArkTS 报 "declares locally but not exported"）；③ 机械校验口径：VM/服务类成员 API 面用「非 private 声明行」diff，DatabaseSchema 用「逐版 DDL 全量字符串」diff（本轮以 Node 夹具在仓外实现，可复用于后续）
-- ChatService 现状：**现实下限 ≈2,350~2,400 行**（构成：构造装配 ≈450 + 公开薄包装 ≈200 + 流式核心簇 ≈900 + 核心内联辅助）；剩余仅 `updateRequestPlan` + 估算查询 ≈77 行，因预算缓存被核心读写、搬出需回环回调，ROI 为负已主动放弃；**千行级须突破"流式核心不动"（需用户显式授权）**；**P3 已按此方向完成**（ChatViewModel / MemoryService / DatabaseSchema，见上）
-- P2 装配范式（后续接缝直接复用）：服务依赖构造期注入；跨类状态与宿主私有能力经**函数属性**回调（`ChatRequestHost` 式）读写——读走 getter、写走 setter（`ChatOneShotHost` / `ChatStatusHost` / `ChatSwipeHost` 含 `doStream` 委托），类内同名 getter/setter/方法转发 → 搬运代码零改写、读写语义不变；自带状态的簇可将状态随类迁出（见 `ChatStatusService`）。参考实现：`entry/src/main/ets/services/` 下 `ChatRequestBuilder.ets` / `ChatOneShotGenerator.ets` / `ChatStatusService.ets` / `ChatSwipeController.ets` / `ConversationBranchService.ets`
-- **剩余高风险区**（改前必读）：① `ChatService` 流式核心簇（≈900 行，`doStream`/`finalizeAssistantTurn`/句柄定时器/delta 持久化）——**不授权不动**；② `ChatPage`（4,884 行、80+ @State，含 T3 直连偏差）；③ `ChatSessionRootView`（2,786 行，拖拽重排/归档导入导出，无测试覆盖）；④ `ChatService` 构造装配（≈450 行宿主装配）；⑤ 数据库迁移链（只增不改，任何 DDL 差异按 bug 处理）
-- **下一步候选（P4 观察项，审计 §6）**：① 治理落地（P3-4 的 C 即刻生效 + A `TransactionCoordinator`）；② T2 页面逐个补/并 VM（每页独立 commit）；③ `State V1 → V2` 迁移（面大，最后评估）；④ `router` → `Navigation`（新页面优先）；⑤ `ChatPage` `@ObjectLink` 赋值告警；⑥ `EdgeTtsTestPage` 是否撤出正式路由；⑦ 自动化测试基建（当前以编译 + 真机冒烟为主）
-- 验证状态：P2/P3 全部改动均编译通过；**搬运块 byte 级与原文一致**（P2 全部；P3 唯一差异为宿主间接行/可见性/日志 tag，已逐条记录）；**API 面机械对比**：ChatService 89 项与基线一致、ChatViewModel 131 项零差异（两接缝）、MemoryService 类成员 49 项（③后 46 项，含 3 项有意删除）、DatabaseSchema 导出 99 项零差异；**DatabaseSchema 逐版 DDL**：②/③ 两接缝 v1..v47 + 建表 37 + 索引 119 **逐字节 DIFF=0**；随后①的最小修正**仅 v39/40/41 变化**（171 → 168 条，属预期修复），v1..v38 与 v42..v47 仍不变；**本地单测 `hvigorw test`**（`entry/src/test`，16 类 / 96 用例）首跑与 P3 三轮复跑均全通过；真机冒烟**统一在 P3 末期一次性进行**（会话/Swipe/分支/流式/数据库迁移只能真机验证）——**统一清单与回滚锚点见 `docs/handover/CURRENT.md` §4b**（逐接缝明细见 §4）；路线图见 `docs/handover/2026-09-27-audit-and-roadmap.md` §6
+> **权威状态以 [CURRENT.md](./docs/handover/CURRENT.md) 为准**（当前进度、待办、里程碑日志 §5、统一冒烟清单 §4b）。此处只保留"接手即需知道"的骨架。
+
+- **基线**：tag `refactor-baseline`（`8dbd9df`，2026-09-27）；此后 P1 / P2 / P3 全部完成并逐接缝提交（**未 push**）
+- **已完成批次**（逐接缝清单、commit 锚点、冒烟项见 CURRENT.md §2 / §2b / §2c / §5）：
+  1. **P1**：死代码清理 · ChatService 重复逻辑消除 · ChatPage 组件抽取 5 个 · 会话列表去重（删不可达死 UI ≈ -1069 行）· 组件越层修复 · 不可变性
+  2. **P2**：ChatService 瘦身 **6,735 → 2,413 行（-64%）**（14 个接缝，搬运块全部 byte 级一致，公开 API 面 89 项零差异）
+  3. **P3**：ChatViewModel **1,698 → 1,479** / MemoryService **1,953 → 1,451** / DatabaseSchema **2,879 → 1,443**（DatabaseSchema 逐版 DDL 逐字节一致）；P3-4 治理口径已出方案（未落地）
+- **P2 装配范式**（抽离逻辑的默认做法，后续接缝直接复用）：服务依赖**构造期注入**（字段同名）；跨类可变状态与宿主私有能力经 **`XxxHost` 函数属性**回调（读 getter / 写 setter，含 `doStream` 委托）；类内**同名 getter/setter/方法转发** ⇒ 搬运代码**零改写**。参考实现：`services/ChatRequestBuilder.ets` / `ChatOneShotGenerator.ets` / `ChatStatusService.ets` / `ChatSwipeController.ets` / `ConversationBranchService.ets` / `viewmodels/LorebookPanelVM.ets`
+- **剩余高风险区**（改前必读）：① `ChatService` 流式核心簇（≈900 行：`doStream` / `finalizeAssistantTurn` / 句柄与定时器 / delta 持久化）——**不授权勿动**；② `ChatPage`（4,884 行、80+ @State）；③ `ChatSessionRootView`（2,786 行，拖拽重排 / 归档导入导出，无测试覆盖）；④ `ChatService` 构造装配（≈450 行宿主装配）；⑤ 数据库迁移链（只增不改，任何 DDL 差异按 bug 处理）
+- **下一步候选**：① 治理落地（P3-4 口径 **C** 即刻生效 + **A** `TransactionCoordinator`）；② T2 页面逐个补 / 并 VM（每页独立 commit）；③ P4 观察项（`State V1→V2` / `router→Navigation` / `@ObjectLink` 告警 / `EdgeTtsTestPage` 路由 / 自动化测试基建）
+- **验证状态**：本轮编译 BUILD SUCCESSFUL + 本地单测 `hvigorw test` **96/96**（16 类）；机械校验手法与结论见 CURRENT.md §4 与 [PITFALLS.md](./docs/handover/PITFALLS.md) §4；**真机冒烟统一在 P3 末期一次性进行**（清单 CURRENT.md §4b）
