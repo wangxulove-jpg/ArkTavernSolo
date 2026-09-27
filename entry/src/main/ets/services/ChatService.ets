@@ -584,7 +584,6 @@ export class ChatService {
         this.currentAssistantId = assistantId;
       },
       getCurrentChatId: (): string | undefined => this.currentChatId,
-      findMessageIndexById: (messageId: string): number => this.findMessageIndexById(messageId),
       invalidateMemoryFromMessagePosition: (messageId: string): void => {
         this.invalidateMemoryFromMessagePosition(messageId);
       }
@@ -869,36 +868,9 @@ export class ChatService {
     return this.messageSender.narratorMessageOnly(content, callbacks);
   }
 
-  /**
-   * 标记消息是否计入记忆摘要。
-   */
+  /** 标记消息是否计入记忆摘要(委托 ChatMessageService)。 */
   async markMessageIncludeInMemory(messageId: string, include: boolean): Promise<void> {
-    if (this.disposed) {
-      return;
-    }
-    const idx: number = this.findMessageIndexById(messageId);
-    if (idx < 0) {
-      return;
-    }
-    const msg: ChatMessage = this.messages[idx];
-    const updated: ChatMessage = mergeChatMessage(msg, { includeInMemory: include });
-    this.messages[idx] = updated;
-    if (this.persistenceService !== null && this.currentChatId !== undefined) {
-      try {
-        await this.persistenceService.updateMessage(messageId, updated);
-      } catch (e) {
-        Logger.error(LOG_TAG, 'markMessageIncludeInMemory failed: ' + String(e));
-      }
-    }
-  }
-
-  private findMessageIndexById(messageId: string): number {
-    for (let i = 0; i < this.messages.length; i++) {
-      if (this.messages[i].id === messageId) {
-        return i;
-      }
-    }
-    return -1;
+    return this.messageService.markMessageIncludeInMemory(messageId, include);
   }
 
   /** 重新生成最后一条 Assistant 回复(创建 Conversation Branch 并流式生成;委托 ConversationBranchService)。 */

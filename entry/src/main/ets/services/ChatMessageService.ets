@@ -50,8 +50,6 @@ export interface ChatMessageHost {
   setCurrentAssistantId: (assistantId: string | null) => void;
   /** 当前会话 id(未初始化时 undefined) */
   getCurrentChatId: () => string | undefined;
-  /** 按 id 查找消息下标(宿主私有辅助;找不到返回 -1) */
-  findMessageIndexById: (messageId: string) => number;
   /** 失效覆盖指定消息位置的记忆(章节/核心等) */
   invalidateMemoryFromMessagePosition: (messageId: string) => void;
 }
@@ -102,7 +100,12 @@ export class ChatMessageService {
   }
 
   private findMessageIndexById(messageId: string): number {
-    return this.host.findMessageIndexById(messageId);
+    for (let i = 0; i < this.messages.length; i++) {
+      if (this.messages[i].id === messageId) {
+        return i;
+      }
+    }
+    return -1;
   }
 
   private invalidateMemoryFromMessagePosition(messageId: string): void {
@@ -224,4 +227,28 @@ export class ChatMessageService {
     // 编辑内容会改变剧情,失效覆盖该位置的记忆(章节/核心等)
     this.invalidateMemoryFromMessagePosition(messageId);
   }
+
+  /**
+   * 标记消息是否计入记忆摘要。
+   */
+  async markMessageIncludeInMemory(messageId: string, include: boolean): Promise<void> {
+    if (this.disposed) {
+      return;
+    }
+    const idx: number = this.findMessageIndexById(messageId);
+    if (idx < 0) {
+      return;
+    }
+    const msg: ChatMessage = this.messages[idx];
+    const updated: ChatMessage = mergeChatMessage(msg, { includeInMemory: include });
+    this.messages[idx] = updated;
+    if (this.persistenceService !== null && this.currentChatId !== undefined) {
+      try {
+        await this.persistenceService.updateMessage(messageId, updated);
+      } catch (e) {
+        Logger.error(LOG_TAG, 'markMessageIncludeInMemory failed: ' + String(e));
+      }
+    }
+  }
+
 }
