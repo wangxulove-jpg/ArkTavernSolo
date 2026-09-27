@@ -1213,140 +1213,67 @@ export const V47_SCHEMA_STATEMENTS: string[] = [
   ...V46_TO_V47_DDL_STATEMENTS
 ];
 
+/**
+ * 版本 → 完整建库语句注册表(P3-3③:逐版 if 链改写为 Registry,逐版输出 100% 一致)。
+ * 每个条目代表"从空库建到该版本"的完整语句序列;取值时统一返回浅拷贝。
+ * 注:v39/v40/v41 与 v42 归并的语义保持不变(见 P3-3① 只读核查结论,本批次不修改)。
+ */
+const SCHEMA_BY_VERSION: Map<number, string[]> = new Map<number, string[]>();
+SCHEMA_BY_VERSION.set(1, VERSION_1_STATEMENTS);
+SCHEMA_BY_VERSION.set(2, [...VERSION_1_STATEMENTS, ...V1_TO_V2_STATEMENTS]);
+SCHEMA_BY_VERSION.set(3, V3_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(4, V4_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(5, V5_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(6, V6_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(7, V7_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(8, V8_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(9, V9_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(10, V10_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(11, V11_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(12, V12_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(13, V13_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(14, V14_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(15, V15_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(16, V16_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(17, V17_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(18, V18_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(19, V19_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(20, V20_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(21, V21_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(22, V22_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(23, V23_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(24, V24_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(25, V25_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(26, V26_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(27, V27_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(28, V28_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(29, V29_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(30, V30_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(31, V31_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(32, V32_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(33, V33_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(34, V34_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(35, V35_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(36, V36_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(37, V37_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(38, V38_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(39, V42_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(40, V42_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(41, V42_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(42, V42_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(43, V43_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(44, V44_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(45, V45_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(46, V46_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(47, V47_SCHEMA_STATEMENTS);
+
+/** 返回指定版本的完整建库语句(未知版本返回空数组)。 */
 export function getSchemaStatements(version: number): string[] {
-  if (version === 1) {
-    return [...VERSION_1_STATEMENTS];
+  const statements: string[] | undefined = SCHEMA_BY_VERSION.get(version);
+  if (statements === undefined) {
+    return [];
   }
-  if (version === 2) {
-    return [...VERSION_1_STATEMENTS, ...V1_TO_V2_STATEMENTS];
-  }
-  if (version === 3) {
-    return [...V3_SCHEMA_STATEMENTS];
-  }
-  if (version === 4) {
-    return [...V4_SCHEMA_STATEMENTS];
-  }
-  if (version === 5) {
-    return [...V5_SCHEMA_STATEMENTS];
-  }
-  if (version === 6) {
-    return [...V6_SCHEMA_STATEMENTS];
-  }
-  if (version === 7) {
-    return [...V7_SCHEMA_STATEMENTS];
-  }
-  if (version === 8) {
-    return [...V8_SCHEMA_STATEMENTS];
-  }
-  if (version === 9) {
-    return [...V9_SCHEMA_STATEMENTS];
-  }
-  if (version === 10) {
-    return [...V10_SCHEMA_STATEMENTS];
-  }
-  if (version === 11) {
-    return [...V11_SCHEMA_STATEMENTS];
-  }
-  if (version === 12) {
-    return [...V12_SCHEMA_STATEMENTS];
-  }
-  if (version === 13) {
-    return [...V13_SCHEMA_STATEMENTS];
-  }
-  if (version === 14) {
-    return [...V14_SCHEMA_STATEMENTS];
-  }
-  if (version === 15) {
-    return [...V15_SCHEMA_STATEMENTS];
-  }
-  if (version === 16) {
-    return [...V16_SCHEMA_STATEMENTS];
-  }
-  if (version === 17) {
-    return [...V17_SCHEMA_STATEMENTS];
-  }
-  if (version === 18) {
-    return [...V18_SCHEMA_STATEMENTS];
-  }
-  if (version === 19) {
-    return [...V19_SCHEMA_STATEMENTS];
-  }
-  if (version === 20) {
-    return [...V20_SCHEMA_STATEMENTS];
-  }
-  if (version === 21) {
-    return [...V21_SCHEMA_STATEMENTS];
-  }
-  if (version === 22) {
-    return [...V22_SCHEMA_STATEMENTS];
-  }
-  if (version === 23) {
-    return [...V23_SCHEMA_STATEMENTS];
-  }
-  if (version === 24) {
-    return [...V24_SCHEMA_STATEMENTS];
-  }
-  if (version === 25) {
-    return [...V25_SCHEMA_STATEMENTS];
-  }
-  if (version === 26) {
-    return [...V26_SCHEMA_STATEMENTS];
-  }
-  if (version === 27) {
-    return [...V27_SCHEMA_STATEMENTS];
-  }
-  if (version === 28) {
-    return [...V28_SCHEMA_STATEMENTS];
-  }
-  if (version === 29) {
-    return [...V29_SCHEMA_STATEMENTS];
-  }
-  if (version === 30) {
-    return [...V30_SCHEMA_STATEMENTS];
-  }
-  if (version === 31) {
-    return [...V31_SCHEMA_STATEMENTS];
-  }
-  if (version === 32) {
-    return [...V32_SCHEMA_STATEMENTS];
-  }
-  if (version === 33) {
-    return [...V33_SCHEMA_STATEMENTS];
-  }
-  if (version === 34) {
-    return [...V34_SCHEMA_STATEMENTS];
-  }
-  if (version === 35) {
-    return [...V35_SCHEMA_STATEMENTS];
-  }
-  if (version === 36) {
-    return [...V36_SCHEMA_STATEMENTS];
-  }
-  if (version === 37) {
-    return [...V37_SCHEMA_STATEMENTS];
-  }
-  if (version === 38) {
-    return [...V38_SCHEMA_STATEMENTS];
-  }
-  if (version === 39 || version === 40 || version === 41 || version === 42) {
-    return [...V42_SCHEMA_STATEMENTS];
-  }
-  if (version === 43) {
-    return [...V43_SCHEMA_STATEMENTS];
-  }
-  if (version === 44) {
-    return [...V44_SCHEMA_STATEMENTS];
-  }
-  if (version === 45) {
-    return [...V45_SCHEMA_STATEMENTS];
-  }
-  if (version === 46) {
-    return [...V46_SCHEMA_STATEMENTS];
-  }
-  if (version === 47) {
-    return [...V47_SCHEMA_STATEMENTS];
-  }
-  return [];
+  return [...statements];
 }
 
 export function getCreateTableStatements(): string[] {

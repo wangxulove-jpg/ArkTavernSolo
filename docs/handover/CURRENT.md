@@ -144,7 +144,10 @@
   - 分类规则：`CREATE_CHAT_MEMORIES_*`/`INDEX_CHATS_WORLD_ID`→Memory；characters/chats/messages 及 ALTER→Core；lorebook/pins/sticky→Lorebook；prompts/personas→Presets；swipe→Swipe；branch→Branch；`CREATE_/INDEX_WORLD*`+`GROUP*`+`ALTER_WORLD*`→World；**分类后无 UNCLASSIFIED**；域间**零交叉依赖**（无循环 import 风险）
   - 校验：Node 验证夹具（临时，仓外）解析 `getSchemaStatements(1..47)` + `getCreateTableStatements()` + `getCreateIndexStatements()` 全量字符串，**改造前后逐字节 DIFF = 0**（v1=7 / v38=168 / v42=171 / v47=176 / 表 37 / 索引 119）；`DatabaseMigration.ets` 仅从 DatabaseSchema 取 V* 数组（导出未动）→ 无破坏
   - 编译 BUILD SUCCESSFUL；单测 **96/96**
-- [ ] **③ `getSchemaStatements` 逐版 if 链 → Registry（逐版输出 100% 一致）**
+- [x] **③ `getSchemaStatements` 逐版 if 链 → Registry** ✅：44 段 if 链改写为 `SCHEMA_BY_VERSION: Map<number, string[]>`（47 条 `set`，1..47 全覆盖；**39/40/41/42 → V42 的归并语义原样保留**，见 ① 结论），`getSchemaStatements` 变 4 行查表 + 浅拷贝（未知版本仍返回 `[]`）
+  - 校验：`getSchemaStatements(1..47)` + 建表/索引全量字符串 **逐字节 DIFF = 0**；**导出声明面 99 → 99 零差异**；编译 BUILD SUCCESSFUL；单测 **96/96**；**DatabaseSchema 1,516 → 1,443 行**
+- **P3-3 收官**：DatabaseSchema **2,879 → 1,443 行（-1,436，-49.9%）**；新增 `database/schema/` 7 个域文件（1,744 行）；①②③ 各自独立 commit；三个接缝均以「逐版 DDL 逐字节一致」为准入
+  - **待拍板（未改）**：① 的 39/40/41 版本映射潜伏不一致（生产不可达）
 
 ## 3. 环境事实（防重复踩坑）
 
