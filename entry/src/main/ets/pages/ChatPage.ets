@@ -382,11 +382,12 @@ struct ChatPage {
    * 新消息入场动画门控。
    *
    * 进入页面时消息是一次性批量插入的,若一开始就开着过渡,整个列表会集体闪入;
-   * 因此首帧先关,等首次加载/自动滚底稳定后再打开,之后只有"新插入的那条"播放入场。
+   * 因此首批(加载)不animate,从第二批起(必然是用户动作触发的新消息)才打开,
+   * 之后只有"新插入的那条"播放入场。
    */
   @State messageEntranceEnabled: boolean = false;
-  /** 入场动画门控定时器(aboutToDisappear 清理) */
-  private messageEntranceTimer: number = -1;
+  /** 首批(加载)批次是否已消费(纯标记,无需触发重渲染) */
+  private messageEntranceInitialBatchDone: boolean = false;
 
   aboutToAppear(): void {
     const modelService = AppServices.getModelService();
@@ -402,6 +403,14 @@ struct ChatPage {
       this.messages = msgs;
       this.syncRenderStates(msgs);
       this.maybeLoadChatBackground();
+      // 入场动画门控:首批(加载)不animate,之后的批次才开(见字段注释)
+      if (msgs.length > 0) {
+        if (!this.messageEntranceInitialBatchDone) {
+          this.messageEntranceInitialBatchDone = true;
+        } else if (!this.messageEntranceEnabled) {
+          this.messageEntranceEnabled = true;
+        }
+      }
       // 流式 delta 期间不刷新预算(避免高频 token 估算拖慢 UI)。
       // 只在非流式状态刷新:用户消息加入 / 回复完成 / 编辑删除 / Swipe / 分支切换 / 页面进入。
       // 其他触发点(onPageShow / onBudgetConfigVersionChanged / onBranchChangeSeqChanged)保持不变。
@@ -860,20 +869,9 @@ struct ChatPage {
       // mediaquery 不可用时默认浅色模式
       this.isDarkMode = false;
     }
-
-    // 首次加载(会话恢复 + 自动滚底)稳定后再打开新消息入场动画,
-    // 否则进入页面时批量插入的历史消息会整列表集体闪入。
-    this.messageEntranceTimer = setTimeout((): void => {
-      this.messageEntranceTimer = -1;
-      this.messageEntranceEnabled = true;
-    }, 400);
   }
 
   aboutToDisappear(): void {
-    if (this.messageEntranceTimer !== -1) {
-      clearTimeout(this.messageEntranceTimer);
-      this.messageEntranceTimer = -1;
-    }
     this.unregisterKeyboardListener();
     this.unregisterGripListener();
     // 注销深色模式监听器
