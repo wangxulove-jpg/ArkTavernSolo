@@ -122,6 +122,7 @@ import {
   COLUMN_STICKY_CHAT_ID,
   COLUMN_STICKY_LOREBOOK_ID,
   COLUMN_STICKY_ENTRY_IDS_JSON,
+  COLUMN_STICKY_ANCHORS_JSON,
   TABLE_CHAT_MEMORIES,
   COLUMN_MEMORY_ID,
   COLUMN_MEMORY_CHAT_ID,
@@ -2553,6 +2554,28 @@ export const V46_SCHEMA_STATEMENTS: string[] = [
   CREATE_CHAT_LOREBOOK_STICKY_TABLE
 ];
 
+/**
+ * v46→v47 迁移 DDL:粘滞命中表补锚点列。
+ * 1. ALTER chat_lorebook_sticky 添加 anchors_json TEXT NOT NULL DEFAULT '{}'
+ *
+ * 安全性:
+ * - 仅 ALTER TABLE ADD COLUMN,不重建表、不删除数据
+ * - 旧行 anchors_json 默认 '{}'(无锚点,回退为插到窗口头部)
+ */
+export const V46_TO_V47_DDL_STATEMENTS: string[] = [
+  `ALTER TABLE ${TABLE_CHAT_LOREBOOK_STICKY} ADD COLUMN ${COLUMN_STICKY_ANCHORS_JSON} TEXT NOT NULL DEFAULT '{}'`
+];
+
+/**
+ * v47 完整 Schema(新安装使用)。
+ * chat_lorebook_sticky 表由 V45_TO_V46 以 v46 字段创建(无 anchors_json),
+ * 此处先 ALTER 补列,保证 fresh schema 与增量迁移结果一致。
+ */
+export const V47_SCHEMA_STATEMENTS: string[] = [
+  ...V46_SCHEMA_STATEMENTS,
+  ...V46_TO_V47_DDL_STATEMENTS
+];
+
 export function getSchemaStatements(version: number): string[] {
   if (version === 1) {
     return [...VERSION_1_STATEMENTS];
@@ -2682,6 +2705,9 @@ export function getSchemaStatements(version: number): string[] {
   }
   if (version === 46) {
     return [...V46_SCHEMA_STATEMENTS];
+  }
+  if (version === 47) {
+    return [...V47_SCHEMA_STATEMENTS];
   }
   return [];
 }

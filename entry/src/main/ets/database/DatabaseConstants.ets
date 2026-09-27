@@ -6,7 +6,7 @@
  */
 
 export const DATABASE_NAME: string = 'arktavern_solo.db';
-export const DATABASE_VERSION: number = 46;
+export const DATABASE_VERSION: number = 47;
 
 export const TABLE_CHARACTERS: string = 'characters';
 export const TABLE_CHATS: string = 'chats';
@@ -230,6 +230,12 @@ export const TABLE_CHAT_LOREBOOK_STICKY: string = 'chat_lorebook_sticky';
 export const COLUMN_STICKY_CHAT_ID: string = 'chat_id';
 export const COLUMN_STICKY_LOREBOOK_ID: string = 'lorebook_id';
 export const COLUMN_STICKY_ENTRY_IDS_JSON: string = 'entry_ids_json';
+/**
+ * v47: 条目 → 锚点消息 ID 的映射(JSON 对象)。
+ * 锚点 = 该条目首次命中时历史末尾的消息 ID;后续构建请求时把条目全文插到锚点之后,
+ * 新对话自然续在其后,使条目进入稳定前缀缓存。
+ */
+export const COLUMN_STICKY_ANCHORS_JSON: string = 'anchors_json';
 
 // ===== messages 表扩展字段(原 v10/v11 引入,已内建到 CREATE 语句) =====
 export const COLUMN_SENDER_TYPE: string = 'sender_type';

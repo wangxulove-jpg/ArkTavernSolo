@@ -50,7 +50,7 @@ function segmentOf(stats: ContextBudgetStats, source: ChatMessageSource): Segmen
 export default function contextOrderLabelTest() {
   describe('ContextOrderLabel', () => {
     it('worldbook_labels_state_loading_method', 0, () => {
-      expect(sourceDisplayLabel(ChatMessageSource.LorebookSticky)).assertContain('粘滞按需');
+      expect(sourceDisplayLabel(ChatMessageSource.LorebookSticky)).assertContain('粘滞');
       expect(sourceDisplayLabel(ChatMessageSource.LorebookPinned)).assertContain('按需锁定');
       expect(sourceDisplayLabel(ChatMessageSource.LorebookDepth)).assertContain('深度注入');
       expect(sourceDisplayLabel(ChatMessageSource.LorebookBefore)).assertContain('常量');
@@ -77,6 +77,29 @@ export default function contextOrderLabelTest() {
       expect(sourceMethodLabel(ChatMessageSource.CharacterPostHistory)).assertEqual('');
     });
 
+    it('status_rule_and_values_have_distinct_labels', 0, () => {
+      expect(sourceDisplayLabel(ChatMessageSource.StatusRule)).assertContain('角色状态输出规则');
+      expect(sourceDisplayLabel(ChatMessageSource.StatusValues)).assertContain('角色状态当前值');
+      // 两段必须能一眼区分稳定段与易变段
+      expect(sourceDisplayLabel(ChatMessageSource.StatusRule) !==
+        sourceDisplayLabel(ChatMessageSource.StatusValues)).assertTrue();
+      expect(sourceMethodLabel(ChatMessageSource.StatusRule).length > 0).assertTrue();
+      expect(sourceMethodLabel(ChatMessageSource.StatusValues).length > 0).assertTrue();
+    });
+
+    it('status_rule_and_values_are_counted_in_stats', 0, () => {
+      const estimator: ContextBudgetEstimator = new ContextBudgetEstimator(new TokenCounter());
+      const messages: ChatMessage[] = [
+        srcMsg(ChatMessageSource.StatusRule, '【角色状态输出规则】...', '角色状态输出规则'),
+        srcMsg(ChatMessageSource.Conversation, '你好'),
+        srcMsg(ChatMessageSource.StatusValues, '【角色状态当前值】- 金币:999', '角色状态当前值')
+      ];
+      const stats: ContextBudgetStats = estimator.estimate(messages, undefined);
+      expect(segmentOf(stats, ChatMessageSource.StatusRule) !== null).assertTrue();
+      expect(segmentOf(stats, ChatMessageSource.StatusValues) !== null).assertTrue();
+      expect(stats.segments.length).assertEqual(3);
+    });
+
     it('sticky_segment_is_counted_in_stats', 0, () => {
       const estimator: ContextBudgetEstimator = new ContextBudgetEstimator(new TokenCounter());
       const messages: ChatMessage[] = [
@@ -88,7 +111,7 @@ export default function contextOrderLabelTest() {
       const sticky: SegmentTokenStat | null = segmentOf(stats, ChatMessageSource.LorebookSticky);
       expect(sticky !== null).assertTrue();
       expect(sticky!.tokenCount > 0).assertTrue();
-      expect(sticky!.label).assertContain('粘滞按需');
+      expect(sticky!.label).assertContain('粘滞');
       // 总输入必须覆盖全部三段(修复前粘滞段被漏掉 → 总数偏小)
       expect(stats.totalInputTokens > sticky!.tokenCount).assertTrue();
     });

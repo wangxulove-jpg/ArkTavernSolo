@@ -19,7 +19,8 @@ import { V1_TO_V2_STATEMENTS, V2_TO_V3_STATEMENTS, V3_TO_V4_STATEMENTS, V4_TO_V5
   V40_TO_V41_DDL_STATEMENTS,
   V41_TO_V42_DDL_STATEMENTS,
   V44_TO_V45_DDL_STATEMENTS,
-  V45_TO_V46_DDL_STATEMENTS
+  V45_TO_V46_DDL_STATEMENTS,
+  V46_TO_V47_DDL_STATEMENTS
 } from './DatabaseSchema';
 import {
   TABLE_CHATS,
@@ -1524,6 +1525,25 @@ class V45ToV46Migration implements DatabaseMigration {
   async migrate(store: relationalStore.RdbStore): Promise<void> {
     for (let i = 0; i < V45_TO_V46_DDL_STATEMENTS.length; i++) {
       await store.executeSql(V45_TO_V46_DDL_STATEMENTS[i]);
+    }
+  }
+}
+
+/**
+ * v46→v47 迁移:粘滞命中表补锚点列(anchors_json)。
+ * 仅 ALTER TABLE ADD COLUMN,不重建表、不删除数据。
+ */
+export function createV46ToV47Migration(): DatabaseMigration {
+  return new V46ToV47Migration();
+}
+
+class V46ToV47Migration implements DatabaseMigration {
+  readonly fromVersion: number = 46;
+  readonly toVersion: number = 47;
+
+  async migrate(store: relationalStore.RdbStore): Promise<void> {
+    for (let i = 0; i < V46_TO_V47_DDL_STATEMENTS.length; i++) {
+      await store.executeSql(V46_TO_V47_DDL_STATEMENTS[i]);
     }
   }
 }

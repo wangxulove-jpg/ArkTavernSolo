@@ -112,6 +112,7 @@ export class ContextBudgetEstimator {
       ChatMessageSource.PersonaAfter,
       ChatMessageSource.LorebookAfter,
       ChatMessageSource.CharacterMesExample,
+      ChatMessageSource.StatusRule,
       ChatMessageSource.MemoryCore,
       ChatMessageSource.LorebookPinned,
       ChatMessageSource.MemorySession,
@@ -127,7 +128,9 @@ export class ContextBudgetEstimator {
       ChatMessageSource.LorebookDepth,
       ChatMessageSource.LorebookSticky,
       ChatMessageSource.FrontendInteraction,
-      ChatMessageSource.CharacterPostHistory
+      ChatMessageSource.CharacterPostHistory,
+      ChatMessageSource.StickyReminder,
+      ChatMessageSource.StatusValues
     ];
 
     for (let i = 0; i < orderedSources.length; i++) {
@@ -228,7 +231,9 @@ export function sourceDisplayLabel(src: ChatMessageSource): string {
     case ChatMessageSource.LorebookDepth:
       return '世界书·按需加载(深度注入)';
     case ChatMessageSource.LorebookSticky:
-      return '世界书·粘滞按需(累积命中)';
+      return '世界书·粘滞全文(锚点插入)';
+    case ChatMessageSource.StickyReminder:
+      return '世界书·粘滞生效提醒(尾部)';
     case ChatMessageSource.MemorySummary:
       return '记忆摘要(旧版兼容)';
     case ChatMessageSource.MemoryCore:
@@ -257,6 +262,10 @@ export function sourceDisplayLabel(src: ChatMessageSource): string {
       return '最近聊天历史(可裁剪)';
     case ChatMessageSource.FrontendInteraction:
       return '前端交互记录(卡片界面操作)';
+    case ChatMessageSource.StatusRule:
+      return '角色状态输出规则(常驻)';
+    case ChatMessageSource.StatusValues:
+      return '角色状态当前值(每轮刷新)';
     case ChatMessageSource.CharacterPostHistory:
       return 'Post-History(常驻)';
     default:
@@ -271,8 +280,12 @@ export function sourceDisplayLabel(src: ChatMessageSource): string {
 export function sourceMethodLabel(src: ChatMessageSource): string {
   switch (src) {
     case ChatMessageSource.LorebookSticky:
-      return '加载方式:粘滞按需(StickyOnDemand)——关键词命中后常驻,只增不减,'
-        + '追加在对话之后、PostHistory 之前(尾部 append-only 保缓存)';
+      return '加载方式:粘滞按需(StickyOnDemand)——关键词命中后会话内只增不减;'
+        + 'v47 起全文只插一次且钉在首次命中的锚点消息之后(不再搬动),'
+        + '新对话续在其后,故该块自下一轮起即处于稳定前缀,命中缓存';
+    case ChatMessageSource.StickyReminder:
+      return '加载方式:粘滞生效提醒(尾部易变区)——只列"已加载且本轮仍命中"的条目名,'
+        + '不含内容;把注意力拉回已钉在历史里的粘滞设定(全文位置不动,避免作废缓存)';
     case ChatMessageSource.LorebookPinned:
       return '加载方式:按需锁定(OnDemandPinned)——本会话首次钉选后固定,'
         + '注入在核心记忆之后、会话记忆之前(随手动记忆总结刷新)';
@@ -282,6 +295,12 @@ export function sourceMethodLabel(src: ChatMessageSource): string {
     case ChatMessageSource.FrontendInteraction:
       return '加载方式:角色卡前端界面交互(契约 v3 appendInteraction)——页面轻交互攒下,'
         + '不触发模型请求,下一轮随本段注入(最近 30 条/2000 字符,尾部滚动窗口)';
+    case ChatMessageSource.StatusRule:
+      return '加载方式:角色状态输出规则(稳定段)——只含格式要求与字段清单(字段名/说明/locked),'
+        + '不含当前值,故内容不随对话变化;注入在对话示例之后、记忆之前,属稳定前缀,命中缓存';
+    case ChatMessageSource.StatusValues:
+      return '加载方式:角色状态当前值(易变段)——每轮都可能变(模型更新 / 卡片界面 setState / 一键重新生成),'
+        + '固定追加为请求最后一条,保证它之前的所有内容(含整段对话历史)仍在缓存前缀内';
     case ChatMessageSource.LorebookBefore:
     case ChatMessageSource.LorebookAfter:
       return '加载方式:常量常驻 + 关键词命中(注入角色定义前/后)';

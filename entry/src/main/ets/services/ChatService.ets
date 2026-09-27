@@ -33,7 +33,7 @@
 import { ModelService } from './ModelService';
 import { LorebookService } from './LorebookService';
 import { LorebookPinService } from './LorebookPinService';
-import { LorebookStickyService } from './LorebookStickyService';
+import { LorebookStickyService, StickyResolveResult } from './LorebookStickyService';
 import { PromptBuilder, PromptBuildContext, PromptBuildResult, MemoryLayersInjection } from './PromptBuilder';
 import { TokenCounter } from './TokenCounter';
 import { HistoryTrimmer } from './HistoryTrimmer';
@@ -161,6 +161,8 @@ export const MEMORY_AUTO_SUMMARY_PREFS_KEY: string = 'memory_auto_summary_enable
 export const FRONTEND_INTERACTION_MAX_ITEMS: number = 30;
 /** 前端卡交互记录:注入提示词时的字符上限(超出从最旧开始丢) */
 export const FRONTEND_INTERACTION_MAX_CHARS: number = 2000;
+/** v47: 尾部「当前仍生效的设定」提醒最多列出的条目数(只列条目名,控制体积) */
+export const STICKY_REMINDER_MAX_ITEMS: number = 12;
 
 // ===== 纯函数(便于单测;ChatService 对应方法均委托这些实现) =====
 
@@ -207,6 +209,7 @@ export function buildFrontendInteractionText(records: string[]): string {
 /**
  * 状态字段指令行:「- 金币｜说明:钱｜当前值:999(由界面/玩家设定)｜已锁定(不可更新)」。
  * 当前值让模型看到玩家/界面改过什么(零额外请求)。
+ * 仅用于一次性请求(重新生成字段 / AI 修改状态)——那种请求不走缓存。
  */
 export function formatStatusFieldInstructionLine(
   name: string, desc: string, value: string, fromUser: boolean, locked: boolean
@@ -219,7 +222,95 @@ export function formatStatusFieldInstructionLine(
 }
 
 /**
- * 构建状态输出指令文本(声明式 v1):
+ * 是否存在可更新字段(全 locked / 空 schema 时返回 false,状态功能视为整体禁用)。
+ * 规则段与当前值段必须用同一判据,保证两段同进同出。
+ */
+function hasUpdatableStatusFields(schema: ChatStatusSchemaEntry[]): boolean {
+  for (let i = 0; i < schema.length; i++) {
+    if (!schema[i].locked) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * 构建状态**稳定段**文本:格式要求 + 字段清单(字段名/说明/locked 标记),**不含当前值**。
+ *
+ * 该文本只随角色卡 status schema 变化,同一张卡逐轮逐字相同,
+ * 因此注入到稳定前缀(DialogueExamples 之后、记忆之前),命中缓存。
+ *
+ * @returns 无 schema / 无可更新字段时返回空串(不注入,状态功能整体禁用)
+ */
+export function buildStatusRuleText(schema: ChatStatusSchemaEntry[]): string {
+  if (!hasUpdatableStatusFields(schema)) {
+    return '';
+  }
+  const updatable: string[] = [];
+  const lockedLines: string[] = [];
+  for (let i = 0; i < schema.length; i++) {
+    const e: ChatStatusSchemaEntry = schema[i];
+    const descPart: string = e.desc.length > 0 ? '｜说明:' + e.desc : '';
+    if (e.locked) {
+      lockedLines.push('- ' + e.name + descPart + '｜已锁定(不可更新)');
+    } else {
+      updatable.push('- ' + e.name + descPart);
+    }
+  }
+  const lockedText: string = lockedLines.length > 0
+    ? '- 以下字段已锁定,严禁输出:\n' + lockedLines.join('\n') + '\n'
+    : '';
+  return '【角色状态输出规则】\n' +
+    '在回复正文之后,单独输出一行 JSON 状态块,格式严格如下(正文中不要提及状态块):\n' +
+    '<|status|>\n' +
+    '{"字段名":"值"}\n' +
+    '<|/status|>\n' +
+    '- 状态块只能包含这些字段,字段名与数量必须完全一致,严禁新增或删除字段\n' +
+    '- 每轮都要重新输出全部字段的最新值,反映当前进展;若剧情没有变化,值保持不变\n' +
+    '- 需要输出的字段(逐行「字段名｜说明」,顺序固定):\n' +
+    updatable.join('\n') + '\n' +
+    lockedText;
+}
+
+/**
+ * 构建状态**易变段**文本:只列各字段的当前值,不含格式要求与字段说明。
+ *
+ * 内容每轮都可能变(模型更新 / 卡片界面 setState / 一键重新生成),
+ * 固定作为请求的最后一条消息追加,使其之前的内容(含整段对话历史)不受影响。
+ *
+ * @returns 无 schema / 无可更新字段时返回空串(不注入)
+ */
+export function buildStatusValuesText(
+  schema: ChatStatusSchemaEntry[], entries: ChatStatusEntry[]
+): string {
+  if (!hasUpdatableStatusFields(schema)) {
+    return '';
+  }
+  const lines: string[] = [];
+  for (let i = 0; i < schema.length; i++) {
+    const e: ChatStatusSchemaEntry = schema[i];
+    let value: string = '';
+    let fromUser: boolean = false;
+    for (let j = 0; j < entries.length; j++) {
+      if (entries[j].name === e.name) {
+        value = entries[j].value;
+        fromUser = entries[j].fromUser;
+        break;
+      }
+    }
+    const lockedPart: string = e.locked ? '｜已锁定' : '';
+    const sourcePart: string = fromUser ? '(由界面/玩家设定)' : '';
+    lines.push('- ' + e.name + ':' + (value.length > 0 ? value : '(空)') + sourcePart + lockedPart);
+  }
+  return '【角色状态当前值】\n' +
+    '以下是各字段的最新状态,仅供你了解现状(输出仍是纯值),不要复述本段:\n' +
+    lines.join('\n');
+}
+
+/**
+ * 构建状态输出指令文本(声明式 v1,规则与当前值合并为一段)。
+ * 供**一次性请求**使用(重新生成字段 / AI 修改状态),这类请求短暂且不走前缀缓存。
+ * 主聊天链路请改用 buildStatusRuleText(稳定前缀) + buildStatusValuesText(请求最末)。
  * - 无声明 schema / 全部 locked → 返回空串(不注入,状态功能整体禁用)
  * - regenerate=true → 只输出 JSON(一次性刷新字段)
  * - 正常路径 → 正文后附带 <|status|> 状态块;locked 字段单列作参考、严禁输出
@@ -275,6 +366,52 @@ export function buildStatusInstructionText(
     '- 下列每行的「当前值」反映最新状态(可能由玩家在卡片界面里调整过),仅供你了解现状,输出仍是纯值:\n' +
     fieldsText + lockedText + '\n' +
     '- 每轮都要重新输出全部字段的最新值,反映当前进展;若剧情没有变化,值保持不变';
+}
+
+/**
+ * v47: 构建「当前仍生效的设定」提醒文本。
+ * 只列条目名、不含内容;names 为空返回空串(PromptBuilder/调用方据此不产生段)。
+ */
+export function buildStickyReminderText(names: string[]): string {
+  if (names.length === 0) {
+    return '';
+  }
+  return '【当前仍生效的设定】\n'
+    + '以下世界书条目已在对话中加载且仍然有效,涉及相关情节时请遵循'
+    + '(完整内容在对话历史中,勿凭猜测改写):\n- '
+    + names.join('\n- ');
+}
+
+/**
+ * v47: 从"已加载的粘滞条目"中挑出"本轮仍然关键词命中"的条目名。
+ * - 顺序按 loaded(首次命中顺序)而非 matched,保证提醒行内容稳定
+ * - 去重:同一 id 只出现一次
+ * - 最多 max 个(0 或负数表示不限制)
+ */
+export function pickHotStickyNames(
+  loaded: LorebookEntry[], matched: LorebookEntry[], max: number
+): string[] {
+  if (loaded.length === 0 || matched.length === 0) {
+    return [];
+  }
+  const hotIds: Set<string> = new Set();
+  for (let i = 0; i < matched.length; i++) {
+    hotIds.add(matched[i].id);
+  }
+  const names: string[] = [];
+  const seen: Set<string> = new Set();
+  for (let i = 0; i < loaded.length; i++) {
+    const entry: LorebookEntry = loaded[i];
+    if (!hotIds.has(entry.id) || seen.has(entry.id)) {
+      continue;
+    }
+    if (max > 0 && names.length >= max) {
+      break;
+    }
+    seen.add(entry.id);
+    names.push(entry.name);
+  }
+  return names;
 }
 
 /** 代写(🎭3候选)引导指令 Preferences key(全局,跨会话;空=用内置默认中文提示词) */
@@ -3349,47 +3486,49 @@ export class ChatService {
   }
 
   /**
-   * CHAT-STATUS-1A: 注入角色状态输出指令 system message。
-   * 仅当存在用户字段时注入,位置复刻 injectAvatarDialogueStrategy(最后一个 system 之后)。
+   * CHAT-STATUS-1A: 追加角色状态**当前值** system message。
+   *
+   * 位置固定为请求的**最后一条**(不再依赖"最后一个 system 消息"这种数据相关的位置):
+   * 该段每轮都可能变化(模型更新 / 卡片界面 setState / 一键重新生成),
+   * 只有钉在最末,它之前的稳定前缀(含整段对话历史)才能持续命中缓存。
+   *
+   * 格式要求与字段清单已拆到 PromptBuilder 的 StatusRule 稳定段,此处只带当前值。
    */
-  private injectStatusInstruction(messages: ChatMessage[]): ChatMessage[] {
+  private appendStatusValuesMessage(messages: ChatMessage[]): ChatMessage[] {
     // 状态输出指令开关:关闭时不注入状态指令,AI 只返回纯正文(不返回状态 JSON)
     if (!this.statusInstructionEnabled) {
       return messages;
     }
-    const instruction: string = this.buildStatusInstruction();
-    if (instruction.length === 0) {
+    const values: string = buildStatusValuesText(this.statusSchema, this.currentStatusState.entries);
+    if (values.length === 0) {
       return messages;
     }
-    const statusMessage: ChatMessage = createChatMessage(
-      generateUuid(), ChatRole.System, instruction, Date.now()
+    const valuesMessage: ChatMessage = mergeChatMessage(
+      createChatMessage(generateUuid(), ChatRole.System, values, Date.now()),
+      {
+        source: ChatMessageSource.StatusValues,
+        sourceName: '角色状态当前值'
+      }
     );
-    let lastSystemIndex: number = -1;
-    for (let i = 0; i < messages.length; i++) {
-      if (messages[i].role === ChatRole.System) {
-        lastSystemIndex = i;
-      }
-    }
-    const result: ChatMessage[] = [];
-    if (lastSystemIndex === -1) {
-      result.push(statusMessage);
-      for (let i = 0; i < messages.length; i++) {
-        result.push(messages[i]);
-      }
-    } else {
-      for (let i = 0; i <= lastSystemIndex; i++) {
-        result.push(messages[i]);
-      }
-      result.push(statusMessage);
-      for (let i = lastSystemIndex + 1; i < messages.length; i++) {
-        result.push(messages[i]);
-      }
-    }
+    const result: ChatMessage[] = messages.slice();
+    result.push(valuesMessage);
     return result;
   }
 
   /**
-   * 构建状态输出指令文本(声明式 v1)。
+   * 构建状态**稳定段**文本(格式规则 + 字段清单,不含当前值),供 PromptBuilder 注入稳定前缀。
+   * 关闭状态指令或无可用字段时返回空串(PromptBuilder 据此不产生段)。
+   */
+  private buildStatusRule(): string {
+    if (!this.statusInstructionEnabled) {
+      return '';
+    }
+    return buildStatusRuleText(this.statusSchema);
+  }
+
+  /**
+   * 构建状态输出指令文本(规则与当前值合并,声明式 v1)。
+   * 仅供**一次性请求**使用(重新生成字段 / AI 修改状态),这类请求不走前缀缓存。
    * - 无声明 schema → 返回空字符串(不注入状态指令,状态功能整体禁用)
    * - 请求刷新字段 → 让 AI 只输出所有已声明字段的最新值(一次性请求)
    * - 正常路径 → 让 AI 在正文后输出状态块,只更新已声明字段,禁止增删字段
@@ -4061,10 +4200,10 @@ export class ChatService {
       }
     }
 
-    // v46: StickyOnDemand(粘滞按需)会话命中加载
-    // - 无记录 → 按最近消息首钉落库
-    // - 已有记录 → 新命中按首次命中顺序追加到集合尾部(append-only,保缓存前缀)
-    let stickyLorebookEntries: LorebookEntry[] | undefined = undefined;
+    // v47: StickyOnDemand(粘滞按需)会话命中加载。
+    // 条目全文不再统一挂在对话之后,而是按锚点插进对话历史(见 injectStickyLorebookEntries):
+    // 插一次即固定、新对话续在其后 → 从下一轮起就处在稳定前缀里,被缓存命中。
+    let stickyResolve: StickyResolveResult = { entries: [], anchors: {} };
     if (characterBook !== undefined
       && this.lorebookStickyService !== null
       && this.currentChatId !== undefined
@@ -4074,15 +4213,14 @@ export class ChatService {
           ? characterBook.activationMode : this.lorebookActivationDefault;
       if (effectiveStickyMode === LorebookActivationMode.StickyOnDemand) {
         try {
-          stickyLorebookEntries = await this.lorebookStickyService.ensureStickyEntries(
+          stickyResolve = await this.lorebookStickyService.ensureStickyEntries(
             this.currentChatId, characterBook, sourceMessages
           );
           Logger.info(LOG_TAG, 'buildRequestMessages lorebookSticky: entries='
-            + String(stickyLorebookEntries.length));
+            + String(stickyResolve.entries.length));
         } catch (e) {
           Logger.warn(LOG_TAG, 'lorebook sticky ensure failed: '
             + (e instanceof Error ? e.message : String(e)));
-          stickyLorebookEntries = [];
         }
       }
     }
@@ -4247,6 +4385,10 @@ export class ChatService {
       }
     }
 
+    // v47: 注入粘滞世界书条目全文(按锚点插到首次命中时的位置;锚点不在窗口时插到窗口头部)。
+    // 与按需记忆共用同一套锚点机制:插一次即固定,新对话续在其后 → 进稳定前缀缓存。
+    conversationMessages = this.injectStickyLorebookEntries(conversationMessages, stickyResolve);
+
     const context: PromptBuildContext = {
       character: this.character !== null ? this.character : undefined,
       characterBook: characterBook,
@@ -4260,10 +4402,11 @@ export class ChatService {
       lorebookDepth: this.lorebookInjectionDepth,
       // v45: OnDemandPinned 会话钉选条目(记忆之后、对话之前注入)
       pinnedLorebookEntries: pinnedLorebookEntries,
-      // v46: StickyOnDemand 会话粘滞命中条目(对话之后、PostHistory 之前注入)
-      stickyLorebookEntries: stickyLorebookEntries,
-      // v50: 前端卡交互记录(粘滞世界书之后、PostHistory 之前;无记录时为空串→不产生段)
+      // 粘滞条目已按锚点插进 conversationMessages(见上),此处不再作为固定尾部段注入
+      // v50: 前端卡交互记录(无记录时为空串→不产生段)
       frontendInteractionLog: this.buildFrontendInteractionBlock(),
+      // 角色状态输出规则(稳定段:格式 + 字段清单,不含当前值;注入对话示例之后)
+      statusRuleText: this.buildStatusRule(),
       // Persona 注入
       persona: effectivePersona !== null ? effectivePersona : undefined
       // enablePostHistoryInstructions 默认为 true
@@ -4272,8 +4415,12 @@ export class ChatService {
 
     const result: PromptBuildResult = this.promptBuilder.build(context);
 
-    // CHAT-STATUS-1A: 注入角色状态输出指令(仅当存在用户字段时)
-    const finalMessages: ChatMessage[] = this.injectStatusInstruction(result.messages);
+    // ===== 尾部易变区(变化越频繁排得越靠后,保证其前面的内容全部命中前缀缓存) =====
+    // 粘滞生效提醒(仅条目名,随"话题是否还热"变化) → 角色状态当前值(每轮都可能变)
+    let finalMessages: ChatMessage[] = this.appendStickyReminder(
+      result.messages, characterBook, stickyResolve, sourceMessages
+    );
+    finalMessages = this.appendStatusValuesMessage(finalMessages);
     return finalMessages;
   }
 
@@ -4454,6 +4601,122 @@ export class ChatService {
       Logger.info(LOG_TAG, 'on-demand memory injected anchored=' + anchoredInserts.length
         + ' head=' + headBlocks.length);
     }
+    return result;
+  }
+
+  /**
+   * v47: 把粘滞世界书条目全文按锚点插进对话历史(与 injectOnDemandMemories 同一套机制)。
+   *
+   * - 锚点消息在当前窗口内 → 插到它之后。位置此后固定不再移动,新消息只在其后追加,
+   *   因此该块从下一轮起就落在稳定前缀里被缓存命中。
+   * - 锚点缺失 / 已滑出窗口(如手动记忆总结截断后)→ 回退插到窗口头部。
+   * - 每条目只插一份(集合本身按 entryId 去重),不会重复加载同一内容。
+   * 空集合直接返回原数组(无粘滞命中时不产生任何段)。
+   */
+  private injectStickyLorebookEntries(
+    messages: ChatMessage[], resolve: StickyResolveResult
+  ): ChatMessage[] {
+    if (resolve.entries.length === 0) {
+      return messages;
+    }
+    const result: ChatMessage[] = messages.slice();
+    const headBlocks: ChatMessage[] = [];
+    const anchoredInserts: OnDemandInsert[] = [];
+    const anchorKeys: Set<string> = new Set(Object.keys(resolve.anchors));
+    const now: number = Date.now();
+
+    for (let i = 0; i < resolve.entries.length; i++) {
+      const entry: LorebookEntry = resolve.entries[i];
+      const block: ChatMessage = {
+        id: 'sticky-' + entry.id,
+        role: ChatRole.System,
+        content: entry.content,
+        createdAt: now,
+        status: ChatMessageStatus.Completed,
+        source: ChatMessageSource.LorebookSticky,
+        sourceName: '粘滞命中·' + entry.name
+      };
+      const anchorId: string = anchorKeys.has(entry.id) ? resolve.anchors[entry.id] : '';
+      let anchorIdx: number = -1;
+      if (anchorId.length > 0) {
+        for (let j = 0; j < result.length; j++) {
+          if (result[j].id === anchorId) {
+            anchorIdx = j;
+            break;
+          }
+        }
+      }
+      if (anchorIdx >= 0) {
+        anchoredInserts.push({ insertAfter: anchorIdx, message: block });
+      } else {
+        headBlocks.push(block);
+      }
+    }
+
+    if (anchoredInserts.length === 0 && headBlocks.length === 0) {
+      return result;
+    }
+    // 头部块:逆序 unshift,最终按 entryIds 顺序排在窗口最前
+    for (let i = headBlocks.length - 1; i >= 0; i--) {
+      result.unshift(headBlocks[i]);
+    }
+    // 锚点块:按 insertAfter 降序排序后逆序 splice,同锚点时保持先加入的在前
+    anchoredInserts.sort((a: OnDemandInsert, b: OnDemandInsert): number =>
+      b.insertAfter - a.insertAfter
+    );
+    for (let i = anchoredInserts.length - 1; i >= 0; i--) {
+      const insert: OnDemandInsert = anchoredInserts[i];
+      result.splice(insert.insertAfter + 1, 0, insert.message);
+    }
+    Logger.info(LOG_TAG, 'sticky lorebook injected anchored=' + anchoredInserts.length
+      + ' head=' + headBlocks.length);
+    return result;
+  }
+
+  /**
+   * v47: 在请求尾部追加一行「当前仍生效的设定」提醒。
+   *
+   * 条目全文已按锚点固定在对话历史里(不搬动,否则会作废其后的前缀缓存),
+   * 随着对话推进注意力会衰减;本段只列**条目名、不带内容**,把注意力拉回这些设定。
+   * 只列"已加载 且 本轮最近消息里仍然关键词命中"的条目(话题还热);
+   * 都不热(或该书非 StickyOnDemand)时返回原数组,不产生该段。
+   */
+  private appendStickyReminder(
+    messages: ChatMessage[],
+    book: Lorebook | undefined,
+    loaded: StickyResolveResult,
+    recentMessages: ChatMessage[]
+  ): ChatMessage[] {
+    if (book === undefined || this.lorebookService === null || loaded.entries.length === 0) {
+      return messages;
+    }
+    let matched: LorebookEntry[] = [];
+    try {
+      matched = this.lorebookService.matchKeywordEntries(book, recentMessages);
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'sticky reminder match failed: ' + String(e));
+      return messages;
+    }
+    if (matched.length === 0) {
+      return messages;
+    }
+    // 按首次命中顺序(entryIds 顺序)列出,内容只含条目名
+    const names: string[] = pickHotStickyNames(
+      loaded.entries, matched, STICKY_REMINDER_MAX_ITEMS
+    );
+    const text: string = buildStickyReminderText(names);
+    if (text.length === 0) {
+      return messages;
+    }
+    const reminder: ChatMessage = mergeChatMessage(
+      createChatMessage(generateUuid(), ChatRole.System, text, Date.now()),
+      {
+        source: ChatMessageSource.StickyReminder,
+        sourceName: '粘滞生效提醒'
+      }
+    );
+    const result: ChatMessage[] = messages.slice();
+    result.push(reminder);
     return result;
   }
 

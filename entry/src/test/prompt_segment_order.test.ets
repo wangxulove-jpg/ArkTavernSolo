@@ -44,7 +44,8 @@ export default function promptSegmentOrderTest() {
       const positions: PromptSegmentPosition[] = sorted.map((s: PromptSegment): PromptSegmentPosition => s.position);
 
       // hypium assertEqual 用 === 比较,数组字面量每次引用不同,改为字符串比较
-      // (契约:MemoryCore(7) → LorebookPinned(8) → Conversation(15),见 POSITION_ORDER)
+      // (契约:PromptPreset(0) → MemoryCore(8) → LorebookPinned(9) → Conversation(16) → PostHistory(19),
+      //  见 POSITION_ORDER)
       expect(positions.join(',')).assertEqual(
         PromptSegmentPosition.PromptPreset + ','
         + PromptSegmentPosition.MemoryCore + ','
@@ -96,21 +97,39 @@ export default function promptSegmentOrderTest() {
       expect(sessionIdx).assertLess(chapterIdx);
     });
 
-    it('lorebook_sticky_between_conversation_and_post_history', 0, () => {
+    it('status_rule_between_dialogue_examples_and_memory_core', 0, () => {
+      const segments: PromptSegment[] = [
+        createPromptSegment('core', PromptSegmentPosition.MemoryCore, ChatRole.System, 'm'),
+        createPromptSegment('rule', PromptSegmentPosition.StatusRule, ChatRole.System, 'r'),
+        createPromptSegment('example', PromptSegmentPosition.DialogueExamples, ChatRole.System, 'e'),
+        createPromptSegment('conversation', PromptSegmentPosition.Conversation, ChatRole.User, 'hi')
+      ];
+      const positions: PromptSegmentPosition[] = sortSegments(segments)
+        .map((s: PromptSegment): PromptSegmentPosition => s.position);
+      const exampleIdx: number = positions.indexOf(PromptSegmentPosition.DialogueExamples);
+      const ruleIdx: number = positions.indexOf(PromptSegmentPosition.StatusRule);
+      const coreIdx: number = positions.indexOf(PromptSegmentPosition.MemoryCore);
+      // 稳定前缀:对话示例 → 状态规则 → 记忆 → 对话
+      expect(exampleIdx).assertLess(ruleIdx);
+      expect(ruleIdx).assertLess(coreIdx);
+      expect(coreIdx).assertLess(positions.indexOf(PromptSegmentPosition.Conversation));
+    });
+
+    it('frontend_interaction_between_conversation_and_post_history', 0, () => {
       const segments: PromptSegment[] = [
         createPromptSegment('post', PromptSegmentPosition.PostHistory, ChatRole.System, 'post'),
-        createPromptSegment('sticky', PromptSegmentPosition.LorebookSticky, ChatRole.System, 'stk'),
-        createPromptSegment('conversation', PromptSegmentPosition.Conversation, ChatRole.User, 'hi'),
-        createPromptSegment('pinned', PromptSegmentPosition.LorebookPinned, ChatRole.System, 'pin')
+        createPromptSegment('fe', PromptSegmentPosition.FrontendInteraction, ChatRole.System, 'fe'),
+        createPromptSegment('conversation', PromptSegmentPosition.Conversation, ChatRole.User, 'hi')
       ];
-      const sorted: PromptSegment[] = sortSegments(segments);
-      const positions: PromptSegmentPosition[] = sorted
+      const positions: PromptSegmentPosition[] = sortSegments(segments)
         .map((s: PromptSegment): PromptSegmentPosition => s.position);
       const conversationIdx: number = positions.indexOf(PromptSegmentPosition.Conversation);
-      const stickyIdx: number = positions.indexOf(PromptSegmentPosition.LorebookSticky);
+      const feIdx: number = positions.indexOf(PromptSegmentPosition.FrontendInteraction);
       const postIdx: number = positions.indexOf(PromptSegmentPosition.PostHistory);
-      expect(conversationIdx).assertLess(stickyIdx);
-      expect(stickyIdx).assertLess(postIdx);
+      // 尾部动态区:对话 → 前端交互记录 → Post-History
+      // (粘滞世界书全文 v47 起不再占独立段位,改由 ChatService 按锚点插进 Conversation 内部)
+      expect(conversationIdx).assertLess(feIdx);
+      expect(feIdx).assertLess(postIdx);
     });
   });
 }

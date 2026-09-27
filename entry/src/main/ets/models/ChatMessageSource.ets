@@ -53,8 +53,26 @@ export enum ChatMessageSource {
   LorebookDepth = 'lorebookDepth',
   /** OnDemandPinned 固定世界书(受保护,记忆之后、对话之前,不进入聊天历史) */
   LorebookPinned = 'lorebookPinned',
-  /** StickyOnDemand 粘滞世界书命中(受保护,对话之后、PostHistory 之前,append-only 不进入聊天历史) */
+  /** StickyOnDemand 粘滞条目全文(受保护;v47 起按锚点插进对话历史,不再固定挂尾部,不进入聊天历史) */
   LorebookSticky = 'lorebookSticky',
+  /**
+   * v47: 粘滞生效提醒(受保护,固定为请求尾部易变区)。
+   * 只列"已加载且本轮仍命中"的条目名,不含内容;用来把注意力拉回已固定在
+   * 对话历史里的粘滞条目,避免其随对话推进被淡忘。
+   */
+  StickyReminder = 'stickyReminder',
   /** v50: 角色卡前端界面交互记录(受保护,粘滞世界书之后、PostHistory 之前,不进入聊天历史) */
-  FrontendInteraction = 'frontendInteraction'
+  FrontendInteraction = 'frontendInteraction',
+  /**
+   * 角色状态输出规则(稳定段)。
+   * 只含格式要求与字段清单(字段名/说明/locked 标记),不含每轮变化的当前值,
+   * 因此注入到稳定前缀(对话示例之后、记忆之前),作为缓存命中前缀的一部分。
+   */
+  StatusRule = 'statusRule',
+  /**
+   * 角色状态当前值(易变段)。
+   * 每轮都可能变化(模型更新 / 卡片界面 setState / 一键重新生成),
+   * 固定追加在请求最末,保证它前面的全部内容仍命中前缀缓存。
+   */
+  StatusValues = 'statusValues'
 }

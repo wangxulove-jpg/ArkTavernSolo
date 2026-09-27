@@ -923,7 +923,7 @@ struct LorebookPage {
           : this.editLorebookActivationMode === 3
           ? '按需锁定:首次按消息匹配后固定注入到记忆之后、对话之前,切换对话/重新生成都不变化,手动记忆总结时才刷新,缓存友好,适合大书'
           : this.editLorebookActivationMode === 4
-          ? '粘滞按需:关键词命中后会话内持续保留,按首次命中顺序追加注入到对话之后,不打断对话前缀,缓存命中最优(推荐)'
+          ? '粘滞按需:关键词命中后会话内持续保留;全文只在首次命中处插入一次并钉住不动,后续对话续在其后(该条目进入稳定前缀、缓存命中),另在请求末尾保留一行"当前仍生效"提醒以维持注意力(推荐)'
           : '按需:恒定条目注入头部,关键词命中条目注入对话尾部,最省上下文,适合大书')
           .fontSize(11)
           .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))

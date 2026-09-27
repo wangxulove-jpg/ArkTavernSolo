@@ -6,9 +6,19 @@
  *
  * 固定顺序:
  * PromptPreset → BeforeCharacter → Character → AfterCharacter
- *   → DialogueExamples → MemoryCore → LorebookPinned(OnDemandPinned世界书)
+ *   → DialogueExamples → StatusRule(稳定状态规则)
+ *   → MemoryCore → LorebookPinned(OnDemandPinned世界书)
  *   → MemorySession → MemoryChapter → MemoryRolling → MemoryLegacy
- *   → Conversation → LorebookSticky → FrontendInteraction(v50 前端交互记录) → PostHistory
+ *   → Conversation → FrontendInteraction(v50 前端交互记录) → PostHistory
+ *   → (追加在请求最末) StickyReminder 粘滞生效提醒 → StatusValues 状态当前值
+ *
+ * 不在该列表内的段:
+ * - StickyOnDemand 粘滞世界书全文:由 ChatService 按锚点插进 Conversation 段内部
+ *   (首次命中位置),不再固定挂在对话之后。
+ *
+ * 缓存友好约定:
+ * - 变化频率越低的内容越靠前;每轮都可能变的「状态当前值」固定放最后一条,
+ *   使其之前的所有内容(含整段对话历史)始终处于稳定前缀中。
  *
  * v12 多层记忆:
  * - MemoryCore:核心长期事实(最高优先级)
@@ -38,6 +48,12 @@ export enum PromptSegmentPosition {
   AfterCharacter = 'AfterCharacter',
   /** 对话示例(mes_example),位于聊天历史之前 */
   DialogueExamples = 'DialogueExamples',
+  /**
+   * 角色状态输出规则(稳定段:格式要求 + 字段清单,不含当前值)。
+   * 内容只随角色卡 schema 变化(极小概率),因此放在稳定前缀里,
+   * 与每轮变化的状态当前值分离,避免后者把整段对话历史拖出缓存。
+   */
+  StatusRule = 'StatusRule',
   /** v12: 核心长期事实(最高优先级记忆) */
   MemoryCore = 'MemoryCore',
   /** OnDemandPinned 固定世界书(核心记忆之后、会话记忆之前,随手动记忆总结一起更新) */
@@ -54,13 +70,11 @@ export enum PromptSegmentPosition {
   MemoryKeyword = 'MemoryKeyword',
   /** 旧版单段长期记忆摘要(兼容,新代码应使用 MemoryCore/Chapter/Rolling) */
   MemorySummary = 'MemorySummary',
-  /** 聊天历史(Conversation) */
+  /** 聊天历史(Conversation)。v47 起粘滞世界书全文也按锚点插在这一段内部 */
   Conversation = 'Conversation',
-  /** StickyOnDemand 粘滞世界书命中块(对话之后、PostHistory 之前,append-only 保缓存) */
-  LorebookSticky = 'LorebookSticky',
   /**
    * v50: 角色卡前端界面交互记录(契约 v3 appendInteraction)。
-   * 由页面轻交互攒下(不请求模型),位于粘滞世界书之后、PostHistory 之前(尾部动态区,保缓存)。
+   * 由页面轻交互攒下(不请求模型),位于聊天历史之后、PostHistory 之前(尾部动态区)。
    */
   FrontendInteraction = 'FrontendInteraction',
   /** Post-History Instructions,位于聊天历史之后 */
@@ -118,16 +132,16 @@ const POSITION_ORDER: Record<string, number> = {
   'PersonaAfter': 4,
   'AfterCharacter': 5,
   'DialogueExamples': 6,
-  'MemoryCore': 7,
-  'LorebookPinned': 8,
-  'MemorySession': 9,
-  'MemoryChapter': 10,
-  'MemoryRolling': 11,
-  'MemoryLegacy': 12,
-  'MemoryKeyword': 13,
-  'MemorySummary': 14,
-  'Conversation': 15,
-  'LorebookSticky': 16,
+  'StatusRule': 7,
+  'MemoryCore': 8,
+  'LorebookPinned': 9,
+  'MemorySession': 10,
+  'MemoryChapter': 11,
+  'MemoryRolling': 12,
+  'MemoryLegacy': 13,
+  'MemoryKeyword': 14,
+  'MemorySummary': 15,
+  'Conversation': 16,
   'FrontendInteraction': 17,
   'PostHistory': 18
 };

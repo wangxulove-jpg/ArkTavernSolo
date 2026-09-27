@@ -111,18 +111,19 @@ export interface PromptBuildContext {
    */
   pinnedLorebookEntries?: LorebookEntry[];
   /**
-   * v46: StickyOnDemand(粘滞按需)模式的会话粘滞命中条目(可选)。
-   * 由调用方通过 LorebookStickyService.ensureStickyEntries 预先解析后传入;
-   * 合并为单条 System 消息注入到对话之后、PostHistory 之前(LorebookSticky 位置),
-   * append-only 保证块内已注入前缀缓存命中。
-   */
-  stickyLorebookEntries?: LorebookEntry[];
-  /**
    * v50: 前端卡界面交互记录(可选,契约 v3 appendInteraction)。
    * 由 ChatService.buildFrontendInteractionBlock() 生成(空串=无记录,不产生段);
    * 注入到粘滞世界书之后、PostHistory 之前(FrontendInteraction 位置,尾部动态区保缓存)。
    */
   frontendInteractionLog?: string;
+  /**
+   * 角色状态输出规则(稳定段,可选)。
+   * 由 ChatService.buildStatusRule() 生成(空串=状态功能禁用,不产生段);
+   * 只含格式要求与字段清单(字段名/说明/locked),**不含每轮变化的当前值**,
+   * 因此注入到对话示例之后、记忆之前(StatusRule 位置),作为稳定前缀命中缓存。
+   * 当前值由 ChatService 在构建完成后追加为请求最后一条,见 StatusValues。
+   */
+  statusRuleText?: string;
   /** v44: 记忆关键词检索命中的历史章节(可选开关,位置固定于对话前)。 */
   memoryKeywordHits?: MemoryKeywordHit[];
   /** 用户身份(可选,提供时注入到提示词) */
@@ -289,6 +290,22 @@ export class PromptBuilder {
       }
     }
 
+    // 4.4 角色状态输出规则(稳定段:格式要求 + 字段清单,不含当前值)。
+    // 内容只随角色卡 status schema 变化,放在对话示例之后、记忆之前(稳定前缀内),
+    // 与每轮变化的状态当前值分离 —— 后者由 ChatService 追加为请求最后一条(StatusValues)。
+    if (context.statusRuleText !== undefined && context.statusRuleText.trim().length > 0) {
+      const statusRuleSeg: PromptSegment = createPromptSegment(
+        'status-rule',
+        PromptSegmentPosition.StatusRule,
+        ChatRole.System,
+        context.statusRuleText,
+        0,
+        ChatMessageSource.StatusRule,
+        '角色状态输出规则'
+      );
+      segments.push(statusRuleSeg);
+    }
+
     // 4.5 长期记忆注入(v12 多层优先,回退单段)
     // v12: 若 memoryLayers 提供,按 Core/Chapter/Rolling/Legacy 分层注入
     // 否则回退到 memorySummary 单段注入(旧路径兼容)
@@ -428,29 +445,6 @@ export class PromptBuilder {
         this.formatEntryNames('按需命中', lorebookDepthNames)
       );
       segments.push(lorebookDepthSeg);
-    }
-
-    // 5.7 StickyOnDemand 粘滞世界书命中(v46)
-    // 合并为单条 System 消息注入到对话之后、PostHistory 之前(尾部动态区)。
-    // 单条消息保证 token 序列 append-only:块尾追加新命中时已注入前缀缓存命中。
-    if (context.stickyLorebookEntries !== undefined && context.stickyLorebookEntries.length > 0) {
-      const parts: string[] = [];
-      const stickyNames: string[] = [];
-      for (let i = 0; i < context.stickyLorebookEntries.length; i++) {
-        matchedIds.push(context.stickyLorebookEntries[i].id);
-        parts.push(context.stickyLorebookEntries[i].content);
-        stickyNames.push(context.stickyLorebookEntries[i].name);
-      }
-      const stickySeg: PromptSegment = createPromptSegment(
-        'lorebook-sticky',
-        PromptSegmentPosition.LorebookSticky,
-        ChatRole.System,
-        parts.join('\n\n'),
-        0,
-        ChatMessageSource.LorebookSticky,
-        this.formatEntryNames('粘滞命中', stickyNames)
-      );
-      segments.push(stickySeg);
     }
 
     // 5.8 v50: 前端卡界面交互记录(契约 v3 appendInteraction):

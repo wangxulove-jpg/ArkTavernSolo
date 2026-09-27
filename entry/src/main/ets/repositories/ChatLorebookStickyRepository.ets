@@ -20,6 +20,7 @@ import {
   COLUMN_STICKY_CHAT_ID,
   COLUMN_STICKY_LOREBOOK_ID,
   COLUMN_STICKY_ENTRY_IDS_JSON,
+  COLUMN_STICKY_ANCHORS_JSON,
   COLUMN_CREATED_AT,
   COLUMN_UPDATED_AT
 } from '../database/DatabaseConstants';
@@ -29,6 +30,13 @@ export interface ChatLorebookSticky {
   readonly chatId: string;
   readonly lorebookId: string;
   readonly entryIds: string[];
+  /**
+   * v47: 条目 ID → 锚点消息 ID。
+   * 锚点 = 该条目首次命中时历史末尾的消息 ID;构建请求时把条目全文插到锚点之后,
+   * 新对话自然续在其后,使条目进入稳定前缀缓存。
+   * 无锚点的条目(旧数据 / 锚点已滑出窗口)回退为插到窗口头部。
+   */
+  readonly anchors: Record<string, string>;
   readonly createdAt: number;
   readonly updatedAt: number;
 }
@@ -78,6 +86,7 @@ export class ChatLorebookStickyRepository {
     bucket[COLUMN_STICKY_CHAT_ID] = sticky.chatId;
     bucket[COLUMN_STICKY_LOREBOOK_ID] = sticky.lorebookId;
     bucket[COLUMN_STICKY_ENTRY_IDS_JSON] = JSON.stringify(sticky.entryIds);
+    bucket[COLUMN_STICKY_ANCHORS_JSON] = JSON.stringify(sticky.anchors);
     bucket[COLUMN_CREATED_AT] = sticky.createdAt;
     bucket[COLUMN_UPDATED_AT] = sticky.updatedAt;
     await store.insert(
@@ -105,15 +114,43 @@ export class ChatLorebookStickyRepository {
     const chatIdIndex: number = rs.getColumnIndex(COLUMN_STICKY_CHAT_ID);
     const lorebookIdIndex: number = rs.getColumnIndex(COLUMN_STICKY_LOREBOOK_ID);
     const entryIdsIndex: number = rs.getColumnIndex(COLUMN_STICKY_ENTRY_IDS_JSON);
+    const anchorsIndex: number = rs.getColumnIndex(COLUMN_STICKY_ANCHORS_JSON);
     const createdIndex: number = rs.getColumnIndex(COLUMN_CREATED_AT);
     const updatedIndex: number = rs.getColumnIndex(COLUMN_UPDATED_AT);
     return {
       chatId: rs.getString(chatIdIndex),
       lorebookId: rs.getString(lorebookIdIndex),
       entryIds: parseEntryIdsJson(rs.getString(entryIdsIndex)),
+      anchors: parseAnchorsJson(anchorsIndex >= 0 ? rs.getString(anchorsIndex) : ''),
       createdAt: rs.getLong(createdIndex),
       updatedAt: rs.getLong(updatedIndex)
     };
+  }
+}
+
+/** anchors_json 安全解析(损坏/非对象/非字符串值逐项丢弃,返回空映射不抛错)。 */
+function parseAnchorsJson(json: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (json.length === 0) {
+    return result;
+  }
+  try {
+    const parsed: Object = JSON.parse(json) as Object;
+    if (parsed === null || !(parsed instanceof Object) || Array.isArray(parsed)) {
+      return result;
+    }
+    const rec: Record<string, Object> = parsed as Record<string, Object>;
+    const keys: string[] = Object.keys(rec);
+    for (let i = 0; i < keys.length; i++) {
+      const key: string = keys[i];
+      const value: Object = rec[key];
+      if (typeof value === 'string' && (value as string).length > 0) {
+        result[key] = (value as string).trim();
+      }
+    }
+    return result;
+  } catch (_e) {
+    return result;
   }
 }
 

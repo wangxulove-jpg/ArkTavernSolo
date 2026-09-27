@@ -13,11 +13,11 @@
  * - 换书(lorebookId 不一致)重置首钉
  * - 条目禁用后返回集合自动缩水
  * - refreshStickyEntries 全量重算整体替换
- * - 失败(repository 抛错)返回空数组不抛出
+ * - 失败(repository 抛错)返回空结果不抛出
  */
 
 import { describe, it, expect } from '@ohos/hypium';
-import { LorebookStickyService } from '../main/ets/services/LorebookStickyService';
+import { LorebookStickyService, StickyResolveResult } from '../main/ets/services/LorebookStickyService';
 import {
   ChatLorebookStickyRepository,
   ChatLorebookSticky
@@ -143,6 +143,15 @@ function idsOf(entries: LorebookEntry[]): string {
   return entries.map((e: LorebookEntry): string => e.name).join(',');
 }
 
+/** 取粘滞解析结果中的条目列表(测试便利:多数用例只关心条目) */
+async function ensureEntries(
+  service: LorebookStickyService, chatId: string, book: Lorebook, messages: ChatMessage[]
+): Promise<LorebookEntry[]> {
+  const pending: Promise<StickyResolveResult> = service.ensureStickyEntries(chatId, book, messages);
+  const result: StickyResolveResult = await pending;
+  return result.entries;
+}
+
 export default function lorebookStickyServiceTest() {
   describe('LorebookStickyService', () => {
     it('first_pin_persists_matched_entries', 0, async () => {
@@ -152,7 +161,7 @@ export default function lorebookStickyServiceTest() {
       const book: Lorebook = buildTestBook();
       const messages: ChatMessage[] = [userMsg('m1', '我们聊聊阿尔法吧')];
 
-      const entries: LorebookEntry[] = await service.ensureStickyEntries('chat1', book, messages);
+      const entries: LorebookEntry[] = await ensureEntries(service, 'chat1', book, messages);
       expect(idsOf(entries)).assertEqual('阿尔法');
 
       // 落库验证:记录的 lorebookId 与条目 ID 一致
@@ -162,6 +171,31 @@ export default function lorebookStickyServiceTest() {
       expect(saved!.entryIds.length).assertEqual(1);
     });
 
+    it('anchors_recorded_at_first_hit_and_kept_for_existing', 0, async () => {
+      const repo: FakeStickyRepository = new FakeStickyRepository();
+      const service: LorebookStickyService =
+        new LorebookStickyService(repo, buildLorebookService());
+      const book: Lorebook = buildTestBook();
+
+      // 首轮:阿尔法命中 → 锚点 = 当时最后一条消息 m1
+      const first: StickyResolveResult = await service.ensureStickyEntries('chat1', book,
+        [userMsg('m1', '阿尔法登场')]);
+      expect(first.anchors['e-alpha']).assertEqual('m1');
+
+      // 次轮:贝塔/伽马在 m2 命中;阿尔法仍在集合内 → 锚点保持 m1 不动(位置固定才能保住前缀缓存)
+      const second: StickyResolveResult = await service.ensureStickyEntries('chat1', book,
+        [userMsg('m2', '贝塔和伽马来了')]);
+      expect(second.anchors['e-alpha']).assertEqual('m1');
+      expect(second.anchors['e-beta']).assertEqual('m2');
+      expect(second.anchors['e-gamma']).assertEqual('m2');
+
+      // 落库与返回一致
+      const saved: ChatLorebookSticky | null = await repo.getByChatId('chat1');
+      expect(saved !== null).assertTrue();
+      expect(saved!.anchors['e-alpha']).assertEqual('m1');
+      expect(saved!.anchors['e-beta']).assertEqual('m2');
+    });
+
     it('new_hits_appended_in_order_existing_unchanged', 0, async () => {
       const repo: FakeStickyRepository = new FakeStickyRepository();
       const service: LorebookStickyService =
@@ -169,9 +203,9 @@ export default function lorebookStickyServiceTest() {
       const book: Lorebook = buildTestBook();
 
       // 首轮:命中阿尔法
-      await service.ensureStickyEntries('chat1', book, [userMsg('m1', '阿尔法登场')]);
+      await ensureEntries(service, 'chat1', book, [userMsg('m1', '阿尔法登场')]);
       // 次轮:命中贝塔与伽马,阿尔法未再出现(但已粘滞保留,位置不动)
-      const entries: LorebookEntry[] = await service.ensureStickyEntries('chat1', book,
+      const entries: LorebookEntry[] = await ensureEntries(service, 'chat1', book,
         [userMsg('m2', '贝塔和伽马来了')]);
 
       // append-only:阿尔法仍在首位,新命中按匹配顺序追加
@@ -185,8 +219,8 @@ export default function lorebookStickyServiceTest() {
       // 预算 15:'阿尔法的内容'(6)+'贝塔的内容'(6)=12 ≤ 15,加'伽马的内容'(6)=18 > 15
       const book: Lorebook = buildTestBook(15);
 
-      await service.ensureStickyEntries('chat1', book, [userMsg('m1', '阿尔法和贝塔')]);
-      const entries: LorebookEntry[] = await service.ensureStickyEntries('chat1', book,
+      await ensureEntries(service, 'chat1', book, [userMsg('m1', '阿尔法和贝塔')]);
+      const entries: LorebookEntry[] = await ensureEntries(service, 'chat1', book,
         [userMsg('m2', '阿尔法和贝塔和伽马')]);
       expect(idsOf(entries)).assertEqual('阿尔法,贝塔');
     });
@@ -196,11 +230,11 @@ export default function lorebookStickyServiceTest() {
       const service: LorebookStickyService =
         new LorebookStickyService(repo, buildLorebookService());
       const book1: Lorebook = buildTestBook();
-      await service.ensureStickyEntries('chat1', book1, [userMsg('m1', '阿尔法登场')]);
+      await ensureEntries(service, 'chat1', book1, [userMsg('m1', '阿尔法登场')]);
 
       // 换书:lorebookId 不一致 → 重新首钉
       const book2: Lorebook = buildTestBook();
-      const entries: LorebookEntry[] = await service.ensureStickyEntries('chat1', book2,
+      const entries: LorebookEntry[] = await ensureEntries(service, 'chat1', book2,
         [userMsg('m2', '贝塔登场')]);
       expect(idsOf(entries)).assertEqual('贝塔');
 
@@ -214,7 +248,7 @@ export default function lorebookStickyServiceTest() {
       const service: LorebookStickyService =
         new LorebookStickyService(repo, buildLorebookService());
       const book: Lorebook = buildTestBook();
-      await service.ensureStickyEntries('chat1', book,
+      await ensureEntries(service, 'chat1', book,
         [userMsg('m1', '阿尔法和贝塔')]);
 
       // 同 id 的书,阿尔法条目被禁用:返回集合实时缩水(字面量构造,id 与原书一致)
@@ -234,7 +268,7 @@ export default function lorebookStickyServiceTest() {
         createdAt: book.createdAt,
         updatedAt: book.updatedAt
       };
-      const entries: LorebookEntry[] = await service.ensureStickyEntries('chat1', bookDisabled,
+      const entries: LorebookEntry[] = await ensureEntries(service, 'chat1', bookDisabled,
         [userMsg('m2', '继续聊')]);
       expect(idsOf(entries)).assertEqual('贝塔');
     });
@@ -244,13 +278,13 @@ export default function lorebookStickyServiceTest() {
       const service: LorebookStickyService =
         new LorebookStickyService(repo, buildLorebookService());
       const book: Lorebook = buildTestBook();
-      await service.ensureStickyEntries('chat1', book, [userMsg('m1', '阿尔法登场')]);
+      await ensureEntries(service, 'chat1', book, [userMsg('m1', '阿尔法登场')]);
 
       // 手动总结刷新:全量消息重算(阿尔法的消息已滑出扫描窗口,但全量匹配仍命中)
       await service.refreshStickyEntries('chat1', book,
         [userMsg('m1', '阿尔法登场'), userMsg('m2', '贝塔登场')]);
 
-      const entries: LorebookEntry[] = await service.ensureStickyEntries('chat1', book,
+      const entries: LorebookEntry[] = await ensureEntries(service, 'chat1', book,
         [userMsg('m3', '继续')]);
       expect(idsOf(entries)).assertEqual('阿尔法,贝塔');
     });
@@ -263,7 +297,7 @@ export default function lorebookStickyServiceTest() {
       const book: Lorebook = buildTestBook();
 
       const entries: LorebookEntry[] =
-        await service.ensureStickyEntries('chat1', book, [userMsg('m1', '阿尔法')]);
+        await ensureEntries(service, 'chat1', book, [userMsg('m1', '阿尔法')]);
       expect(entries.length).assertEqual(0);
     });
 
@@ -274,12 +308,12 @@ export default function lorebookStickyServiceTest() {
       const book: Lorebook = buildTestBook(1000, false);
 
       const entries: LorebookEntry[] =
-        await service.ensureStickyEntries('chat1', book, [userMsg('m1', '阿尔法')]);
+        await ensureEntries(service, 'chat1', book, [userMsg('m1', '阿尔法')]);
       expect(entries.length).assertEqual(0);
 
       const enabledBook: Lorebook = buildTestBook();
       const emptyIdEntries: LorebookEntry[] =
-        await service.ensureStickyEntries('', enabledBook, [userMsg('m2', '阿尔法')]);
+        await ensureEntries(service, '', enabledBook, [userMsg('m2', '阿尔法')]);
       expect(emptyIdEntries.length).assertEqual(0);
     });
   });
