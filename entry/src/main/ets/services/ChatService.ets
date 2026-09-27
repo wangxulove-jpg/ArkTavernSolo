@@ -98,12 +98,8 @@ import { ChatState, ChatServiceCallbacks } from '../models/ChatServiceContract';
 import { extractStatusBlock } from '../parser/ChatStatusBlockParser';
 import {
   PromptPresetRequestSnapshot,
-  EffectiveGenerationSettings,
-  resolveEffectiveGenerationSettings,
-  createSnapshotWithoutPreset,
-  createSnapshotWithPresets
+  EffectiveGenerationSettings
 } from './PromptPresetRuntimeResolver';
-import { PromptPreset } from '../models/PromptPreset';
 import { Persona } from '../models/Persona';
 import { generateUuid } from '../utils/Uuid';
 import { Logger } from '../utils/Logger';
@@ -343,7 +339,9 @@ export class ChatService {
       memoryService: this.memoryService,
       memoryLoadRefService: this.memoryLoadRefService,
       chatMemoryModeService: this.chatMemoryModeService,
-      contextBudgetService: this.contextBudgetService
+      contextBudgetService: this.contextBudgetService,
+      modelService: this.modelService,
+      promptPresetService: this.promptPresetService
     };
     const builderHost: ChatRequestHost = {
       getCurrentChat: (): Chat | null => this.currentChat,
@@ -1690,82 +1688,9 @@ export class ChatService {
     });
   }
 
-  /**
-   * 创建请求级 Preset 快照。
-   *
-   * 每次 sendMessage/regenerate 开始时调用一次。
-   * 读取当前 Preset,与模型配置合并为 EffectiveGenerationSettings。
-   *
-   * 读取失败规则:
-   * - 当前 ID 不存在:清空选择,返回 null(使用模型配置)
-   * - Repository 读取异常:抛出错误,阻止请求
-   * - Preset 数据损坏:抛出错误,阻止请求
-   *
-   * @returns 请求快照
-   * @throws Error 无法读取当前预设或数据损坏
-   */
+  /** 创建请求级 Preset 快照(委托 ChatRequestBuilder)。 */
   private async createPresetRequestSnapshot(): Promise<PromptPresetRequestSnapshot> {
-    // 1. 获取模型配置作为基准
-    let baseTemperature: number | undefined = undefined;
-    let baseTopP: number | undefined = undefined;
-    let baseMaxOutputTokens: number | undefined = undefined;
-    let baseContextWindow: number | undefined = undefined;
-    try {
-      const config: ProviderConfig | null = await this.modelService.getCurrentConfig();
-      if (config !== null) {
-        baseTemperature = config.temperature;
-        baseTopP = config.topP;
-        baseMaxOutputTokens = config.maxTokens;
-        baseContextWindow = config.contextWindow;
-      }
-    } catch (e) {
-      // 配置获取失败:使用空 base,后续由 DEFAULT_OPTIONS 兜底
-      Logger.warn(LOG_TAG, 'createPresetRequestSnapshot getCurrentConfig failed: '
-        + (e instanceof Error ? e.message : String(e)));
-    }
-    const base: EffectiveGenerationSettings = {
-      temperature: baseTemperature,
-      topP: baseTopP,
-      maxOutputTokens: baseMaxOutputTokens,
-      contextWindow: baseContextWindow
-    };
-
-    // 2. 获取当前 Preset
-    if (this.promptPresetService === null) {
-      return createSnapshotWithoutPreset(
-        resolveEffectiveGenerationSettings(base)
-      );
-    }
-
-    let presets: PromptPreset[] = [];
-    try {
-      presets = await this.promptPresetService.getSelectedPresets();
-    } catch (e) {
-      // Repository 读取失败:阻止请求
-      throw new Error('无法读取当前提示词预设，请重试');
-    }
-
-    // Phase 4D-9: 预设加载诊断日志
-    // 用于验证用户在设置 tab 选择的预设是否真正被加载到请求中
-    Logger.info(LOG_TAG, 'createPresetRequestSnapshot: selected preset count='
-      + presets.length.toString());
-
-    if (presets.length === 0) {
-      return createSnapshotWithoutPreset(
-        resolveEffectiveGenerationSettings(base)
-      );
-    }
-
-    // 3. 合并参数
-    let settings: EffectiveGenerationSettings;
-    try {
-      settings = resolveEffectiveGenerationSettings(base, presets);
-    } catch (e) {
-      // 数据损坏:阻止请求
-      throw new Error('无法读取当前提示词预设，请重试');
-    }
-
-    return createSnapshotWithPresets(presets, settings);
+    return this.requestBuilder.createPresetRequestSnapshot();
   }
 
   /**

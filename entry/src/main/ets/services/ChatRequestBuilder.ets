@@ -43,6 +43,17 @@ import { ChatMemoryModeService } from './ChatMemoryModeService';
 import { ContextBudgetService } from './ContextBudgetService';
 import { EntityIndex, EntityIndexEntry, matchEntityChapterIds, parseEntityIndexJson } from './ChapterMemoryIndexer';
 import { buildStickyReminderText, pickHotStickyNames, STICKY_REMINDER_MAX_ITEMS } from './ChatTextContract';
+import { ModelService } from './ModelService';
+import { PromptPresetService } from './PromptPresetService';
+import { ProviderConfig } from '../models/ProviderConfig';
+import { PromptPreset } from '../models/PromptPreset';
+import {
+  PromptPresetRequestSnapshot,
+  EffectiveGenerationSettings,
+  resolveEffectiveGenerationSettings,
+  createSnapshotWithoutPreset,
+  createSnapshotWithPresets
+} from './PromptPresetRuntimeResolver';
 import { generateUuid } from '../utils/Uuid';
 import { Logger } from '../utils/Logger';
 
@@ -66,6 +77,8 @@ export interface ChatRequestBuilderDeps {
   memoryLoadRefService: MemoryLoadRefService | null;
   chatMemoryModeService: ChatMemoryModeService | null;
   contextBudgetService: ContextBudgetService | null;
+  modelService: ModelService;
+  promptPresetService: PromptPresetService | null;
 }
 
 /**
@@ -112,6 +125,8 @@ export class ChatRequestBuilder {
   private readonly memoryLoadRefService: MemoryLoadRefService | null;
   private readonly chatMemoryModeService: ChatMemoryModeService | null;
   private readonly contextBudgetService: ContextBudgetService | null;
+  private readonly modelService: ModelService;
+  private readonly promptPresetService: PromptPresetService | null;
   private readonly host: ChatRequestHost;
 
   constructor(deps: ChatRequestBuilderDeps, host: ChatRequestHost) {
@@ -125,6 +140,8 @@ export class ChatRequestBuilder {
     this.memoryLoadRefService = deps.memoryLoadRefService;
     this.chatMemoryModeService = deps.chatMemoryModeService;
     this.contextBudgetService = deps.contextBudgetService;
+    this.modelService = deps.modelService;
+    this.promptPresetService = deps.promptPresetService;
     this.host = host;
   }
 
@@ -132,6 +149,87 @@ export class ChatRequestBuilder {
   async build(presetSystemPrompt?: string, excludeMessageId?: string): Promise<ChatMessage[]> {
     return this.buildRequestMessages(presetSystemPrompt, excludeMessageId);
   }
+
+  // ===== 请求级 Preset 快照(P2-12:自 ChatService 抽离,逐字搬出) =====
+
+  /**
+   * 创建请求级 Preset 快照。
+   *
+   * 每次 sendMessage/regenerate 开始时调用一次。
+   * 读取当前 Preset,与模型配置合并为 EffectiveGenerationSettings。
+   *
+   * 读取失败规则:
+   * - 当前 ID 不存在:清空选择,返回 null(使用模型配置)
+   * - Repository 读取异常:抛出错误,阻止请求
+   * - Preset 数据损坏:抛出错误,阻止请求
+   *
+   * @returns 请求快照
+   * @throws Error 无法读取当前预设或数据损坏
+   */
+  async createPresetRequestSnapshot(): Promise<PromptPresetRequestSnapshot> {
+    // 1. 获取模型配置作为基准
+    let baseTemperature: number | undefined = undefined;
+    let baseTopP: number | undefined = undefined;
+    let baseMaxOutputTokens: number | undefined = undefined;
+    let baseContextWindow: number | undefined = undefined;
+    try {
+      const config: ProviderConfig | null = await this.modelService.getCurrentConfig();
+      if (config !== null) {
+        baseTemperature = config.temperature;
+        baseTopP = config.topP;
+        baseMaxOutputTokens = config.maxTokens;
+        baseContextWindow = config.contextWindow;
+      }
+    } catch (e) {
+      // 配置获取失败:使用空 base,后续由 DEFAULT_OPTIONS 兜底
+      Logger.warn(LOG_TAG, 'createPresetRequestSnapshot getCurrentConfig failed: '
+        + (e instanceof Error ? e.message : String(e)));
+    }
+    const base: EffectiveGenerationSettings = {
+      temperature: baseTemperature,
+      topP: baseTopP,
+      maxOutputTokens: baseMaxOutputTokens,
+      contextWindow: baseContextWindow
+    };
+
+    // 2. 获取当前 Preset
+    if (this.promptPresetService === null) {
+      return createSnapshotWithoutPreset(
+        resolveEffectiveGenerationSettings(base)
+      );
+    }
+
+    let presets: PromptPreset[] = [];
+    try {
+      presets = await this.promptPresetService.getSelectedPresets();
+    } catch (e) {
+      // Repository 读取失败:阻止请求
+      throw new Error('无法读取当前提示词预设，请重试');
+    }
+
+    // Phase 4D-9: 预设加载诊断日志
+    // 用于验证用户在设置 tab 选择的预设是否真正被加载到请求中
+    Logger.info(LOG_TAG, 'createPresetRequestSnapshot: selected preset count='
+      + presets.length.toString());
+
+    if (presets.length === 0) {
+      return createSnapshotWithoutPreset(
+        resolveEffectiveGenerationSettings(base)
+      );
+    }
+
+    // 3. 合并参数
+    let settings: EffectiveGenerationSettings;
+    try {
+      settings = resolveEffectiveGenerationSettings(base, presets);
+    } catch (e) {
+      // 数据损坏:阻止请求
+      throw new Error('无法读取当前提示词预设，请重试');
+    }
+
+    return createSnapshotWithPresets(presets, settings);
+  }
+
 
   // ===== 宿主状态读取(同名 getter 转发,保持搬运代码零改写) =====
 
