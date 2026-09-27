@@ -118,6 +118,7 @@ import { planRequest, RequestPlanDeps, RequestPlanResult } from './ChatRequestPl
 import { ChatRequestBuilder, ChatRequestBuilderDeps, ChatRequestHost } from './ChatRequestBuilder';
 import { ChatOneShotGenerator, ChatOneShotDeps, ChatOneShotHost } from './ChatOneShotGenerator';
 import { ChatStatusService, ChatStatusDeps, ChatStatusHost } from './ChatStatusService';
+import { ChatSwipeController, ChatSwipeDeps, ChatSwipeHost } from './ChatSwipeController';
 import {
   GLOBAL_USER_NAME_KEY,
   LOREBOOK_ACTIVATION_DEFAULT_PREFS_KEY,
@@ -321,6 +322,8 @@ export class ChatService {
   private readonly oneShotGenerator: ChatOneShotGenerator;
   /** 角色状态簇(P2-3:自本类抽离,自带状态与宿主回调在构造期装配) */
   private readonly statusService: ChatStatusService;
+  /** Swipe 浏览/切换簇(P2-4a:自本类抽离,状态仍在本类,经宿主回调读写) */
+  private readonly swipeController: ChatSwipeController;
 
   constructor(
     modelService: ModelService,
@@ -457,6 +460,35 @@ export class ChatService {
       getLastCallbacks: (): ChatServiceCallbacks | null => this.lastCallbacks
     };
     this.statusService = new ChatStatusService(statusDeps, statusHost);
+
+    const swipeDeps: ChatSwipeDeps = {
+      swipePersistenceService: this.swipePersistenceService
+    };
+    const swipeHost: ChatSwipeHost = {
+      isBusy: (): boolean => this.isBusy(),
+      isGenerating: (): boolean => this.isGenerating(),
+      getLastAssistantMessageId: (): string => this.lastAssistantMessageId,
+      getSwipeSummaries: (): MessageSwipeSummary[] => this.swipeSummaries,
+      setSwipeSummaries: (summaries: MessageSwipeSummary[]): void => {
+        this.swipeSummaries = summaries;
+      },
+      getSwipeOperationInProgress: (): boolean => this.swipeOperationInProgress,
+      setSwipeOperationInProgress: (inProgress: boolean): void => {
+        this.swipeOperationInProgress = inProgress;
+      },
+      getCurrentChatId: (): string | undefined => this.currentChatId,
+      getLastCallbacks: (): ChatServiceCallbacks | null => this.lastCallbacks,
+      reloadCurrentSession: (): Promise<void> => this.reloadCurrentSession(),
+      updateLastAssistantMessageId: (): void => this.updateLastAssistantMessageId(),
+      persistChatTimestamp: (): void => this.persistChatTimestamp(),
+      invalidateMemoryFromMessagePosition: (assistantMessageId: string): void => {
+        this.invalidateMemoryFromMessagePosition(assistantMessageId);
+      },
+      emitMessages: (callbacks: ChatServiceCallbacks | null): void => {
+        this.emitMessages(callbacks);
+      }
+    };
+    this.swipeController = new ChatSwipeController(swipeDeps, swipeHost);
   }
 
   /**
@@ -3446,144 +3478,36 @@ export class ChatService {
     this.updateLastAssistantMessageId();
   }
 
-  // ===== Swipe 公开方法 =====
+  // ===== Swipe 公开方法(实现已抽至 services/ChatSwipeController,P2-4a) =====
 
-  /**
-   * 获取当前会话的 Swipe 摘要列表(副本)。
-   */
+  /** 获取当前会话的 Swipe 摘要列表(副本;委托 ChatSwipeController)。 */
   getSwipeSummaries(): MessageSwipeSummary[] {
-    return this.swipeSummaries.slice();
+    return this.swipeController.getSwipeSummaries();
   }
 
-  /**
-   * 获取指定 Assistant 消息的 Swipe 摘要。
-   */
+  /** 获取指定 Assistant 消息的 Swipe 摘要(委托 ChatSwipeController)。 */
   getSwipeSummary(assistantMessageId: string): MessageSwipeSummary | undefined {
-    return this.getSummaryForMessage(assistantMessageId);
+    return this.swipeController.getSwipeSummary(assistantMessageId);
   }
 
-  /**
-   * 判断指定 Assistant 消息是否可操作 Swipe。
-   * 只允许非生成状态下操作最后一条 Assistant 消息。
-   */
+  /** 判断指定 Assistant 消息是否可操作 Swipe(只允许非生成状态下操作最后一条;委托 ChatSwipeController)。 */
   canOperateSwipe(assistantMessageId: string): boolean {
-    if (this.isGenerating()) {
-      return false;
-    }
-    if (assistantMessageId !== this.lastAssistantMessageId) {
-      return false;
-    }
-    return true;
+    return this.swipeController.canOperateSwipe(assistantMessageId);
   }
 
-  /**
-   * 候选激活公共执行块:互斥锁 + 持久化切换 + reload + 时间戳 + 记忆失效 + 通知。
-   * activatePreviousCandidate / activateNextCandidate / activateCandidateIndex 共用;
-   * 调用方已完成 canOperateSwipe / isBusy / 索引合法性校验。
-   */
-  private async doActivateCandidate(assistantMessageId: string, targetIndex: number): Promise<void> {
-    if (this.swipePersistenceService === null || this.currentChatId === undefined) {
-      return;
-    }
-    this.swipeOperationInProgress = true;
-    try {
-      await this.swipePersistenceService.activateCandidate(assistantMessageId, targetIndex);
-      // 重新加载 messages
-      await this.reloadCurrentSession();
-      // 重新加载 summaries
-      this.swipeSummaries = await this.swipePersistenceService.listSwipeSummariesByChatId(this.currentChatId);
-      this.updateLastAssistantMessageId();
-      // 仅更新 updatedAt,不修改 lastMessageAt
-      this.persistChatTimestamp();
-      // v12: 切换候选后,失效该 Assistant position 之后的记忆(内容已变化,旧摘要可能不准确)
-      // 失败不阻塞,只记录 warn
-      this.invalidateMemoryFromMessagePosition(assistantMessageId);
-      this.emitMessages(this.lastCallbacks);
-    } finally {
-      this.swipeOperationInProgress = false;
-    }
-  }
-
-  /**
-   * 激活前一个候选。
-   * T-6.3: 与生成 / session op / 其他 swipe 操作互斥(swipeOperationInProgress)。
-   * 仅更新 updatedAt(不修改 lastMessageAt),避免会话反复置顶。
-   */
+  /** 激活前一个候选(委托 ChatSwipeController)。 */
   async activatePreviousCandidate(assistantMessageId: string): Promise<void> {
-    if (!this.canOperateSwipe(assistantMessageId)) {
-      return;
-    }
-    if (this.isBusy()) {
-      Logger.warn(LOG_TAG, 'activatePreviousCandidate rejected: busy');
-      return;
-    }
-    if (this.swipePersistenceService === null || this.currentChatId === undefined) {
-      return;
-    }
-    const summary: MessageSwipeSummary | undefined = this.getSummaryForMessage(assistantMessageId);
-    if (summary === undefined) {
-      return;
-    }
-    const newIndex: number = summary.activeCandidateIndex - 1;
-    if (newIndex < 0) {
-      return;
-    }
-    await this.doActivateCandidate(assistantMessageId, newIndex);
+    return this.swipeController.activatePreviousCandidate(assistantMessageId);
   }
 
-  /**
-   * 激活下一个候选。
-   * T-6.3: 与生成 / session op / 其他 swipe 操作互斥(swipeOperationInProgress)。
-   * 仅更新 updatedAt(不修改 lastMessageAt),避免会话反复置顶。
-   */
+  /** 激活下一个候选(委托 ChatSwipeController)。 */
   async activateNextCandidate(assistantMessageId: string): Promise<void> {
-    if (!this.canOperateSwipe(assistantMessageId)) {
-      return;
-    }
-    if (this.isBusy()) {
-      Logger.warn(LOG_TAG, 'activateNextCandidate rejected: busy');
-      return;
-    }
-    if (this.swipePersistenceService === null || this.currentChatId === undefined) {
-      return;
-    }
-    const summary: MessageSwipeSummary | undefined = this.getSummaryForMessage(assistantMessageId);
-    if (summary === undefined) {
-      return;
-    }
-    const newIndex: number = summary.activeCandidateIndex + 1;
-    if (newIndex >= summary.candidateCount) {
-      return;
-    }
-    await this.doActivateCandidate(assistantMessageId, newIndex);
+    return this.swipeController.activateNextCandidate(assistantMessageId);
   }
 
-  /**
-   * 激活指定索引的候选(开场白选择等场景的显式索引切换)。
-   * 语义同 activateNextCandidate,但允许任意合法索引(含回绕到 Candidate 0)。
-   * 索引越界时安全回退到 Candidate 0。
-   */
+  /** 激活指定索引的候选(开场白选择等显式索引切换;委托 ChatSwipeController)。 */
   async activateCandidateIndex(assistantMessageId: string, index: number): Promise<void> {
-    if (!this.canOperateSwipe(assistantMessageId)) {
-      return;
-    }
-    if (this.isBusy()) {
-      Logger.warn(LOG_TAG, 'activateCandidateIndex rejected: busy');
-      return;
-    }
-    if (this.swipePersistenceService === null || this.currentChatId === undefined) {
-      return;
-    }
-    const summary: MessageSwipeSummary | undefined = this.getSummaryForMessage(assistantMessageId);
-    if (summary === undefined) {
-      return;
-    }
-    const target: number =
-      index >= 0 && index < summary.candidateCount ? index : 0;
-    if (target === summary.activeCandidateIndex) {
-      return;
-    }
-    await this.doActivateCandidate(assistantMessageId, target);
+    return this.swipeController.activateCandidateIndex(assistantMessageId, index);
   }
 
   /**
@@ -3732,16 +3656,9 @@ export class ChatService {
 
   // ===== Swipe 内部辅助方法 =====
 
-  /**
-   * 获取指定消息的 Swipe 摘要。
-   */
+  /** 获取指定消息的 Swipe 摘要(委托 ChatSwipeController)。 */
   private getSummaryForMessage(messageId: string): MessageSwipeSummary | undefined {
-    for (let i = 0; i < this.swipeSummaries.length; i++) {
-      if (this.swipeSummaries[i].assistantMessageId === messageId) {
-        return this.swipeSummaries[i];
-      }
-    }
-    return undefined;
+    return this.swipeController.getSummaryForMessage(messageId);
   }
 
   /**
