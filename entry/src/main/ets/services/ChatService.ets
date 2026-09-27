@@ -4534,28 +4534,7 @@ export class ChatService {
       }
     }
 
-    if (anchoredInserts.length === 0 && headBlocks.length === 0) {
-      return result;
-    }
-
-    // 头部块:逆序 unshift,最终按 addedAt 正序排列在窗口最前
-    for (let i = headBlocks.length - 1; i >= 0; i--) {
-      result.unshift(headBlocks[i]);
-    }
-    // 锚点块:按 insertAfter 降序稳定排序后逆序 splice,
-    // 同锚点时后加入的先插入,先加入的排在前面(保持 addedAt 顺序)
-    anchoredInserts.sort((a: OnDemandInsert, b: OnDemandInsert): number =>
-      b.insertAfter - a.insertAfter
-    );
-    for (let i = anchoredInserts.length - 1; i >= 0; i--) {
-      const insert: OnDemandInsert = anchoredInserts[i];
-      result.splice(insert.insertAfter + 1, 0, insert.message);
-    }
-    if (anchoredInserts.length > 0 || headBlocks.length > 0) {
-      Logger.info(LOG_TAG, 'on-demand memory injected anchored=' + anchoredInserts.length
-        + ' head=' + headBlocks.length);
-    }
-    return result;
+    return this.applyAnchoredInserts(result, anchoredInserts, headBlocks, 'on-demand memory injected');
   }
 
   /**
@@ -4607,10 +4586,25 @@ export class ChatService {
       }
     }
 
+    return this.applyAnchoredInserts(result, anchoredInserts, headBlocks, 'sticky lorebook injected');
+  }
+
+  /**
+   * 锚点插入公共尾部:头部块逆序 unshift + 锚点块按 insertAfter 降序逆序 splice。
+   * injectOnDemandMemories / injectStickyLorebookEntries 共用(同一套锚点插入机制)。
+   * @param result 已复制的消息数组(调用方已 slice,索引均基于原窗口计算)。
+   * @param logTag 注入日志前缀(区分来源:on-demand / sticky)。
+   */
+  private applyAnchoredInserts(
+    result: ChatMessage[],
+    anchoredInserts: OnDemandInsert[],
+    headBlocks: ChatMessage[],
+    logTag: string
+  ): ChatMessage[] {
     if (anchoredInserts.length === 0 && headBlocks.length === 0) {
       return result;
     }
-    // 头部块:逆序 unshift,最终按 entryIds 顺序排在窗口最前
+    // 头部块:逆序 unshift,最终按添加顺序排在窗口最前
     for (let i = headBlocks.length - 1; i >= 0; i--) {
       result.unshift(headBlocks[i]);
     }
@@ -4622,7 +4616,7 @@ export class ChatService {
       const insert: OnDemandInsert = anchoredInserts[i];
       result.splice(insert.insertAfter + 1, 0, insert.message);
     }
-    Logger.info(LOG_TAG, 'sticky lorebook injected anchored=' + anchoredInserts.length
+    Logger.info(LOG_TAG, logTag + ' anchored=' + anchoredInserts.length
       + ' head=' + headBlocks.length);
     return result;
   }
