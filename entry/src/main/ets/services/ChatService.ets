@@ -115,6 +115,7 @@ import { ChatRequestBuilder, ChatRequestBuilderDeps, ChatRequestHost } from './C
 import { ChatOneShotGenerator, ChatOneShotDeps, ChatOneShotHost } from './ChatOneShotGenerator';
 import { ChatStatusService, ChatStatusDeps, ChatStatusHost } from './ChatStatusService';
 import { ChatSwipeController, ChatSwipeDeps, ChatSwipeHost } from './ChatSwipeController';
+import { ConversationBranchService, ConversationBranchDeps, ConversationBranchHost } from './ConversationBranchService';
 import {
   GLOBAL_USER_NAME_KEY,
   LOREBOOK_ACTIVATION_DEFAULT_PREFS_KEY,
@@ -290,6 +291,8 @@ export class ChatService {
   private readonly statusService: ChatStatusService;
   /** Swipe 浏览/切换簇(P2-4a:自本类抽离,状态仍在本类,经宿主回调读写) */
   private readonly swipeController: ChatSwipeController;
+  /** Branch 查询/判定门面(P2-5:自本类抽离,状态仍在本类,经宿主回调读写) */
+  private readonly branchService: ConversationBranchService;
 
   constructor(
     modelService: ModelService,
@@ -486,6 +489,32 @@ export class ChatService {
         this.doStream(assistantId, callbacks, context)
     };
     this.swipeController = new ChatSwipeController(swipeDeps, swipeHost);
+
+    const branchDeps: ConversationBranchDeps = {
+      branchPersistenceService: this.branchPersistenceService
+    };
+    const branchHost: ConversationBranchHost = {
+      isDisposed: (): boolean => this.disposed,
+      isBusy: (): boolean => this.isBusy(),
+      getCurrentChatId: (): string | undefined => this.currentChatId,
+      getCurrentAssistantId: (): string | null => this.currentAssistantId,
+      getMessages: (): ChatMessage[] => this.messages,
+      findMessageById: (id: string): ChatMessage | undefined => this.findMessageById(id),
+      getBranches: (): ConversationBranchSummary[] => this.branches,
+      setBranches: (branches: ConversationBranchSummary[]): void => {
+        this.branches = branches;
+      },
+      getActiveBranchId: (): string => this.activeBranchId,
+      setActiveBranchId: (branchId: string): void => {
+        this.activeBranchId = branchId;
+      },
+      getRecordCounts: (): ConversationRecordCounts | undefined => this.recordCounts,
+      setRecordCounts: (counts: ConversationRecordCounts | undefined): void => {
+        this.recordCounts = counts;
+      },
+      getBranchOperationInProgress: (): boolean => this.branchOperationInProgress
+    };
+    this.branchService = new ConversationBranchService(branchDeps, branchHost);
   }
 
   /**
@@ -3563,111 +3592,36 @@ export class ChatService {
     }
   }
 
-  // ===== T-6.4B-1 Branch 公开方法 =====
+  // ===== T-6.4B-1 Branch 公开方法(查询与判定已抽至 services/ConversationBranchService,P2-5) =====
 
-  /**
-   * 获取 Branch 列表(副本)。
-   */
+  /** 获取 Branch 列表(副本;委托 ConversationBranchService)。 */
   getBranches(): ConversationBranchSummary[] {
-    return this.branches.slice();
+    return this.branchService.getBranches();
   }
 
-  /**
-   * 获取当前活动 Branch ID。
-   */
+  /** 获取当前活动 Branch ID(委托 ConversationBranchService)。 */
   getActiveBranchId(): string {
-    return this.activeBranchId;
+    return this.branchService.getActiveBranchId();
   }
 
-  /**
-   * 获取 Branch 记录数量统计。
-   */
+  /** 获取 Branch 记录数量统计(委托 ConversationBranchService)。 */
   getRecordCounts(): ConversationRecordCounts | undefined {
-    return this.recordCounts;
+    return this.branchService.getRecordCounts();
   }
 
-  /**
-   * 是否正在执行 Branch 操作(创建 Child / 切换)。
-   */
+  /** 是否正在执行 Branch 操作(创建 Child / 切换;委托 ConversationBranchService)。 */
   isBranchOperating(): boolean {
-    return this.branchOperationInProgress;
+    return this.branchService.isBranchOperating();
   }
 
-  /**
-   * 判断指定 Assistant 消息是否可"从此处继续"创建 Child Branch。
-   *
-   * 条件:
-   * - 未处于忙碌状态
-   * - branchPersistenceService 可用
-   * - role = Assistant
-   * - source = Conversation 或 undefined(兼容)
-   * - 不是 CharacterFirstMessage
-   * - status = Completed
-   * - 不是当前正在生成的消息
-   * - 位于当前 messages 列表中
-   */
+  /** 判断指定 Assistant 消息是否可"从此处继续"创建 Child Branch(委托 ConversationBranchService)。 */
   canContinueFromAssistant(messageId: string): boolean {
-    if (this.isBusy()) {
-      return false;
-    }
-    if (this.branchPersistenceService === null) {
-      return false;
-    }
-    if (messageId.length === 0) {
-      return false;
-    }
-    if (this.currentAssistantId !== null && this.currentAssistantId === messageId) {
-      return false;
-    }
-    const msg: ChatMessage | undefined = this.findMessageById(messageId);
-    if (msg === undefined) {
-      return false;
-    }
-    if (msg.role !== ChatRole.Assistant) {
-      return false;
-    }
-    if (msg.source === ChatMessageSource.CharacterFirstMessage) {
-      return false;
-    }
-    if (msg.source !== undefined && msg.source !== ChatMessageSource.Conversation) {
-      return false;
-    }
-    if (msg.status !== ChatMessageStatus.Completed) {
-      return false;
-    }
-    return true;
+    return this.branchService.canContinueFromAssistant(messageId);
   }
 
-  /**
-   * 刷新 Branch 状态(branches / activeBranchId / recordCounts)。
-   * 在 initializeSession 完成后以及 Branch 操作后调用。
-   * 失败不抛异常,仅记录 warning。
-   */
+  /** 刷新 Branch 状态(branches / activeBranchId / recordCounts;委托 ConversationBranchService)。 */
   async refreshBranchState(): Promise<void> {
-    if (this.disposed) {
-      return;
-    }
-    if (this.branchPersistenceService === null) {
-      return;
-    }
-    if (this.currentChatId === undefined) {
-      return;
-    }
-    try {
-      const chatId: string = this.currentChatId;
-      const branches: ConversationBranchSummary[] =
-        await this.branchPersistenceService.listBranches(chatId);
-      const activeBranch: ConversationBranch | null =
-        await this.branchPersistenceService.getActiveBranch(chatId);
-      const counts: ConversationRecordCounts =
-        await this.branchPersistenceService.getRecordCounts(chatId);
-      this.branches = branches;
-      this.activeBranchId = activeBranch !== null ? activeBranch.id : '';
-      this.recordCounts = counts;
-    } catch (e) {
-      Logger.warn(LOG_TAG, 'refreshBranchState failed: '
-        + (e instanceof Error ? e.message : String(e)));
-    }
+    return this.branchService.refreshBranchState();
   }
 
   /**
@@ -3761,104 +3715,14 @@ export class ChatService {
     }
   }
 
-  /**
-   * T-6.4B-2: 判断指定 User 消息是否可"从此处生成新回复"创建 Branch。
-   *
-   * 条件:
-   * - 未处于忙碌状态
-   * - branchPersistenceService 可用
-   * - role = User
-   * - status = Completed(或 undefined,兼容旧数据)
-   * - 不是当前正在生成的消息(currentAssistantId 只可能是 Assistant,User 永远不匹配)
-   * - 位于当前 messages 列表中(即位于当前 Active Branch)
-   * - 该 User 消息之后存在 Assistant 回复或后续消息(即不是最新一条尚未生成回复的 User)
-   *   通过 indexOf(msg) < messages.length - 1 判断
-   */
+  /** 判断指定 User 消息是否可"从此处生成新回复"创建 Branch(委托 ConversationBranchService)。 */
   canGenerateFromUserMessage(messageId: string): boolean {
-    if (this.isBusy()) {
-      return false;
-    }
-    if (this.branchPersistenceService === null) {
-      return false;
-    }
-    if (messageId.length === 0) {
-      return false;
-    }
-    const msg: ChatMessage | undefined = this.findMessageById(messageId);
-    if (msg === undefined) {
-      return false;
-    }
-    if (msg.role !== ChatRole.User) {
-      return false;
-    }
-    if (msg.status !== undefined && msg.status !== ChatMessageStatus.Completed) {
-      return false;
-    }
-    // 必须有后续消息(后面存在 Assistant 回复或后续历史)
-    // 最新一条尚未生成 Assistant 的 User 消息不显示该操作
-    const idx: number = this.messages.indexOf(msg);
-    if (idx < 0 || idx >= this.messages.length - 1) {
-      return false;
-    }
-    return true;
+    return this.branchService.canGenerateFromUserMessage(messageId);
   }
 
-  /**
-   * T-6.4B-3: 判断指定历史 Assistant 消息是否可"重新生成此回复"。
-   *
-   * 条件:
-   * - 未处于忙碌状态
-   * - branchPersistenceService 可用
-   * - role = Assistant
-   * - source = Conversation 或 undefined(兼容旧数据)
-   * - status = Completed
-   * - 不是 CharacterFirstMessage
-   * - 不是当前正在生成的消息(currentAssistantId)
-   * - 位于当前 messages 列表中(即位于当前 Active Branch)
-   * - 前面存在对应的 User 消息(基于当前 Branch 有序路径向前查找)
-   */
+  /** 判断指定历史 Assistant 消息是否可"重新生成此回复"(委托 ConversationBranchService)。 */
   canRegenerateAssistantMessage(messageId: string): boolean {
-    if (this.isBusy()) {
-      return false;
-    }
-    if (this.branchPersistenceService === null) {
-      return false;
-    }
-    if (messageId.length === 0) {
-      return false;
-    }
-    if (this.currentAssistantId !== null && this.currentAssistantId === messageId) {
-      return false;
-    }
-    const msg: ChatMessage | undefined = this.findMessageById(messageId);
-    if (msg === undefined) {
-      return false;
-    }
-    if (msg.role !== ChatRole.Assistant) {
-      return false;
-    }
-    if (msg.source === ChatMessageSource.CharacterFirstMessage) {
-      return false;
-    }
-    if (msg.source !== undefined && msg.source !== ChatMessageSource.Conversation) {
-      return false;
-    }
-    if (msg.status !== ChatMessageStatus.Completed) {
-      return false;
-    }
-    // 基于当前 Active Branch 有序路径向前查找最近的 User
-    const idx: number = this.messages.indexOf(msg);
-    if (idx <= 0) {
-      return false;
-    }
-    let hasPrevUser: boolean = false;
-    for (let i = idx - 1; i >= 0; i--) {
-      if (this.messages[i].role === ChatRole.User) {
-        hasPrevUser = true;
-        break;
-      }
-    }
-    return hasPrevUser;
+    return this.branchService.canRegenerateAssistantMessage(messageId);
   }
 
   /**
@@ -4029,52 +3893,9 @@ export class ChatService {
     );
   }
 
-  /**
-   * T-6.4B-3.1: 判断指定历史 User 消息是否可"编辑"。
-   *
-   * 条件:
-   * - 未处于忙碌状态
-   * - branchPersistenceService 可用
-   * - role = User
-   * - status = Completed 或 undefined(兼容旧数据)
-   * - content 非空
-   * - 位于当前 messages 列表中(即位于当前 Active Branch)
-   * - 后面存在消息(目标 User 不是最新一条)
-   * - 前面存在消息(目标 User 不是第一条,有 anchor)
-   */
+  /** 判断指定历史 User 消息是否可"编辑"(委托 ConversationBranchService)。 */
   canEditUserMessage(messageId: string): boolean {
-    if (this.isBusy()) {
-      return false;
-    }
-    if (this.branchPersistenceService === null) {
-      return false;
-    }
-    if (messageId.length === 0) {
-      return false;
-    }
-    const msg: ChatMessage | undefined = this.findMessageById(messageId);
-    if (msg === undefined) {
-      return false;
-    }
-    if (msg.role !== ChatRole.User) {
-      return false;
-    }
-    if (msg.status !== undefined && msg.status !== ChatMessageStatus.Completed) {
-      return false;
-    }
-    if (msg.content.length === 0) {
-      return false;
-    }
-    const idx: number = this.messages.indexOf(msg);
-    if (idx <= 0) {
-      // idx <= 0:第一条消息无 anchor,或不在列表
-      return false;
-    }
-    if (idx >= this.messages.length - 1) {
-      // 最新一条 User(后面无消息),不可编辑
-      return false;
-    }
-    return true;
+    return this.branchService.canEditUserMessage(messageId);
   }
 
   /**
