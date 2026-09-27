@@ -117,7 +117,10 @@
   - 5 处调用点改走 `this.promptBuilder.xxx(`；6 个原 private 因跨类调用改 public；`formatMessages` 被 `generateSessionMemory` 直用（L1279）保持可达
   - **教训（ArkTS 红线）**：ArkTS **禁止结构类型**（`arkts-no-structural-typing`）—— 首次尝试用「局部窄接口 `ChapterPromptConfig` 接收 `ChapterTriggerConfig`」编译失败 → 改为把 `ChapterTriggerConfig` + `DEFAULT_CHAPTER_TRIGGER` 下沉 `models/ChatMemory.ets`（与既有 `MemoryTriggerConfig` 同域），`AppServices` 改从 models 导入；**接口参数必须精确类型匹配，不可依赖结构兼容**
   - 校验：搬运体逐行等价（**6/6 DIFF=0**）；MemoryService 公开 API 面 **63 → 63 零差异**；编译 BUILD SUCCESSFUL；单测 **96/96**；**MemoryService 1,953 → 1,664 行**（-289）；`ChatMemory` 类型下沉零行为影响
-- [ ] **② `WorldMemoryStore`**（v44 世界级手工记忆与关键词召回）
+- [x] **② `WorldMemoryStore`（v44 世界级手工记忆与关键词召回）** ✅：新增 `services/WorldMemoryStore.ets`，8 方法**逐字搬出**（`addWorldMemory` 23 行 / `updateWorldMemory` 3 / `removeWorldMemory` 3 / `listWorldMemories` 3 / `retrieveKeywordMemories` 33 / `parseMemoryKeywords` 21 / `matchMemoryKeywords` 18 / `isAsciiOnly` 8）
+  - 依赖 `MemoryPersistenceService` 构造期注入（字段同名 → **8/8 DIFF=0**）；无可变状态，无需宿主回调；5 个公开方法保留薄包装 → 公开 API 面零差异
+  - **边界决策**：`listWorldSessions`（会话记忆去重列表）依赖加载簇的 `dedupeWorldSessionMemories`（该私有方法被 `resolveWorldSessionMemories` 共用），**保留在 MemoryService**，避免跨簇依赖
+  - 校验：搬运体逐行等价（**8/8 DIFF=0**）；MemoryService 真实类成员 API 面 **49 → 49 零差异**（注：此前口径 63 含 14 行顶层接口/常量的缩进行，属误计，已澄清）；编译 BUILD SUCCESSFUL；**MemoryService 1,664 → 1,580 行**（P3-2 累计 1,953 → 1,580，-373）
 - [ ] **③ `MemoryTriggerPolicy`**（触发检查：shouldTriggerSummary / shouldGenerateChapter / resolveArchivedPosition / 阈值配置）
 - [ ] **旧兼容 API 死代码核实**（审计 L249/273/657 附近，行号已过期；P1-1 已删 `getEffectiveMemory`/`getInjectionContext`，`trySummarize` 已复核保留）
 
