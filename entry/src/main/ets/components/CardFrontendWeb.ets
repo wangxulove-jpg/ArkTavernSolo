@@ -7,7 +7,8 @@
  * window.arktavernPush.dispatch(json)。
  *
  * 设计:
- * - vm 为 ChatViewModel 引用(普通属性,父子共享同一实例),bridge 由本组件自建
+ * - host 为宿主契约(FrontendCardHost)引用(普通属性,父子共享同一实例;
+ *   页面直接传入 ChatViewModel),bridge 由本组件自建
  * - html 为提取出的完整 HTML 字符串
  * - 关键加载:loadData(rawHtml,'text/html','utf-8','data:','data:') 在首次 about:blank
  *   onPageEnd 时触发(Web 引擎就绪),规避 loadUrl URL 长度限制与 LoadWithData 缺陷(见 FrontendCardPage)
@@ -18,9 +19,9 @@
 import { webview } from '@kit.ArkWeb';
 import {
   CardFrontendBridge,
+  FrontendCardHost,
   FrontendCardCharacterInfo
 } from '../bridge/CardFrontendBridge';
-import { ChatViewModel } from '../viewmodels/ChatViewModel';
 import { Character } from '../models/Character';
 import { ChatMessage } from '../models/ChatMessage';
 import { ThemePalette } from '../theme/ThemePalette';
@@ -44,8 +45,8 @@ const BRIDGE_READY_PROBE: string =
 
 @Component
 export struct CardFrontendWeb {
-  /** 当前会话 ViewModel(对象引用,父子共享)。页面 JS 的 Bridge 由本组件自建 */
-  vm: ChatViewModel | null = null;
+  /** 宿主契约引用(对象引用,父子共享,页面直接传 ChatViewModel)。页面 JS 的 Bridge 由本组件自建 */
+  host: FrontendCardHost | null = null;
   /** 要渲染的完整 HTML(extensions.arktavern.frontend 内容) */
   html: string = '';
   /**
@@ -98,7 +99,7 @@ export struct CardFrontendWeb {
     }
   }
 
-  /** 基于当前 vm 的角色卡构建 Bridge(每次进入重建,确保订阅与会话绑定) */
+  /** 基于当前 host 的角色卡构建 Bridge(每次进入重建,确保订阅与会话绑定) */
   private setupBridge(): void {
     this.disposed = false;
     this.pageReady = false;
@@ -107,8 +108,8 @@ export struct CardFrontendWeb {
     this.isLoading = true;
     this.loadError = '';
     const character: Character | null =
-      this.vm !== null ? this.vm!.currentCharacter : null;
-    if (this.vm === null || character === null || this.html.trim().length === 0) {
+      this.host !== null ? this.host!.currentCharacter : null;
+    if (this.host === null || character === null || this.html.trim().length === 0) {
       this.loadError = '该角色卡没有可用的前端界面';
       this.isLoading = false;
       return;
@@ -121,7 +122,7 @@ export struct CardFrontendWeb {
       systemPrompt: character.systemPrompt
     };
     const bridge: CardFrontendBridge = new CardFrontendBridge(
-      this.vm!, info, (msg: string): void => { /* 调试日志静默 */ }
+      this.host!, info, (msg: string): void => { /* 调试日志静默 */ }
     );
     bridge.pushFunc = (json: string): void => {
       this.pushToPage(json);
@@ -194,19 +195,19 @@ export struct CardFrontendWeb {
 
   /** 推送一次初始快照(schema + status + 消息),保证页面打开即有数据 */
   private pushInitialSnapshot(): void {
-    const vm: ChatViewModel | null = this.vm;
-    if (vm === null) {
+    const host: FrontendCardHost | null = this.host;
+    if (host === null) {
       return;
     }
     // 先推送声明式 Schema 快照(页面可据此重绘状态表单);无声明则为空数组
-    const schemaData: Object = JSON.parse(vm.statusSchemaJson());
+    const schemaData: Object = JSON.parse(host.statusSchemaJson());
     const schemaEvent: PushSnapshotEvent = { kind: 'schema_update', data: schemaData };
     this.pushToPage(JSON.stringify(schemaEvent));
-    const statusData: Object = vm.statusState.entries;
+    const statusData: Object = host.statusState.entries;
     const statusEvent: PushSnapshotEvent = { kind: 'status_update', data: statusData };
     this.pushToPage(JSON.stringify(statusEvent));
     let lastAssistant: string = '';
-    const msgs: ChatMessage[] = vm.messages;
+    const msgs: ChatMessage[] = host.messages;
     for (let i = msgs.length - 1; i >= 0; i--) {
       if (msgs[i].role === 'assistant') {
         lastAssistant = msgs[i].content;
@@ -214,7 +215,7 @@ export struct CardFrontendWeb {
       }
     }
     const msgData: MessageSnapshotData = {
-      generating: vm.isGenerating,
+      generating: host.isGenerating,
       lastAssistant: lastAssistant,
       messageCount: msgs.length
     };

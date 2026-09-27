@@ -31,7 +31,7 @@ struct FrontendCardPage {
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   @StorageProp('effectiveTheme') effectiveTheme: string = 'dark';
 
-  /** 传给 CardFrontendWeb 的引用(普通属性,非状态) */
+  /** 传给 CardFrontendWeb 的宿主引用(普通属性,非状态;结构上满足 FrontendCardHost) */
   private vmRef: ChatViewModel | null = null;
   private frontendHtml: string = '';
   /** 是否隐藏 App 顶栏(卡声明 chrome:'none' → 沉浸) */
@@ -98,7 +98,7 @@ struct FrontendCardPage {
       // 主体
       if (this.vmRef !== null && this.frontendHtml.trim().length > 0) {
         CardFrontendWeb({
-          vm: this.vmRef,
+          host: this.vmRef,
           html: this.frontendHtml,
           onClose: (): void => {
             this.goBack();

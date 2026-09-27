@@ -11,7 +11,8 @@
  * 设计约束:
  * - 普通 class,不依赖 ArkUI,可由 FrontendCardPage 注入 pushFunc 与 logger
  * - 所有 JS 可调方法只返回同步字符串(避免 JS proxy 对异步返回值的不确定支持)
- * - 不持有 @State;通过 ChatViewModel 的多订阅(subscribeMessages/subscribeStatus)接收更新
+ * - 不持有 @State;通过宿主契约(FrontendCardHost,页面传入 ChatViewModel)的多订阅
+ *   (subscribeMessages/subscribeStatus)接收更新
  * - 与 ChatPage 的原生回调(onMessagesUpdate 等)并存,不互相覆盖
  *
  * 版本历史:
@@ -20,10 +21,10 @@
  *      message_update.messageCount(计数对齐用);frontend.chrome 支持 'none' 沉浸
  */
 
-import { ChatViewModel } from '../viewmodels/ChatViewModel';
 import { ChatMessage } from '../models/ChatMessage';
 import { ChatRole } from '../models/ChatRole';
 import { ChatStatusState } from '../models/ChatStatusState';
+import { Character } from '../models/Character';
 
 /** Bridge 提供给页面的契约版本号(v3: 新增 appendInteraction;v1/v2 能力全保留) */
 const BRIDGE_VERSION: string = '3';
@@ -191,8 +192,49 @@ interface MessageUpdateData {
   messageCount: number;
 }
 
+/**
+ * 角色卡前端页面(全屏页 / 聊天页面板)所需的宿主契约。
+ *
+ * 目的:components 与 bridge 不直接依赖 viewmodels 层,只依赖本契约;
+ * 页面把会话对象直接作为 host 传入(ChatViewModel 结构上满足本接口,无需适配器)。
+ */
+export interface FrontendCardHost {
+  /** 当前角色卡(无角色时 null;无值时页面报"没有可用的前端界面") */
+  currentCharacter: Character | null;
+  /** 当前会话消息(按时间正序) */
+  messages: ChatMessage[];
+  /** 当前角色状态(entries 供 getState/setState/status_update 使用) */
+  statusState: ChatStatusState;
+  /** 是否正在生成(message_update 事件下发) */
+  isGenerating: boolean;
+  /** 是否忙(send 拒绝) */
+  busy: boolean;
+  /** 会话是否就绪(send 拒绝) */
+  isSessionReady: boolean;
+  /** 角色卡声明的状态 Schema JSON;无声明返回 '[]' */
+  statusSchemaJson(): string;
+  /** 订阅消息更新 */
+  subscribeMessages(listener: (messages: ChatMessage[]) => void): void;
+  /** 退订消息更新 */
+  unsubscribeMessages(listener: (messages: ChatMessage[]) => void): void;
+  /** 订阅状态更新 */
+  subscribeStatus(listener: (state: ChatStatusState) => void): void;
+  /** 退订状态更新 */
+  unsubscribeStatus(listener: (state: ChatStatusState) => void): void;
+  /** 以正常聊天链路发送一条消息(消息进入聊天气泡流) */
+  sendExternalText(text: string): Promise<boolean>;
+  /** 追加前端交互记录(不进聊天历史,随提示词段进入模型上下文) */
+  appendFrontendInteraction(text: string): boolean;
+  /** 新增状态字段 */
+  addStatusField(name: string): void;
+  /** 写入状态字段值 */
+  setStatusFieldValue(name: string, value: string): void;
+  /** 删除状态字段 */
+  removeStatusField(name: string): void;
+}
+
 export class CardFrontendBridge {
-  private readonly viewModel: ChatViewModel;
+  private readonly host: FrontendCardHost;
   private readonly characterJson: string;
   private readonly logger: (msg: string) => void;
   /** 由 FrontendCardPage 注入:向页面 JS 推送事件(字符串为 JSON 序列化后的消息) */
@@ -205,11 +247,11 @@ export class CardFrontendBridge {
   private readonly statusListener: (state: ChatStatusState) => void;
 
   constructor(
-    viewModel: ChatViewModel,
+    host: FrontendCardHost,
     characterInfo: FrontendCardCharacterInfo,
     logger: (msg: string) => void
   ) {
-    this.viewModel = viewModel;
+    this.host = host;
     this.logger = logger;
     this.characterJson = JSON.stringify(characterInfo);
     this.messageListener = (messages: ChatMessage[]): void => {
@@ -220,10 +262,10 @@ export class CardFrontendBridge {
     };
   }
 
-  /** 开始订阅 ChatViewModel 事件(页面加载完成前即可调用,事件在页面就绪后统一入队) */
+  /** 开始订阅宿主事件(页面加载完成前即可调用,事件在页面就绪后统一入队) */
   start(): void {
-    this.viewModel.subscribeMessages(this.messageListener);
-    this.viewModel.subscribeStatus(this.statusListener);
+    this.host.subscribeMessages(this.messageListener);
+    this.host.subscribeStatus(this.statusListener);
   }
 
   /** 停止订阅并清理引用(页面退出时调用) */
@@ -232,8 +274,8 @@ export class CardFrontendBridge {
       return;
     }
     this.disposed = true;
-    this.viewModel.unsubscribeMessages(this.messageListener);
-    this.viewModel.unsubscribeStatus(this.statusListener);
+    this.host.unsubscribeMessages(this.messageListener);
+    this.host.unsubscribeStatus(this.statusListener);
     this.pushFunc = null;
     this.closeHandler = null;
   }
@@ -247,12 +289,12 @@ export class CardFrontendBridge {
 
   /** 返回当前角色状态字段数组 JSON,如 [{name,value,fromUser,locked}, ...] */
   getState(): string {
-    return JSON.stringify(this.viewModel.statusState.entries);
+    return JSON.stringify(this.host.statusState.entries);
   }
 
   /** 返回角色卡声明的状态 Schema JSON:[{name,desc,type,locked}, ...];无声明返回 '[]' */
   getStatusSchema(): string {
-    return this.viewModel.statusSchemaJson();
+    return this.host.statusSchemaJson();
   }
 
   /**
@@ -267,7 +309,7 @@ export class CardFrontendBridge {
     if (trimmedName.length === 0) {
       return 'invalid';
     }
-    const entries = this.viewModel.statusState.entries;
+    const entries = this.host.statusState.entries;
     let exists: boolean = false;
     for (let i = 0; i < entries.length; i++) {
       if (entries[i].name === trimmedName) {
@@ -277,14 +319,14 @@ export class CardFrontendBridge {
     }
     if (exists) {
       if (value.trim().length === 0) {
-        this.viewModel.removeStatusField(trimmedName);
+        this.host.removeStatusField(trimmedName);
       } else {
-        this.viewModel.setStatusFieldValue(trimmedName, value);
+        this.host.setStatusFieldValue(trimmedName, value);
       }
     } else {
       if (value.trim().length > 0) {
-        this.viewModel.addStatusField(trimmedName);
-        this.viewModel.setStatusFieldValue(trimmedName, value);
+        this.host.addStatusField(trimmedName);
+        this.host.setStatusFieldValue(trimmedName, value);
       }
     }
     this.logger('setState: ' + trimmedName + ' = ' + value);
@@ -306,7 +348,7 @@ export class CardFrontendBridge {
     if (this.disposed) {
       return '[]';
     }
-    return buildMessagesJson(this.viewModel.messages, limit);
+    return buildMessagesJson(this.host.messages, limit);
   }
 
   /**
@@ -321,12 +363,12 @@ export class CardFrontendBridge {
     if (trimmed.length === 0) {
       return 'empty';
     }
-    if (this.viewModel.busy || !this.viewModel.isSessionReady) {
-      this.logger('send blocked: busy=' + this.viewModel.busy.toString()
-        + ' ready=' + this.viewModel.isSessionReady.toString());
+    if (this.host.busy || !this.host.isSessionReady) {
+      this.logger('send blocked: busy=' + this.host.busy.toString()
+        + ' ready=' + this.host.isSessionReady.toString());
       return 'busy';
     }
-    void this.viewModel.sendExternalText(trimmed);
+    void this.host.sendExternalText(trimmed);
     this.logger('send ok: ' + (trimmed.length > 32 ? trimmed.substring(0, 32) + '…' : trimmed));
     return 'ok';
   }
@@ -353,7 +395,7 @@ export class CardFrontendBridge {
     if (trimmed.length === 0) {
       return 'empty';
     }
-    const ok: boolean = this.viewModel.appendFrontendInteraction(trimmed);
+    const ok: boolean = this.host.appendFrontendInteraction(trimmed);
     if (!ok) {
       return 'empty';
     }
@@ -375,7 +417,7 @@ export class CardFrontendBridge {
       }
     }
     const data: MessageUpdateData = {
-      generating: this.viewModel.isGenerating,
+      generating: this.host.isGenerating,
       lastAssistant: lastAssistant,
       messageCount: messages.length
     };

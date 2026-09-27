@@ -1922,7 +1922,7 @@ struct ChatPage {
             .color(ThemePalette.dividerColor(this.effectiveTheme))
 
           CardFrontendWeb({
-            vm: this.viewModel,
+            host: this.viewModel,
             html: this.frontendPanelHtml,
             active: this.frontendPanelVisible,
             onClose: (): void => {
