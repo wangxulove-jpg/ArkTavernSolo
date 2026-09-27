@@ -7,11 +7,12 @@
  * - docs/ui_reference/generated/glm_context.md 1.9 / 2.x
  *
  * 视觉结构:
- * - TopNavigation:返回 + 汉堡(打开会话列表) + 头像 + 角色名 + 更多(打开 ChatMoreMenuSheet)
+ * - TopNavigation:返回 + 预算指示 / TTS / 显示设置 / 世界书 + 更多(打开 ChatMoreMenuSheet)
  * - MessageArea:Scroll + ForEach,消息气泡由 ChatMessageBubble 渲染
  * - OptionalFloatingControls:回到底部 + 再试一次(条件渲染)
  * - InputArea:TextArea + 发送/停止按钮
- * - ConditionalOverlays:会话列表 / 更多菜单 / 消息操作菜单 / 清空确认
+ * - ConditionalOverlays:更多菜单 / 消息操作菜单 / 清空确认 / 章节开场白选择
+ *   (会话切换统一走首页"对话记录"Tab,页面内不再提供会话列表面板)
  *
  * 业务约束:
  * - 不显示无功能按钮(全屏 / 加号 / 齿轮未实现不显示)
@@ -76,19 +77,12 @@ import {
   ContextBudgetStats
 } from '../services/ContextBudgetEstimator';
 import { ForkChatMode } from '../models/ForkChatOptions';
-import { ChatSessionListPanel } from '../components/ChatSessionListPanel';
-import { Chat } from '../models/Chat';
 import { Character, resolveCharacterDisplayName } from '../models/Character';
 import { extractFrontendSpec, FrontendSpec } from '../bridge/CardFrontendBridge';
 import { CardFrontendWeb } from '../components/CardFrontendWeb';
 import { ACTIVE_CHAT_VM_KEY } from './FrontendCardPage';
 import { Persona } from '../models/Persona';
 import { Logger } from '../utils/Logger';
-import {
-  SESSION_LIST_COLLAPSED_WORLD_IDS_KEY,
-  parseCollapsedWorldIds,
-  serializeCollapsedWorldIds
-} from '../utils/SessionListCollapseState';
 import { MacroReplacer } from '../services/MacroReplacer';
 import { ThemePalette } from '../theme/ThemePalette';
 import { TtsService } from '../services/TtsService';
@@ -935,33 +929,7 @@ struct ChatPage {
       this.showClearConfirm = false;
       return true;
     }
-    if (this.viewModel !== null) {
-      if (this.viewModel!.showDeleteSessionConfirm) {
-        this.viewModel!.cancelDeleteSession();
-        return true;
-      }
-      if (this.viewModel!.showSessionList) {
-        this.viewModel!.closeSessionList();
-        return true;
-      }
-    }
     return false;
-  }
-
-  // ===== 会话列表面板:分组折叠状态持久化(面板通过回调取用) =====
-
-  /** v49: 读取分组折叠状态(无记录/读取失败返回空数组=全展开) */
-  private async fetchSessionListCollapsedIds(): Promise<string[]> {
-    const prefs = AppServices.getAppPreferences();
-    const raw: string = await prefs.getString(SESSION_LIST_COLLAPSED_WORLD_IDS_KEY, '');
-    return parseCollapsedWorldIds(raw);
-  }
-
-  /** v49: 持久化分组折叠状态(fire-and-forget) */
-  private persistSessionListCollapsedIds(ids: string[]): void {
-    const prefs = AppServices.getAppPreferences();
-    prefs.putString(SESSION_LIST_COLLAPSED_WORLD_IDS_KEY, serializeCollapsedWorldIds(ids))
-      .catch((_e: Object): void => {});
   }
 
   build() {
@@ -1323,56 +1291,6 @@ struct ChatPage {
         }
 
         // ===== 弹窗层(覆盖在最上层) =====
-        // 会话列表面板(覆盖层;组件不持有 VM,数据/动作经 @Prop + 回调传入)
-        if (this.viewModel !== null && this.viewModel!.showSessionList) {
-          ChatSessionListPanel({
-            sessions: this.viewModel!.sessions,
-            worldGroups: this.viewModel!.getWorldGroups(),
-            characterName: this.viewModel!.characterName,
-            sessionError: this.viewModel!.sessionError,
-            isLoadingSessions: this.viewModel!.isLoadingSessions,
-            canOperateSessions: this.viewModel!.canOperateSessions,
-            showDeleteSessionConfirm: this.viewModel!.showDeleteSessionConfirm,
-            isCurrentSession: (chatId: string): boolean => this.viewModel!.isCurrentSession(chatId),
-            getSessionTitle: (chat: Chat): string => this.viewModel!.getSessionTitle(chat),
-            getSessionSubtitle: (chat: Chat): string => this.viewModel!.getSessionSubtitle(chat),
-            getChapterLabel: (chatId: string): string => this.viewModel!.getChapterLabel(chatId),
-            getWorldName: (worldId: string): string => this.viewModel!.getWorldName(worldId),
-            onClose: (): void => { this.viewModel!.closeSessionList(); },
-            onCreateNewSession: (): void => { this.viewModel!.createNewSession(); },
-            onSelectSession: (chatId: string): void => { this.viewModel!.selectSession(chatId); },
-            onRequestDeleteSession: (chatId: string): void => {
-              this.viewModel!.requestDeleteSession(chatId);
-            },
-            onCancelDeleteSession: (): void => { this.viewModel!.cancelDeleteSession(); },
-            onConfirmDeleteSession: (): void => { this.viewModel!.confirmDeleteSession(); },
-            // 分组操作:返回错误消息(空=成功),面板据此弹 Toast(与旧行为一致)
-            onCreateWorldGroup: (name: string): Promise<string> => {
-              const vm: ChatViewModel = this.viewModel!;
-              return vm.createWorldGroup(name)
-                .then((ok: boolean): string => ok ? '' : vm.sessionError);
-            },
-            onRenameWorldGroup: (worldId: string, name: string): Promise<string> => {
-              const vm: ChatViewModel = this.viewModel!;
-              return vm.renameWorldGroup(worldId, name)
-                .then((ok: boolean): string => ok ? '' : vm.sessionError);
-            },
-            onDeleteWorldGroup: (worldId: string): Promise<string> => {
-              const vm: ChatViewModel = this.viewModel!;
-              return vm.deleteWorldGroup(worldId)
-                .then((ok: boolean): string => ok ? '' : vm.sessionError);
-            },
-            onMoveChatToWorld: (chatId: string, worldId: string): Promise<string> => {
-              const vm: ChatViewModel = this.viewModel!;
-              return vm.moveChatToWorld(chatId, worldId.length > 0 ? worldId : null)
-                .then((ok: boolean): string => ok ? '' : vm.sessionError);
-            },
-            fetchCollapsedWorldIds: (): Promise<string[]> => this.fetchSessionListCollapsedIds(),
-            onPersistCollapsedWorldIds: (ids: string[]): void => {
-              this.persistSessionListCollapsedIds(ids);
-            }
-          })
-        }
 
         // 更多菜单
         if (this.showMoreMenu && this.viewModel !== null) {
