@@ -63,6 +63,15 @@ $env:DEVECO_SDK_HOME = "D:\DevEco_studio\DevEco Studio\sdk"
 - `D:\DevEco_studio\Sdk`（旧版 6.0.2）会报 00303312，勿用
 - 既有告警（非阻塞，勿当新问题）：`showToast`/`back` deprecated、若干 "Function may throw exceptions"、ChatPage 一处 `@ObjectLink` 赋值警告
 
+**本地单元测试（host 侧回归，可选但建议在搬运类改动后跑一次）**：
+
+```powershell
+& "D:\DevEco_studio\DevEco Studio\tools\hvigor\bin\hvigorw.bat" test --mode module -p module=entry@default -p product=default -p buildMode=debug --no-daemon
+```
+
+- 逐用例结果落盘：`entry/.test/default/intermediates/test/coverage_data/test_result.txt`（`result=Success/Failure`）；覆盖率 HTML 在同目录 `outputs/test/reports/`
+- 覆盖纯函数层（ChatTextContract / PromptSegment 段序 / 世界书激活与粘滞 / 记忆索引 / 状态 schema / 前端契约）；**会话 / Swipe / 分支 / 流式簇不在覆盖内**，只能真机冒烟
+
 **git 纪律**：
 - 一次一个操作 → 编译验证 → 提交；失败立即 `git checkout -- <file>` 回滚，不带病继续
 - 提交信息风格：`feat/fix/refactor/chore/docs(scope): 中文描述`
@@ -154,4 +163,4 @@ docs/handover/
 - ChatService 现状：**现实下限 ≈2,350~2,400 行**（构成：构造装配 ≈450 + 公开薄包装 ≈200 + 流式核心簇 ≈900 + 核心内联辅助）；剩余仅 `updateRequestPlan` + 估算查询 ≈77 行，因预算缓存被核心读写、搬出需回环回调，ROI 为负已主动放弃；**千行级须突破"流式核心不动"（需用户显式授权）**；**下一步候选（P3，审计 §6）**：ChatViewModel 拆分 → MemoryService 拆分 → DatabaseSchema 分域
 - P2 装配范式（后续接缝直接复用）：服务依赖构造期注入；跨类状态与宿主私有能力经**函数属性**回调（`ChatRequestHost` 式）读写——读走 getter、写走 setter（`ChatOneShotHost` / `ChatStatusHost` / `ChatSwipeHost` 含 `doStream` 委托），类内同名 getter/setter/方法转发 → 搬运代码零改写、读写语义不变；自带状态的簇可将状态随类迁出（见 `ChatStatusService`）。参考实现：`entry/src/main/ets/services/` 下 `ChatRequestBuilder.ets` / `ChatOneShotGenerator.ets` / `ChatStatusService.ets` / `ChatSwipeController.ets` / `ConversationBranchService.ets`
 - 后续接缝：P2 批次（P2-1..P2-14）全部收官；P3 批次以用户拍板为准（流式核心不动）
-- 验证状态：代码改动均编译通过；真机冒烟按批次进行，清单与回滚锚点见 `docs/handover/CURRENT.md` §4；路线图见 `docs/handover/2026-09-27-audit-and-roadmap.md` §6
+- 验证状态：代码改动均编译通过（P2 全部搬运块 byte 级与原文一致）；**本地单测套件可用 `hvigorw test` 本机执行**（`entry/src/test`，16 类 / 96 用例；2026-09-27 首跑全通过，结果落盘 `entry/.test/default/intermediates/test/coverage_data/test_result.txt`）；真机冒烟按批次进行（会话/Swipe/分支/流式簇只能真机验证），清单与回滚锚点见 `docs/handover/CURRENT.md` §4；路线图见 `docs/handover/2026-09-27-audit-and-roadmap.md` §6

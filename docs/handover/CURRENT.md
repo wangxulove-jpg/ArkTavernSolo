@@ -93,7 +93,7 @@
 - 编译命令见 `AGENTS.md` §5；同一命令最多 3 次；单次约 35~45s
 - 签名配置在 `build-profile.json5`（绝对路径指向 `C:\Users\35595\.ohos\config\...`，本机有效）
 - 无 hvigorw 包装脚本，统一用全局 CLI；系统 node v24 可用
-- 测试：`entry/src/test/` 有 11 个单测文件（如 frontend_interaction、prompt_segment_order、lorebook_sticky_service）；未纳入日常验证流程，主要验证手段仍是编译 + 真机冒烟
+- 测试：`entry/src/test/` 有 11 个单测文件 / 16 个测试类 / 96 用例（如 frontend_interaction、prompt_segment_order、lorebook_sticky_service）；**已可用 `hvigorw test` 本机执行**（2026-09-27 首跑全通过；结果落盘 `entry/.test/default/intermediates/test/coverage_data/test_result.txt`）；日常验证仍以编译 + 真机冒烟为主
 
 ## 4. 待用户确认 / 关注
 
@@ -150,6 +150,7 @@
   6. 消息"计入记忆"开关（`9f13ce4`）：长按/菜单切换该条消息的 includeInMemory 并持久化（重进会话仍生效）
   7. Swipe 生成标志与分支刷新（`29f8f45`）：重新生成候选时摘要箭头的生成中状态正常；分支面板数据刷新正常
   - 回滚锚点：`29f8f45` / `9f13ce4` / `1ab7a8c` / `f0ee661` / `fa44f58`（各自独立）
+- **本轮附加验证（2026-09-27，host 侧）**：本地单元测试套件已在本机执行通过 —— `hvigorw test`（`entry/src/test`，16 个测试类 / **96 用例全部 Success，0 失败 0 忽略**；结果落盘 `entry/.test/default/intermediates/test/coverage_data/test_result.txt`）。覆盖：ChatTextContract 纯函数（前端交互缓冲 / 粘滞提醒文本 / 状态段拆分 —— P2-1、P2-3 搬运过的纯函数）、PromptSegment 段序、状态 schema 解析、世界书激活与粘滞服务、ChapterMemoryIndexer、MemoryLoadRefService、ContextBudgetEstimator、Lorebook 模式、Gemini 模型过滤、前端契约 v2；**不含**会话 / Swipe / 分支 / 流式簇（依赖 DB/网络，只能真机冒烟）。命令：`hvigorw test --mode module -p module=entry@default -p product=default -p buildMode=debug --no-daemon`
 - **已作废冒烟项**（相关代码已删除）：会话列表面板（`726efec` / `958b43b` 的面板侧）——面板与 ChatViewModel 会话列表 API 已随 P1-4 ③ 删除，不必再测
 - **需回归确认**（删除相影响面）：聊天页正常打开/发送/停止/重生成；更多菜单"新建章节(切换开场白)"创建后提示与当前会话不变；从"对话记录"Tab 点会话进入聊天页仍能切到指定会话（`pendingChatId` → `selectSession` 路径未动，但 `refreshSessions` 已移除，建议确认切换后列表/消息正常）
 - `APK-reference/`（约 100MB 反编译参考资料）暂保留，未清理
@@ -173,3 +174,4 @@
 | 2026-09-27 | P2 扩展（P2-6..P2-8） | `ChatMessageService`（01361d0）/ `ChatContextMaintenanceService`（b4fc54f）/ branch 切换与重载（bbbfcda）/ branch 生成族七碎片（e272d9b）——合计 **1,183 行逐字搬出**（均 byte 级一致）；**ChatService 4,305 → 3,315 行（累计 6,735 → 3,315，-3,420）**；每步编译通过；待真机冒烟 |
 | 2026-09-27 | P2-9（会话生命周期） | `ChatSessionService` 三段抽取：工具/查询族（cc32bfc，6 碎片 144 行）→ 初始化族（1f09346，四块 214 行）→ 操作族（891de45，五块 248 行）——合计 **606 行逐字搬出**（均 byte 级一致），清理 4 个死包装；宿主 38 项回调；`dispose` 有意留 ChatService 并已记录；**ChatService 3,315 → 2,780 行（累计 6,735 → 2,780，-3,955，-59%）**；每步编译通过；待真机冒烟 |
 | 2026-09-27 | P2-10..P2-14（收官） | ① `ChatMessageSender` 消息发起入口（fa44f58，四块 231 行，`stopGeneration` 有意留 ChatService）；② `ChatUserIdentityService` 用户称呼与 Persona（f0ee661，124 行）；③ Preset 快照迁入 `ChatRequestBuilder`（1ab7a8c，77 行 + 2 依赖，编译修正 1 处）；④ 消息记忆标记迁入 `ChatMessageService`（9f13ce4，31 行 + 宿主项收口）；⑤ `reloadCurrentSession` 迁入 `ChatSessionService`（29f8f45，15 行）——合计 **478 行逐字搬出**（均 byte 级一致）；**ChatService 2,780 → 2,413 行（累计 6,735 → 2,413，-4,322，-64%）**；**主动停止**：现实下限 ≈2,350~2,400（剩余仅 `updateRequestPlan`+估算 ≈77 行，因核心共享缓存 ROI 为负）；千行级需突破"流式核心不动"约束（待用户授权）；每步编译通过；待真机冒烟 |
+| 2026-09-27 | P2 验证（host 侧附加） | 本地单测套件执行通过：**16 类 / 96 用例全 Success，0 失败**（`hvigorw test` BUILD SUCCESSFUL；结果落盘 `entry/.test/.../coverage_data/test_result.txt`）——含 P2-1/P2-3 搬运过的 ChatTextContract 纯函数（前端交互缓冲 / 粘滞提醒 / 状态段拆分）；为 P2 搬运补一层 host 侧回归证据；会话 / Swipe / 分支 / 流式簇仍需真机冒烟（本机当前无设备连接，`hdc list targets` 为空） |
