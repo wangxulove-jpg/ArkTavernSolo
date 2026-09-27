@@ -34,7 +34,6 @@ import { ChatMessageSource } from '../models/ChatMessageSource';
 import { ChatMessageRenderState } from '../models/ChatMessageRenderState';
 import { MessageSwipeSummary, MAX_SWIPE_CANDIDATES } from '../models/MessageSwipe';
 import { HistoricalMessageEditDialog } from '../components/HistoricalMessageEditDialog';
-import { ImpersonateCandidatesPanel } from '../components/ImpersonateCandidatesPanel';
 import { ChatMessageDataSource } from '../components/ChatMessageDataSource';
 import { ChatMessageActionSheet, MessageAction } from '../components/ChatMessageActionSheet';
 import { ChatMoreMenuSheet } from '../components/ChatMoreMenuSheet';
@@ -378,6 +377,16 @@ struct ChatPage {
    * 背景图保持占满全屏不动。
    */
   @State chatContentHeightRatio: number = 1.0;
+
+  /**
+   * 新消息入场动画门控。
+   *
+   * 进入页面时消息是一次性批量插入的,若一开始就开着过渡,整个列表会集体闪入;
+   * 因此首帧先关,等首次加载/自动滚底稳定后再打开,之后只有"新插入的那条"播放入场。
+   */
+  @State messageEntranceEnabled: boolean = false;
+  /** 入场动画门控定时器(aboutToDisappear 清理) */
+  private messageEntranceTimer: number = -1;
 
   aboutToAppear(): void {
     const modelService = AppServices.getModelService();
@@ -851,9 +860,20 @@ struct ChatPage {
       // mediaquery 不可用时默认浅色模式
       this.isDarkMode = false;
     }
+
+    // 首次加载(会话恢复 + 自动滚底)稳定后再打开新消息入场动画,
+    // 否则进入页面时批量插入的历史消息会整列表集体闪入。
+    this.messageEntranceTimer = setTimeout((): void => {
+      this.messageEntranceTimer = -1;
+      this.messageEntranceEnabled = true;
+    }, 400);
   }
 
   aboutToDisappear(): void {
+    if (this.messageEntranceTimer !== -1) {
+      clearTimeout(this.messageEntranceTimer);
+      this.messageEntranceTimer = -1;
+    }
     this.unregisterKeyboardListener();
     this.unregisterGripListener();
     // 注销深色模式监听器
@@ -991,6 +1011,7 @@ struct ChatPage {
                 ttsEnabled: this.ttsService.readMode !== TtsReadMode.Off,
                 isGenerating: this.viewModel !== null && this.viewModel!.isGenerating,
                 swipeControlsAvailable: this.viewModel !== null,
+                entranceAnimationEnabled: this.messageEntranceEnabled,
                 dataSource: this.dataSource,
                 scroller: this.scroller,
                 onRequestAutoScroll: (): void => {
@@ -1182,25 +1203,6 @@ struct ChatPage {
         // margin bottom 12vp + navigationBarHeight:避开系统手势条;
         // margin left/right 12vp:与页面其他内容对齐。
         Column() {
-          if (this.viewModel !== null
-            && (this.viewModel!.impersonateCandidates.length > 0
-              || this.viewModel!.isImpersonateGenerating)) {
-            ImpersonateCandidatesPanel({
-              candidates: this.viewModel!.impersonateCandidates,
-              isGenerating: this.viewModel!.isImpersonateGenerating,
-              onSelect: (index: number): void => {
-                if (this.viewModel !== null) {
-                  this.viewModel!.selectImpersonateCandidate(index);
-                }
-              },
-              onDismiss: (): void => {
-                if (this.viewModel !== null) {
-                  this.viewModel!.dismissImpersonateCandidates();
-                }
-              }
-            })
-          }
-
           // 开场白选择箭头(新会话首条消息时显示,点击切换开场白;开始聊天后自动消失)。
           // 放在输入栏胶囊上方独立浮层,避免被胶囊背景遮挡。
           if (this.showGreetingSwitcher()) {
@@ -1222,6 +1224,11 @@ struct ChatPage {
             showAiActions: this.viewModel !== null
               && !this.viewModel!.busy && !this.viewModel!.isGenerating,
             isSendButtonOnLeft: this.isSendButtonOnLeft(),
+            impersonateCandidates: this.viewModel !== null
+              ? this.viewModel!.impersonateCandidates
+              : [],
+            isImpersonateGenerating: this.viewModel !== null
+              && this.viewModel!.isImpersonateGenerating,
             narratorModeActive: this.narratorModeActive,
             onInputChange: (value: string): void => {
               if (this.viewModel !== null) {
@@ -1236,6 +1243,16 @@ struct ChatPage {
             onAutoContinue: (): void => {
               if (this.viewModel !== null && !this.viewModel!.busy) {
                 this.viewModel!.autoContinue();
+              }
+            },
+            onSelectImpersonateCandidate: (index: number): void => {
+              if (this.viewModel !== null) {
+                this.viewModel!.selectImpersonateCandidate(index);
+              }
+            },
+            onDismissImpersonateCandidates: (): void => {
+              if (this.viewModel !== null) {
+                this.viewModel!.dismissImpersonateCandidates();
               }
             },
             onSendRequest: (): void => {

@@ -30,7 +30,7 @@
 | `ChatMoreMenuSheet` | 聊天页顶部"更多"菜单（底部） |
 | `ChatForkPicker` | "从此处创建独立对话"模式选择弹窗 |
 | `HistoricalMessageEditDialog` | 历史 User 消息编辑弹窗 |
-| `ImpersonateCandidatesPanel` | 代写候选（3 条）展示与选择 |
+| `ImpersonateCandidatesPanel` | 代写候选展示与选择（带序号、可滚动） | 自身不画底/描边，渲染在 `ChatInputArea` 胶囊内部顶部（2026-09-27 由独立浮层改入胶囊，避免材质割裂） |
 
 ### 1.3 聊天专用
 
@@ -40,7 +40,7 @@
 | `ChatMessageDataSource` | 消息列表懒加载数据源 | **>20 条列表的标准做法** |
 | `ChatMessageBubble` | 单条消息气泡 | — |
 | `ChatRichText` | 富文本渲染（含 `ChatSenderType` 渲染类型） | 改渲染类型前先读 AGENTS §7 消息三层体系 |
-| `ChatInputArea` | 聊天输入区（含发送/停止按钮） | 键盘避让由页面负责 |
+| `ChatInputArea` | 聊天输入区（含发送/停止按钮、代写候选区） | 键盘避让由页面负责；停止键为低对比描边圆钮（刻意不用高饱和红）；发送/停止切换带形变过渡 |
 | `MessageSwipeControls` | Swipe 候选切换控件 | — |
 | `ChatAppearancePanel` | 聊天显示设置面板（滑块/配色/色盘/恢复默认） | 语义色经 `@Prop`，色盘请求经 `ColorPickerRequest` 上抛 |
 | `ChatStatusWorldPanel` | 状态 / 世界书面板 | AI 区与条目启停经 `@Link` + 回调上抛 |

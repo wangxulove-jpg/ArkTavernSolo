@@ -4,13 +4,11 @@
  * 把模型、预设、分支、会话等次要入口收敛到这里,
  * 让顶部栏只保留:返回 + 角色名 + 更多按钮。
  *
- * 菜单项:
- * - 模型信息(只读显示)+ 前往模型设置
- * - 预设信息(只读显示)+ 前往预设列表
- * - 分支状态(只读显示)+ 查看分支图
- * - 会话列表
- * - 重新生成(底部 canRegenerate 时)
- * - 清空对话(危险操作,二次确认)
+ * 布局(v2,2026-09-27):
+ * - 按职责分组,每组一个分区小标题 + 一张卡片(卡内用 1px 分隔线);
+ * - 行高 52 → 44,标签宽度不再写死(此前固定 56 导致"记忆模式""本对话称呼"折成两行);
+ * - 标签统一精简到 ≤6 字,配合 maxLines(1) 保证永不折行;
+ * - 危险操作(清空对话)单独成区,不做成普通行的近邻。
  *
  * 复用 ChatViewModel 数据,不在组件内做业务操作。
  */
@@ -112,175 +110,227 @@ export struct ChatMoreMenuSheet {
   sheetContent() {
     Column() {
       Text('对话设置')
-        .fontSize($r('app.float.app_font_caption'))
-        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-        .margin({ top: 8, bottom: 8 })
+        .fontSize($r('app.float.app_font_title'))
+        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
         .width('100%')
-        .textAlign(TextAlign.Start)
+        .padding({ left: 4, top: 8, bottom: 2 })
 
-      // 模型信息
-      this.infoRow('模型', this.modelName.length > 0 ? this.modelName : '未配置', true, (): void => {
-        this.onGoModelSettings();
-      })
-
-      // 预设
-      this.infoRow('预设', this.presetName.length > 0 ? this.presetName : '未启用', true, (): void => {
-        this.onGoPresetList();
-      })
-
-      // 分支
-      if (this.branchStatusText.length > 0) {
-        this.infoRow('分支', this.branchStatusText, !this.busy, (): void => {
-          if (this.busy) {
-            return;
-          }
-          this.onGoBranchMap();
+      // ===== 模型与预设 =====
+      this.sectionCaption('模型与预设')
+      Column() {
+        this.valueRow('模型', this.modelName.length > 0 ? this.modelName : '未配置', true, false, (): void => {
+          this.onGoModelSettings();
+        })
+        this.valueRow('预设', this.presetName.length > 0 ? this.presetName : '未启用', true, true, (): void => {
+          this.onGoPresetList();
         })
       }
+      .width('100%')
+      .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+      .borderRadius($r('app.float.app_radius_md'))
 
-      Divider().color(ThemePalette.dividerColor(this.effectiveTheme)).margin({ top: 8, bottom: 8 })
-
-      // 对话设置(背景 + 思考强度)
-      this.menuRow('对话设置', this.busy, false, (): void => {
-        if (this.busy) {
-          return;
+      // ===== 分支 =====
+      if (this.branchStatusText.length > 0) {
+        this.sectionCaption('分支')
+        Column() {
+          this.valueRow('分支', this.branchStatusText, !this.busy, false, (): void => {
+            if (this.busy) {
+              return;
+            }
+            this.onGoBranchMap();
+          })
         }
-        this.onGoChatBackground();
-      })
+        .width('100%')
+        .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+        .borderRadius($r('app.float.app_radius_md'))
+      }
 
-      // 对话记忆(长期记忆摘要管理)
-      this.menuRow('对话记忆', this.busy, false, (): void => {
-        if (this.busy) {
-          return;
-        }
-        this.onGoMemory();
-      })
-
-      // v50: 记忆模式(手动总结/自动归档,会话级)
-      this.infoRow('记忆模式', this.memoryModeText, !this.busy, (): void => {
-        if (this.busy) {
-          return;
-        }
-        this.onEditMemoryMode();
-      })
-
-      // 上下文管理(预算设置 + 占用查看)
-      this.menuRow('上下文管理', this.busy, false, (): void => {
-        if (this.busy) {
-          return;
-        }
-        this.onGoContextBudget();
-      })
-
-      // 续写/代写引导(引导方向可编辑)
-      this.menuRow('续写/代写引导', this.busy, false, (): void => {
-        if (this.busy) {
-          return;
-        }
-        this.onGoAutoWriteGuide();
-      })
-
-      // 本对话称呼(v9:对话级用户称呼覆盖)
-      this.infoRow(
-        '本对话称呼',
-        this.resolvedUserName.length > 0 ? this.resolvedUserName : 'User',
-        !this.busy,
-        (): void => {
+      // ===== 对话 =====
+      this.sectionCaption('对话')
+      Column() {
+        this.menuRowInCard('对话设置', this.busy, false, false, (): void => {
           if (this.busy) {
             return;
           }
-          this.onEditUserNameOverride();
-        }
-      )
-
-      // 切换身份
-      this.infoRow(
-        '用户身份',
-        this.resolvedPersonaName.length > 0 ? this.resolvedPersonaName : '未设置',
-        !this.busy,
-        (): void => {
+          this.onGoChatBackground();
+          this.onClose();
+        })
+        this.menuRowInCard('对话记忆', this.busy, false, true, (): void => {
           if (this.busy) {
             return;
           }
-          this.onSwitchPersona();
-        }
-      )
-
-      // 新建章节(世界分组内切换开场白,仅角色聊天可用)
-      if (this.characterName.length > 0) {
-        this.menuRow('新建章节(切换开场白)', this.busy, false, (): void => {
+          this.onGoMemory();
+          this.onClose();
+        })
+        this.valueRow('记忆模式', this.memoryModeText, !this.busy, true, (): void => {
           if (this.busy) {
             return;
           }
-          this.onNewChapter();
+          this.onEditMemoryMode();
+        })
+        this.menuRowInCard('上下文管理', this.busy, false, true, (): void => {
+          if (this.busy) {
+            return;
+          }
+          this.onGoContextBudget();
+          this.onClose();
+        })
+        this.menuRowInCard('续写/代写引导', this.busy, false, true, (): void => {
+          if (this.busy) {
+            return;
+          }
+          this.onGoAutoWriteGuide();
           this.onClose();
         })
       }
+      .width('100%')
+      .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+      .borderRadius($r('app.float.app_radius_md'))
 
-      // 重新生成
-      if (this.canRegenerate) {
-        this.menuRow('重新生成', this.isGenerating, false, (): void => {
-          if (this.isGenerating) {
-            return;
+      // ===== 身份 =====
+      this.sectionCaption('身份')
+      Column() {
+        this.valueRow(
+          '对话称呼',
+          this.resolvedUserName.length > 0 ? this.resolvedUserName : 'User',
+          !this.busy,
+          false,
+          (): void => {
+            if (this.busy) {
+              return;
+            }
+            this.onEditUserNameOverride();
           }
-          this.onRegenerate();
-        })
+        )
+        this.valueRow(
+          '用户身份',
+          this.resolvedPersonaName.length > 0 ? this.resolvedPersonaName : '未设置',
+          !this.busy,
+          true,
+          (): void => {
+            if (this.busy) {
+              return;
+            }
+            this.onSwitchPersona();
+          }
+        )
+      }
+      .width('100%')
+      .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+      .borderRadius($r('app.float.app_radius_md'))
+
+      // ===== 会话(全部门槛行都不可用时整组隐藏) =====
+      if (this.characterName.length > 0 || this.canRegenerate
+        || this.currentConversationId.length > 0 || this.currentCharacterId.length > 0) {
+        this.sectionCaption('会话')
+        Column() {
+          if (this.characterName.length > 0) {
+            this.menuRowInCard('新建章节', this.busy, false, false, (): void => {
+              if (this.busy) {
+                return;
+              }
+              this.onNewChapter();
+              this.onClose();
+            })
+          }
+          if (this.canRegenerate) {
+            this.menuRowInCard('重新生成', this.isGenerating, false,
+              this.characterName.length > 0, (): void => {
+                if (this.isGenerating) {
+                  return;
+                }
+                this.onRegenerate();
+              })
+          }
+          if (this.currentConversationId.length > 0) {
+            this.menuRowInCard('导出当前聊天', this.busy, false,
+              this.characterName.length > 0 || this.canRegenerate, (): void => {
+                if (this.busy) {
+                  return;
+                }
+                this.onExportCurrentChat();
+              })
+          }
+          if (this.currentCharacterId.length > 0) {
+            this.menuRowInCard('导出全部聊天', this.busy, false,
+              this.characterName.length > 0 || this.canRegenerate
+                || this.currentConversationId.length > 0, (): void => {
+                if (this.busy) {
+                  return;
+                }
+                this.onExportCharacterChats();
+              })
+          }
+        }
+        .width('100%')
+        .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+        .borderRadius($r('app.float.app_radius_md'))
       }
 
-      Divider().color(ThemePalette.dividerColor(this.effectiveTheme)).margin({ top: 8, bottom: 8 })
-
-      // T-CHAT.1: 导出当前聊天(对话就绪时显示)
-      if (this.currentConversationId.length > 0) {
-        this.menuRow('导出当前聊天', this.busy, false, (): void => {
-          if (this.busy) {
-            return;
-          }
-          this.onExportCurrentChat();
+      // ===== 危险区 =====
+      this.sectionCaption('危险区')
+      Column() {
+        this.menuRowInCard('清空对话', this.busy, true, false, (): void => {
+          this.onClearChat();
         })
       }
-
-      // T-CHAT.1: 导出该角色全部聊天(有角色时显示)
-      if (this.currentCharacterId.length > 0) {
-        this.menuRow('导出该角色全部聊天', this.busy, false, (): void => {
-          if (this.busy) {
-            return;
-          }
-          this.onExportCharacterChats();
-        })
-      }
-
-      // 清空对话
-      this.menuRow('清空对话', this.busy, true, (): void => {
-        this.onClearChat();
-      })
+      .width('100%')
+      .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+      .borderRadius($r('app.float.app_radius_md'))
     }
     .width('100%')
+    .padding({ left: 12, right: 12, bottom: 8 })
   }
 
+  /** 分区小标题(与行内文字左对齐:卡片内边距 12 + 分组标题内边距 4) */
   @Builder
-  infoRow(label: string, value: string, enabled: boolean, onClick: () => void) {
-    Row() {
-      Text(label)
-        .fontSize($r('app.float.app_font_body'))
-        .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-        .width(56)
-      Text(value)
-        .fontSize($r('app.float.app_font_body'))
-        .fontColor(enabled
-          ? ThemePalette.textPrimaryColor(this.effectiveTheme)
-          : ThemePalette.textTertiaryColor(this.effectiveTheme))
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .layoutWeight(1)
-        .constraintSize({ minWidth: 0 })
-      Text('›')
-        .fontSize(20)
-        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+  sectionCaption(text: string) {
+    Text(text)
+      .fontSize($r('app.float.app_font_caption'))
+      .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+      .width('100%')
+      .padding({ left: 4, top: 14, bottom: 6 })
+  }
+
+  /**
+   * 值行:标签自适应宽度(不折行) + 右对齐值 + 箭头。
+   * @param showDivider 是否在行顶画分隔线(卡片内非首行传 true)
+   */
+  @Builder
+  valueRow(label: string, value: string, enabled: boolean, showDivider: boolean, onClick: () => void) {
+    Column() {
+      if (showDivider) {
+        Divider()
+          .color(ThemePalette.dividerColor(this.effectiveTheme))
+          .margin({ left: 12, right: 12 })
+      }
+      Row() {
+        Text(label)
+          .fontSize($r('app.float.app_font_body'))
+          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(value)
+          .fontSize($r('app.float.app_font_body'))
+          .fontColor(enabled
+            ? ThemePalette.textPrimaryColor(this.effectiveTheme)
+            : ThemePalette.textTertiaryColor(this.effectiveTheme))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .textAlign(TextAlign.End)
+          .layoutWeight(1)
+          .margin({ left: 12 })
+        Text('›')
+          .fontSize(18)
+          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+          .margin({ left: 4 })
+      }
+      .width('100%')
+      .height(44)
+      .padding({ left: 12, right: 12 })
+      .alignItems(VerticalAlign.Center)
     }
     .width('100%')
-    .height(52)
-    .padding({ left: 16, right: 16 })
-    .alignItems(VerticalAlign.Center)
     .onClick(() => {
       if (!enabled) {
         return;
@@ -290,20 +340,37 @@ export struct ChatMoreMenuSheet {
     })
   }
 
+  /**
+   * 卡片内菜单行(无值列,可危险色)。
+   * @param showDivider 是否在行顶画分隔线(卡片内非首行传 true)
+   */
   @Builder
-  menuRow(label: string, disabled: boolean, isDestructive: boolean, onClick: () => void) {
-    Row() {
-      Text(label)
-        .fontSize($r('app.float.app_font_body'))
-        .fontColor(isDestructive
-          ? (disabled ? ThemePalette.textTertiaryColor(this.effectiveTheme) : $r('app.color.app_danger'))
-          : (disabled ? ThemePalette.textTertiaryColor(this.effectiveTheme) : ThemePalette.textPrimaryColor(this.effectiveTheme)))
-        .layoutWeight(1)
+  menuRowInCard(label: string, disabled: boolean, isDestructive: boolean,
+    showDivider: boolean, onClick: () => void) {
+    Column() {
+      if (showDivider) {
+        Divider()
+          .color(ThemePalette.dividerColor(this.effectiveTheme))
+          .margin({ left: 12, right: 12 })
+      }
+      Row() {
+        Text(label)
+          .fontSize($r('app.float.app_font_body'))
+          .fontColor(isDestructive
+            ? (disabled ? ThemePalette.textTertiaryColor(this.effectiveTheme) : $r('app.color.app_danger'))
+            : (disabled
+              ? ThemePalette.textTertiaryColor(this.effectiveTheme)
+              : ThemePalette.textPrimaryColor(this.effectiveTheme)))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
+      }
+      .width('100%')
+      .height(44)
+      .padding({ left: 12, right: 12 })
+      .alignItems(VerticalAlign.Center)
     }
     .width('100%')
-    .height(52)
-    .padding({ left: 16, right: 16 })
-    .alignItems(VerticalAlign.Center)
     .onClick(() => {
       if (disabled) {
         return;

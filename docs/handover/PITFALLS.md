@@ -35,6 +35,8 @@
 | P-21 | 宿主契约（结构类型）里含 `private` 成员会导致结构赋值失败 | 宿主契约**仅适用于 public 成员**；需要私有能力的场景改用「构造注入 + 调用期快照字段」 |
 | P-22 | 搬运代码后**签名悄悄变了**（丢失 `async`） | P2 实测：`refreshLorebookPinNow` 薄包装时丢了 `async`（commit `36d809c` 修复）。**必须做 API 面 diff**（见 §4） |
 | P-23 | `@Builder` 参数导致状态不刷新 | VM 字段一律**新引用赋值**（`[...arr]`），确保 ArkUI 检测到变化 |
+| P-24 | 给 `LazyForEach` 的项加 `.transition()` 后，**首次进页面整个列表集体入场** | 列表首帧是一次性批量插入的，过渡会全部触发。必须做**页面侧门控**：页面持 `entranceAnimationEnabled`，进页面时先 false，等首次加载/自动滚底稳定（约 400ms 定时器）再置 true；定时器在 `aboutToDisappear` 清理。关闭态用 `TransitionEffect.IDENTITY` |
+| P-25 | `bindSheet(SheetSize.FIT_CONTENT)` 的内容加分区标题后超出可视高度 | Sheet 内容**可滚动**（拖动可到底），但**首屏看不到最后一组**（本轮给"对话设置"加分组标题后，"危险区/清空对话"落到屏外）。改完必须真机拖动确认最后一组可达，或显式压缩内容高度 |
 
 ## 3. 分层与架构
 

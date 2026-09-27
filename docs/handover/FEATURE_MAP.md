@@ -118,4 +118,4 @@ bridge/：仅承载「页面 ↔ 组件」的宿主契约（例：FrontendCardHo
 1. 本表 → `services/ChatOneShotGenerator.ets`（代写族）
 2. 看它的宿主契约 `ChatOneShotHost`（可变状态经函数属性回传）
 3. 若涉及请求内容 → `services/ChatRequestBuilder.ets`（`excludeMessageId` 路径）
-4. 若涉及界面 → `viewmodels/ChatViewModel.ets` → `components/ImpersonateCandidatesPanel.ets`
+4. 若涉及界面 → `viewmodels/ChatViewModel.ets` → `components/ChatInputArea.ets`（代写候选区就渲染在这个胶囊内部）→ `components/ImpersonateCandidatesPanel.ets`

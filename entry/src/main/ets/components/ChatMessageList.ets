@@ -49,6 +49,8 @@ export struct ChatMessageList {
   @Prop isGenerating: boolean = false;
   /** Swipe 控件可渲染(页面 viewModel 就绪) */
   @Prop swipeControlsAvailable: boolean = false;
+  /** 新消息入场动画开关(页面首帧门控:首次加载不animate,之后新插入项淡入+上移) */
+  @Prop entranceAnimationEnabled: boolean = true;
 
   /** 消息渲染状态数据源(页面持有) */
   dataSource: ChatMessageDataSource = new ChatMessageDataSource();
@@ -168,6 +170,13 @@ export struct ChatMessageList {
               }
             }
             .width('100%')
+            // 新消息入场:淡入 + 上移 220ms。首帧由页面门控关闭,避免整列表加载时集体闪入;
+            // 流式回答只在消息插入时触发一次(delta 更新不重建节点,不会重复播放)。
+            .transition(this.entranceAnimationEnabled
+              ? TransitionEffect.OPACITY
+                .animation({ duration: 220, curve: Curve.FastOutSlowIn })
+                .combine(TransitionEffect.translate({ y: 12 }))
+              : TransitionEffect.IDENTITY)
           }
         }, (state: ChatMessageRenderState) => state.messageId)
         // 底部空白占位:高度等于悬浮输入栏占用空间(输入栏 56 + bottom padding 12 + navBar 12),

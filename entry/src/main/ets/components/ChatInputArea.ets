@@ -4,9 +4,13 @@
  * 设计:组件不持有 VM/服务,依赖全部经 @Prop 值 + @Link + 回调上抛:
  * - 渲染态:inputText / canSend / canStop / showAiActions / isSendButtonOnLeft
  * - 旁白模式:narratorModeActive(@Link 双向,切换按钮直接翻转)
+ * - 代写候选:impersonateCandidates / isImpersonateGenerating(候选区渲染在胶囊内部顶部,
+ *   与输入栏共用同一模糊底,视觉上连成一块,不再另起一张描边卡片)
  * - 业务动作:全部回调上抛,由页面执行(viewModel 调用、预算校验、发送)
  */
 import { ThemePalette } from '../theme/ThemePalette';
+import { ImpersonateCandidate } from '../models/ImpersonateCandidate';
+import { ImpersonateCandidatesPanel } from './ImpersonateCandidatesPanel';
 
 @Component
 export struct ChatInputArea {
@@ -22,6 +26,10 @@ export struct ChatInputArea {
   @Prop showAiActions: boolean = false;
   /** 发送/停止按钮是否在左侧(用户偏好) */
   @Prop isSendButtonOnLeft: boolean = false;
+  /** 代写候选列表(非空或生成中时,胶囊顶部展开候选区) */
+  @Prop impersonateCandidates: ImpersonateCandidate[] = [];
+  /** 代写候选是否生成中 */
+  @Prop isImpersonateGenerating: boolean = false;
   /** 旁白模式(双向:切换按钮与发送后复位) */
   @Link narratorModeActive: boolean;
 
@@ -31,6 +39,10 @@ export struct ChatInputArea {
   onImpersonate: () => void = () => {};
   /** 续写(页面完成 busy 校验) */
   onAutoContinue: () => void = () => {};
+  /** 选中某条代写候选(页面完成 busy 校验) */
+  onSelectImpersonateCandidate: (index: number) => void = (_: number) => {};
+  /** 关闭代写候选区 */
+  onDismissImpersonateCandidates: () => void = () => {};
   /** 请求发送(提交/回车/发送按钮共用,含预算校验与旁白分支) */
   onSendRequest: () => void = () => {};
   /** 仅发旁白(旁白行 📝 按钮;无预算校验,与原逻辑一致) */
@@ -44,6 +56,24 @@ export struct ChatInputArea {
 
   build() {
     Column() {
+      // 代写候选区(与输入胶囊同底,顶部展开;与下方操作行用一条 0.5 分隔线区隔)
+      if (this.impersonateCandidates.length > 0 || this.isImpersonateGenerating) {
+        ImpersonateCandidatesPanel({
+          candidates: this.impersonateCandidates,
+          isGenerating: this.isImpersonateGenerating,
+          onSelect: (index: number): void => {
+            this.onSelectImpersonateCandidate(index);
+          },
+          onDismiss: (): void => {
+            this.onDismissImpersonateCandidates();
+          }
+        })
+
+        Divider()
+          .color(ThemePalette.dividerColor(this.effectiveTheme))
+          .margin({ left: 12, right: 12, bottom: 2 })
+      }
+
       // AI 操作按钮行(仅空闲时显示)
       if (this.showAiActions) {
         Row() {
@@ -160,19 +190,31 @@ export struct ChatInputArea {
     .padding({ left: 4, right: 4, top: 4, bottom: 4 })
   }
 
+  /**
+   * 发送/停止按钮(同一槽位,if 分支切换时按形变过渡交叉淡入)。
+   * 停止态刻意用低对比配色:描边圆钮 + 中性色方块,避免高饱和红色在暗色主题里过于跳。
+   */
   @Builder
   sendStopButton() {
     if (this.canStop) {
       Stack() {
-        SymbolGlyph($r('sys.symbol.xmark'))
-          .fontSize(16)
-          .fontColor([$r('app.color.app_on_accent')])
+        Column()
+          .width(11)
+          .height(11)
+          .borderRadius(2.5)
+          .backgroundColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
       }
-      .backgroundColor($r('app.color.app_danger'))
+      .backgroundColor(Color.Transparent)
+      .border({ width: 1, color: ThemePalette.dividerColor(this.effectiveTheme) })
       .borderRadius(20)
       .height(40)
       .width(40)
       .margin({ left: 2, right: 2 })
+      .transition(
+        TransitionEffect.OPACITY
+          .animation({ duration: 180, curve: Curve.EaseOut })
+          .combine(TransitionEffect.scale({ x: 0.85, y: 0.85 }))
+      )
       .onClick(() => {
         this.onStop();
       })
@@ -224,6 +266,11 @@ export struct ChatInputArea {
       .height(40)
       .width(40)
       .margin({ left: 2, right: 2 })
+      .transition(
+        TransitionEffect.OPACITY
+          .animation({ duration: 180, curve: Curve.EaseOut })
+          .combine(TransitionEffect.scale({ x: 0.85, y: 0.85 }))
+      )
       .onClick(() => {
         this.onSendRequest();
       })
