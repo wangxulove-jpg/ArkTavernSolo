@@ -21,7 +21,7 @@
 - [ ] **P1-3 ChatPage 组件抽取**（逐个，纯搬运不改行为）：`ChatMessageList`（messageList, L3456, ≈160 行）/ `ChatInputArea`（inputArea, L3808, ≈160 行）/ `ChatAppearancePanel`（appearanceSheetContent, L2732, ≈360 行）/ `ChatStatusWorldPanel`（L2104-2453）/ `ChatForkPicker`（L5623, ≈80 行）
 - [ ] **P1-4 会话列表去重**：`ChatSessionRootView` ↔ `ChatSessionListPanel` 近乎全量重复，合并为单组件 + 布局参数
 - [ ] **P1-5 组件越层修复**：`CardFrontendWeb`（L23）、`ChatSessionListPanel`（L25/L30）对 ChatViewModel / AppServices 的直接依赖
-- [ ] **P1-6 不可变性修复**：`deleteMessage`（L6709）/ `editNarratorMessage`（L6731）/ `editAssistantMessage`（L6763）原地改数组，且缺 `emitMessages`，与文件头"不可变更新"声明矛盾
+- [x] **P1-6 不可变性修复**（2026-09-27 完成）：`deleteMessage` / `editNarratorMessage` / `editAssistantMessage` 改为新数组整体替换；复核后**未补 `emitMessages`**——刷新契约由 ChatViewModel 承担（`[...getMessages()]` + `onMessagesUpdate`），补发会改变通知行为、超范围
 
 ## 3. 环境事实（防重复踩坑）
 
@@ -42,4 +42,4 @@
 | 日期 | 会话主题 | 产出 / 决策 |
 |---|---|---|
 | 2026-09-27 | 审计 + 文档体系重建 | 审计报告与路线图；`AGENTS.md` + `docs/handover/` 建立；`tools/`、开发截图、旧文档归档清理；决策：交接文档进版本库 |
-| 2026-09-27 | P1 批次执行 | P1-1 死代码清理 ✅；P1-2 重复逻辑消除完成（Swipe 合并 / 失败收尾 4 处 / 锚点插入 / 状态请求，4 组）✅；每步编译通过 |
+| 2026-09-27 | P1 批次执行 | P1-1 死代码清理 ✅；P1-2 重复逻辑消除完成（Swipe / 失败收尾 / 锚点插入 / 状态请求）✅；P1-6 不可变性修复 ✅；每步编译通过 |

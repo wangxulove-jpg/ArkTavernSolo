@@ -6661,8 +6661,10 @@ export class ChatService {
     if (this.persistenceService !== null) {
       await this.persistenceService.removeMessage(messageId);
     }
-    // 移除内存列表
-    this.messages.splice(idx, 1);
+    // 移除内存列表(不可变更新:构造新数组并整体替换)
+    const next: ChatMessage[] = this.messages.slice();
+    next.splice(idx, 1);
+    this.messages = next;
     if (this.currentAssistantId === messageId) {
       this.currentAssistantId = null;
     }
@@ -6684,7 +6686,10 @@ export class ChatService {
       content: editedContent,
       updatedAt: Date.now()
     });
-    this.messages[idx] = updated;
+    // 不可变更新:构造新数组并整体替换
+    const next: ChatMessage[] = this.messages.slice();
+    next[idx] = updated;
+    this.messages = next;
     if (this.persistenceService !== null && this.currentChatId !== undefined) {
       await this.persistenceService.updateMessage(messageId, updated);
     }
@@ -6716,7 +6721,10 @@ export class ChatService {
       content: editedContent,
       updatedAt: Date.now()
     });
-    this.messages[idx] = updated;
+    // 不可变更新:构造新数组并整体替换
+    const next: ChatMessage[] = this.messages.slice();
+    next[idx] = updated;
+    this.messages = next;
     if (this.persistenceService !== null && this.currentChatId !== undefined) {
       await this.persistenceService.updateMessage(messageId, updated);
     }
