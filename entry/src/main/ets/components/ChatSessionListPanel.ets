@@ -30,6 +30,7 @@
 import { Chat } from '../models/Chat';
 import { WorldGroup } from '../models/WorldGroup';
 import { ThemePalette } from '../theme/ThemePalette';
+import { isWorldCollapsed, toggleCollapsedWorldId } from '../utils/SessionListCollapseState';
 import { AppDialog } from './ui/AppDialog';
 import { promptAction } from '@kit.ArkUI';
 
@@ -395,7 +396,7 @@ export struct ChatSessionListPanel {
       header.worldId = worldId;
       header.worldName = this.getWorldName(worldId);
       header.chatCount = list.length;
-      header.isCollapsed = this.isWorldCollapsed(worldId);
+      header.isCollapsed = isWorldCollapsed(this.collapsedWorldIds, worldId);
       rows.push(header);
       if (!header.isCollapsed) {
         const sorted: Chat[] = list.slice();
@@ -417,20 +418,9 @@ export struct ChatSessionListPanel {
     return rows;
   }
 
-  /** 分组是否已折叠 */
-  private isWorldCollapsed(worldId: string): boolean {
-    return this.collapsedWorldIds.indexOf(worldId) >= 0;
-  }
-
-  /** 折叠/展开分组 */
+  /** 折叠/展开分组(切换后持久化) */
   private toggleWorldCollapsed(worldId: string): void {
-    const next: string[] = this.collapsedWorldIds.slice();
-    const idx: number = next.indexOf(worldId);
-    if (idx >= 0) {
-      next.splice(idx, 1);
-    } else {
-      next.push(worldId);
-    }
+    const next: string[] = toggleCollapsedWorldId(this.collapsedWorldIds, worldId);
     this.collapsedWorldIds = next;
     this.persistCollapsedWorldIds(next);
   }

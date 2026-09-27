@@ -36,14 +36,18 @@ import { ChatArchiveViewModel } from '../../viewmodels/ChatArchiveViewModel';
 import { ChatArchiveImportConversationResult } from '../../parser/ChatArchiveSchema';
 import { Logger } from '../../utils/Logger';
 import { ThemePalette } from '../../theme/ThemePalette';
+import {
+  SESSION_LIST_COLLAPSED_WORLD_IDS_KEY,
+  parseCollapsedWorldIds,
+  serializeCollapsedWorldIds,
+  isWorldCollapsed,
+  toggleCollapsedWorldId
+} from '../../utils/SessionListCollapseState';
 
 const LOG_TAG_SESSION: string = 'ChatSessionRootView';
 
 /** 根 Stack 组件 id(拖拽预览定位用,配合 componentUtils.getRectangleById 换算窗口坐标) */
 const ROOT_STACK_ID: string = 'chat_session_root_stack';
-
-/** v49: 对话记录分组折叠状态持久化 key(逗号分隔的 worldId 列表,与 ChatSessionListPanel 共用) */
-const SESSION_LIST_COLLAPSED_WORLD_IDS_KEY: string = 'session_list_collapsed_world_ids';
 
 /** AppStorage 中待跳转的 chatId(由本视图写入,ChatPage 读取后清除) */
 export const PENDING_CHAT_ID_KEY: string = 'pendingChatId';
@@ -595,7 +599,7 @@ export struct ChatSessionRootView {
         ? this.viewModel!.getWorldName(worldId)
         : UNKNOWN_WORLD_NAME;
       header.chatCount = list !== undefined ? list.length : 0;
-      header.isCollapsed = this.isWorldCollapsed(worldId);
+      header.isCollapsed = isWorldCollapsed(this.collapsedWorldIds, worldId);
       rows.push(header);
       if (!header.isCollapsed && list !== undefined) {
         const sorted: ChatSessionListItem[] = list.slice();
@@ -734,20 +738,9 @@ export struct ChatSessionRootView {
     }
   }
 
-  /** 分组是否已折叠 */
-  private isWorldCollapsed(worldId: string): boolean {
-    return this.collapsedWorldIds.indexOf(worldId) >= 0;
-  }
-
-  /** 折叠/展开分组 */
+  /** 折叠/展开分组(切换后持久化) */
   private toggleWorldCollapsed(worldId: string): void {
-    const next: string[] = this.collapsedWorldIds.slice();
-    const idx: number = next.indexOf(worldId);
-    if (idx >= 0) {
-      next.splice(idx, 1);
-    } else {
-      next.push(worldId);
-    }
+    const next: string[] = toggleCollapsedWorldId(this.collapsedWorldIds, worldId);
     this.collapsedWorldIds = next;
     this.persistCollapsedWorldIds(next);
   }
@@ -757,11 +750,7 @@ export struct ChatSessionRootView {
     try {
       const prefs = AppServices.getAppPreferences();
       const raw: string = await prefs.getString(SESSION_LIST_COLLAPSED_WORLD_IDS_KEY, '');
-      if (raw.length === 0) {
-        this.collapsedWorldIds = [];
-        return;
-      }
-      this.collapsedWorldIds = raw.split(',').filter((id: string): boolean => id.length > 0);
+      this.collapsedWorldIds = parseCollapsedWorldIds(raw);
     } catch (_e) {
       this.collapsedWorldIds = [];
     }
@@ -770,7 +759,7 @@ export struct ChatSessionRootView {
   /** v49: 持久化分组折叠状态(fire-and-forget) */
   private persistCollapsedWorldIds(ids: string[]): void {
     const prefs = AppServices.getAppPreferences();
-    prefs.putString(SESSION_LIST_COLLAPSED_WORLD_IDS_KEY, ids.join(','))
+    prefs.putString(SESSION_LIST_COLLAPSED_WORLD_IDS_KEY, serializeCollapsedWorldIds(ids))
       .catch((_e: Object): void => {});
   }
 

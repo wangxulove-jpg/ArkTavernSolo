@@ -84,6 +84,11 @@ import { CardFrontendWeb } from '../components/CardFrontendWeb';
 import { ACTIVE_CHAT_VM_KEY } from './FrontendCardPage';
 import { Persona } from '../models/Persona';
 import { Logger } from '../utils/Logger';
+import {
+  SESSION_LIST_COLLAPSED_WORLD_IDS_KEY,
+  parseCollapsedWorldIds,
+  serializeCollapsedWorldIds
+} from '../utils/SessionListCollapseState';
 import { MacroReplacer } from '../services/MacroReplacer';
 import { ThemePalette } from '../theme/ThemePalette';
 import { TtsService } from '../services/TtsService';
@@ -95,9 +100,6 @@ const LOG_TAG: string = 'ChatPage';
 
 /** 显示层宏替换(无状态,单例复用)。仅替换名字类宏,供气泡/开场白展示。 */
 const displayMacroReplacer: MacroReplacer = new MacroReplacer();
-
-/** v49: 会话列表面板分组折叠状态持久化 key(逗号分隔的 worldId 列表;与对话记录 Tab 共用) */
-const SESSION_LIST_COLLAPSED_WORLD_IDS_KEY: string = 'session_list_collapsed_world_ids';
 
 @Entry
 @Component
@@ -952,16 +954,13 @@ struct ChatPage {
   private async fetchSessionListCollapsedIds(): Promise<string[]> {
     const prefs = AppServices.getAppPreferences();
     const raw: string = await prefs.getString(SESSION_LIST_COLLAPSED_WORLD_IDS_KEY, '');
-    if (raw.length === 0) {
-      return [];
-    }
-    return raw.split(',').filter((id: string): boolean => id.length > 0);
+    return parseCollapsedWorldIds(raw);
   }
 
   /** v49: 持久化分组折叠状态(fire-and-forget) */
   private persistSessionListCollapsedIds(ids: string[]): void {
     const prefs = AppServices.getAppPreferences();
-    prefs.putString(SESSION_LIST_COLLAPSED_WORLD_IDS_KEY, ids.join(','))
+    prefs.putString(SESSION_LIST_COLLAPSED_WORLD_IDS_KEY, serializeCollapsedWorldIds(ids))
       .catch((_e: Object): void => {});
   }
 
