@@ -119,6 +119,7 @@ import { ConversationBranchService, ConversationBranchDeps, ConversationBranchHo
 import { ChatMessageService, ChatMessageDeps, ChatMessageHost } from './ChatMessageService';
 import { ChatContextMaintenanceService, ChatContextDeps, ChatContextHost } from './ChatContextMaintenanceService';
 import { ChatSessionService, ChatSessionDeps, ChatSessionHost } from './ChatSessionService';
+import { ChatMessageSender, ChatSendDeps, ChatSendHost } from './ChatMessageSender';
 import {
   GLOBAL_USER_NAME_KEY,
   LOREBOOK_ACTIVATION_DEFAULT_PREFS_KEY,
@@ -295,6 +296,8 @@ export class ChatService {
   private readonly contextMaintenance: ChatContextMaintenanceService;
   /** 会话生命周期(P2-9:自本类抽离,状态仍在本类,经宿主回调读写) */
   private readonly sessionService: ChatSessionService;
+  /** 消息发起入口(P2-10:自本类抽离,状态仍在本类,经宿主回调读写) */
+  private readonly messageSender: ChatMessageSender;
 
   constructor(
     modelService: ModelService,
@@ -692,6 +695,56 @@ export class ChatService {
       }
     };
     this.sessionService = new ChatSessionService(sessionDeps, sessionHost);
+
+    const sendDeps: ChatSendDeps = {
+      persistenceService: this.persistenceService
+    };
+    const sendHost: ChatSendHost = {
+      isDisposed: (): boolean => this.disposed,
+      isBusy: (): boolean => this.isBusy(),
+      getState: (): ChatState => this.state,
+      getLastCallbacks: (): ChatServiceCallbacks | null => this.lastCallbacks,
+      setLastCallbacks: (callbacks: ChatServiceCallbacks | null): void => {
+        this.lastCallbacks = callbacks;
+      },
+      getGenerationOperationId: (): number => this.generationOperationId,
+      setGenerationOperationId: (operationId: number): void => {
+        this.generationOperationId = operationId;
+      },
+      getCurrentChatId: (): string | undefined => this.currentChatId,
+      setCurrentSequenceNumber: (sequenceNumber: number): void => {
+        this.currentSequenceNumber = sequenceNumber;
+      },
+      setLastPersistedContentLength: (length: number): void => {
+        this.lastPersistedContentLength = length;
+      },
+      setPendingPersistAssistantId: (assistantId: string | null): void => {
+        this.pendingPersistAssistantId = assistantId;
+      },
+      setState: (state: ChatState, callbacks: ChatServiceCallbacks | null): void => {
+        this.setState(state, callbacks);
+      },
+      getMessages: (): ChatMessage[] => this.messages,
+      setMessages: (messages: ChatMessage[]): void => {
+        this.messages = messages;
+      },
+      setCurrentAssistantId: (assistantId: string | null): void => {
+        this.currentAssistantId = assistantId;
+      },
+      getActiveGeneration: (): ActiveGenerationContext | null => this.activeGeneration,
+      setActiveGeneration: (context: ActiveGenerationContext | null): void => {
+        this.activeGeneration = context;
+      },
+      emitMessages: (callbacks: ChatServiceCallbacks | null): void => {
+        this.emitMessages(callbacks);
+      },
+      doStream: (assistantId: string, callbacks: ChatServiceCallbacks,
+        context: ActiveGenerationContext): Promise<void> =>
+        this.doStream(assistantId, callbacks, context),
+      isGenerating: (): boolean => this.isGenerating(),
+      stopGeneration: (): void => this.stopGeneration()
+    };
+    this.messageSender = new ChatMessageSender(sendDeps, sendHost);
   }
 
   /** 初始化角色聊天上下文(无持久化版本;委托 ChatSessionService)。 */
@@ -869,88 +922,9 @@ export class ChatService {
     return this.contextInitialized;
   }
 
-  /**
-   * 发送用户消息并开始流式生成。
-   * 顺序:校验 → 创建 User 消息 → 持久化 → 创建 Assistant 占位 → 持久化 → 启动网络。
-   *
-   * 持久化策略:
-   * - 有 persistenceService 时:先持久化 User + Streaming Assistant(事务),
-   *   失败则不启动网络请求,页面显示错误
-   * - 无 persistenceService 时:仅更新内存(兼容旧测试)
-   */
+  /** 发送用户消息并开始流式生成(委托 ChatMessageSender)。 */
   async sendMessage(userContent: string, callbacks: ChatServiceCallbacks): Promise<void> {
-    if (this.disposed) {
-      throw new Error('ChatService disposed, cannot send message');
-    }
-    if (userContent.trim().length === 0) {
-      return;
-    }
-    if (this.isBusy()) {
-      Logger.warn(LOG_TAG, 'sendMessage rejected: busy state=' + this.state);
-      return;
-    }
-
-    this.lastCallbacks = callbacks;
-    this.generationOperationId++;
-
-    // 1. 创建用户消息
-    const userMsg: ChatMessage = {
-      id: 'msg-' + generateUuid(),
-      role: ChatRole.User,
-      content: userContent,
-      createdAt: Date.now(),
-      isStreaming: false,
-      status: ChatMessageStatus.Completed,
-      source: ChatMessageSource.Conversation
-    };
-
-    // 2. 创建空 Assistant 占位消息
-    const assistantId: string = 'msg-' + generateUuid();
-    const assistantMsg: ChatMessage = {
-      id: assistantId,
-      role: ChatRole.Assistant,
-      content: '',
-      createdAt: Date.now(),
-      isStreaming: true,
-      status: ChatMessageStatus.Streaming,
-      source: ChatMessageSource.Conversation
-    };
-
-    // 3. 持久化(如果有 persistenceService)
-    if (this.persistenceService !== null && this.currentChatId !== undefined) {
-      try {
-        const result =
-          await this.persistenceService.appendUserAndStreamingAssistant(
-            this.currentChatId, userMsg, assistantMsg
-          );
-        this.currentSequenceNumber = result.assistantSequenceNumber;
-        this.lastPersistedContentLength = 0;
-        this.pendingPersistAssistantId = assistantId;
-      } catch (e) {
-        // 持久化失败:不启动请求,显示错误
-        const msg: string = e instanceof Error ? e.message : String(e);
-        Logger.error(LOG_TAG, 'sendMessage persist failed: ' + msg);
-        this.setState(ChatState.Failed, callbacks);
-        callbacks.onError('消息保存失败,请重试');
-        return;
-      }
-    }
-
-    // 4. 更新内存(持久化成功后)
-    this.messages = [...this.messages, userMsg, assistantMsg];
-    this.currentAssistantId = assistantId;
-    // 建立 NormalResponse 活动上下文
-    this.activeGeneration = {
-      operationId: this.generationOperationId,
-      kind: ChatGenerationKind.NormalResponse,
-      chatId: this.currentChatId !== undefined ? this.currentChatId : '',
-      assistantMessageId: assistantId
-    };
-    this.setState(ChatState.Sending, callbacks);
-    this.emitMessages(callbacks);
-
-    // 5. 启动网络请求(失败也保留消息)
-    this.doStream(assistantId, callbacks, this.activeGeneration);
+    return this.messageSender.sendMessage(userContent, callbacks);
   }
 
   /**
@@ -973,142 +947,14 @@ export class ChatService {
     return this.oneShotGenerator.autoContinue(callbacks);
   }
 
-  /**
-   * Narrator: 用户输入旁白文本,AI 以旁白身份回复。
-   *
-   * 流程:
-   * 1. 创建 role=System, senderType='narrator' 的旁白消息
-   * 2. 创建 role=Assistant, senderType='narrator' 的 Streaming 占位
-   * 3. 注入旁白指令,AI 以叙述者视角回复
-   */
+  /** Narrator:用户输入旁白文本,AI 以旁白身份回复(委托 ChatMessageSender)。 */
   async narratorMessage(content: string, callbacks: ChatServiceCallbacks): Promise<void> {
-    if (this.disposed) {
-      throw new Error('ChatService disposed');
-    }
-    if (content.trim().length === 0) {
-      return;
-    }
-    if (this.isBusy()) {
-      Logger.warn(LOG_TAG, 'narratorMessage rejected: busy');
-      return;
-    }
-    if (this.currentChatId === undefined) {
-      callbacks.onError('会话未初始化');
-      return;
-    }
-
-    this.lastCallbacks = callbacks;
-    this.generationOperationId++;
-
-    const narratorMsg: ChatMessage = {
-      id: 'msg-' + generateUuid(),
-      role: ChatRole.System,
-      content: content,
-      createdAt: Date.now(),
-      isStreaming: false,
-      status: ChatMessageStatus.Completed,
-      source: ChatMessageSource.Conversation,
-      senderType: 'narrator',
-      includeInMemory: false
-    };
-
-    const assistantId: string = 'msg-' + generateUuid();
-    const assistantMsg: ChatMessage = {
-      id: assistantId,
-      role: ChatRole.Assistant,
-      content: '',
-      createdAt: Date.now(),
-      isStreaming: true,
-      status: ChatMessageStatus.Streaming,
-      source: ChatMessageSource.Conversation,
-      senderType: 'narrator',
-      senderCharacterId: '',
-      includeInMemory: false
-    };
-
-    if (this.persistenceService !== null && this.currentChatId !== undefined) {
-      try {
-        const result =
-          await this.persistenceService.appendUserAndStreamingAssistant(
-            this.currentChatId, narratorMsg, assistantMsg
-          );
-        this.currentSequenceNumber = result.assistantSequenceNumber;
-        this.lastPersistedContentLength = 0;
-        this.pendingPersistAssistantId = assistantId;
-      } catch (e) {
-        const msg: string = e instanceof Error ? e.message : String(e);
-        Logger.error(LOG_TAG, 'narratorMessage persist failed: ' + msg);
-        this.setState(ChatState.Failed, callbacks);
-        callbacks.onError('消息保存失败,请重试');
-        return;
-      }
-    }
-
-    this.messages = [...this.messages, narratorMsg, assistantMsg];
-    this.currentAssistantId = assistantId;
-    this.activeGeneration = {
-      operationId: this.generationOperationId,
-      kind: ChatGenerationKind.Narrator,
-      chatId: this.currentChatId,
-      assistantMessageId: assistantId
-    };
-    this.setState(ChatState.Sending, callbacks);
-    this.emitMessages(callbacks);
-    this.doStream(assistantId, callbacks, this.activeGeneration);
+    return this.messageSender.narratorMessage(content, callbacks);
   }
 
-  /**
-   * Narrator-Only: 仅插入旁白描述消息,不触发 AI 生成。
-   */
+  /** Narrator-Only:仅插入旁白描述消息,不触发 AI 生成(委托 ChatMessageSender)。 */
   async narratorMessageOnly(content: string, callbacks: ChatServiceCallbacks): Promise<void> {
-    if (this.disposed) {
-      throw new Error('ChatService disposed');
-    }
-    if (content.trim().length === 0) {
-      return;
-    }
-    if (this.isBusy()) {
-      Logger.warn(LOG_TAG, 'narratorMessageOnly rejected: busy');
-      return;
-    }
-    if (this.currentChatId === undefined) {
-      callbacks.onError('会话未初始化');
-      return;
-    }
-
-    this.lastCallbacks = callbacks;
-    this.generationOperationId++;
-
-    const narratorMsg: ChatMessage = {
-      id: 'msg-' + generateUuid(),
-      role: ChatRole.System,
-      content: content,
-      createdAt: Date.now(),
-      isStreaming: false,
-      status: ChatMessageStatus.Completed,
-      source: ChatMessageSource.Conversation,
-      senderType: 'narrator',
-      includeInMemory: false
-    };
-
-    if (this.persistenceService !== null && this.currentChatId !== undefined) {
-      try {
-        const seq: number =
-          await this.persistenceService.appendMessage(
-            this.currentChatId, narratorMsg
-          );
-        this.currentSequenceNumber = seq;
-      } catch (e) {
-        const msg: string = e instanceof Error ? e.message : String(e);
-        Logger.error(LOG_TAG, 'narratorMessageOnly persist failed: ' + msg);
-        this.setState(ChatState.Failed, callbacks);
-        callbacks.onError('消息保存失败,请重试');
-        return;
-      }
-    }
-
-    this.messages = [...this.messages, narratorMsg];
-    this.emitMessages(callbacks);
+    return this.messageSender.narratorMessageOnly(content, callbacks);
   }
 
   /**
@@ -1219,17 +1065,9 @@ export class ChatService {
       || this.branchOperationInProgress;
   }
 
-  /**
-   * 清空当前对话。如正在生成先停止。
-   */
+  /** 清空当前对话(委托 ChatMessageSender)。 */
   clearConversation(): void {
-    if (this.isGenerating()) {
-      this.stopGeneration();
-    }
-    this.messages = [];
-    this.currentAssistantId = null;
-    this.setState(ChatState.Idle, this.lastCallbacks);
-    this.emitMessages(this.lastCallbacks);
+    this.messageSender.clearConversation();
   }
 
   // ===== T-4.5 多会话操作 =====
