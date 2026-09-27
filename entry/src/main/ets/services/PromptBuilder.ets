@@ -87,7 +87,7 @@ export interface PromptBuildContext {
   presetSystemPrompt?: string;
   /**
    * 长期记忆摘要(可选,非空时作为 System 消息插入到 DialogueExamples 与 Conversation 之间)。
-   * 调用方负责从 MemoryService.getInjectionContext 取得当前 Branch 的有效摘要文本。
+   * 调用方负责取得当前 Branch 的有效摘要文本。
    * v12: 若 memoryLayers 提供,此字段被忽略(优先使用分层注入)。
    */
   memorySummary?: string;

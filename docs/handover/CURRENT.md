@@ -16,7 +16,7 @@
 > 完整路线图见 [审计报告 §6](./2026-09-27-audit-and-roadmap.md)
 > 纪律：一次一操作 → 编译验证（最多 3 次）→ 提交；任一步失败立即回滚
 
-- [ ] **P1-1 死代码清理**：`ChatService.findLastAssistantIndex()`（L2140，已核实全项目 0 调用）；`MemoryService` 旧兼容 API（`getEffectiveMemory` / `getInjectionContext` / `trySummarize`）复核后清理
+- [x] **P1-1 死代码清理**（2026-09-27 完成）：删除 `findLastAssistantIndex`（ChatService）；删除 `getEffectiveMemory` / `getInjectionContext` 及 `MemoryInjectionContext` 类型（MemoryService）；`trySummarize` 复核为 rolling 回退路径（被 `tryGenerateMultiLayerMemory` 调用）保留；关联注释 2 处同步修正；编译 BUILD SUCCESSFUL
 - [ ] **P1-2 ChatService 重复逻辑消除**：Swipe 三方法（L5522 / L5565 / L5609）合并；失败收尾 4 处（L3712 / L3805 / L5014 / L2421）合并；锚点插入两处（L4548 vs L4622）合并；状态一次性请求两处（L2983 vs L3088）合并
 - [ ] **P1-3 ChatPage 组件抽取**（逐个，纯搬运不改行为）：`ChatMessageList`（messageList, L3456, ≈160 行）/ `ChatInputArea`（inputArea, L3808, ≈160 行）/ `ChatAppearancePanel`（appearanceSheetContent, L2732, ≈360 行）/ `ChatStatusWorldPanel`（L2104-2453）/ `ChatForkPicker`（L5623, ≈80 行）
 - [ ] **P1-4 会话列表去重**：`ChatSessionRootView` ↔ `ChatSessionListPanel` 近乎全量重复，合并为单组件 + 布局参数
@@ -42,3 +42,4 @@
 | 日期 | 会话主题 | 产出 / 决策 |
 |---|---|---|
 | 2026-09-27 | 审计 + 文档体系重建 | 审计报告与路线图；`AGENTS.md` + `docs/handover/` 建立；`tools/`、开发截图、旧文档归档清理；决策：交接文档进版本库 |
+| 2026-09-27 | P1 批次执行 | P1-1 死代码清理完成（3 处方法 + 1 类型），编译 BUILD SUCCESSFUL |

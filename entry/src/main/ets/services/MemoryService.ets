@@ -19,7 +19,7 @@
  * - 总结失败不阻塞正常聊天(catch 后记录 warn)
  * - 不直接调用 Provider,通过 ModelService.sendChat 复用现有配置
  * - 不暴露 chatId/branchId/summary 内容到日志
- * - 保留旧 API(trySummarize/getInjectionContext)向后兼容
+ * - rolling 回退路径复用 trySummarize(由 tryGenerateMultiLayerMemory 内部调用,非死代码)
  *
  * 分层约束:
  * - 可被 ChatService 调用(注入)
@@ -71,20 +71,6 @@ export interface MemorySummaryResult {
   memory: ChatMemory | null;
   /** 失败原因(失败时填) */
   error?: string;
-}
-
-/**
- * 注入到 PromptBuilder 的记忆上下文(旧版,兼容单条摘要)。
- */
-export interface MemoryInjectionContext {
-  /** 摘要文本(空字符串表示无可用记忆) */
-  summary: string;
-  /** 覆盖范围起始 position */
-  startPosition: number;
-  /** 覆盖范围结束 position */
-  endPosition: number;
-  /** 是否启用 */
-  enabled: boolean;
 }
 
 /**
@@ -240,53 +226,6 @@ export class MemoryService {
   }
 
   // ===== 加载 =====
-
-  /**
-   * 获取 Branch 的有效记忆(最新一条 enabled Memory)。
-   * 无 Memory 或禁用时返回 null。
-   * 兼容旧 API。
-   */
-  async getEffectiveMemory(branchId: string): Promise<ChatMemory | null> {
-    if (branchId.length === 0) {
-      return null;
-    }
-    try {
-      const latest: ChatMemory | null = await this.memoryPersistence.getLatestByBranch(branchId);
-      if (latest === null) {
-        return null;
-      }
-      if (!latest.enabled) {
-        return null;
-      }
-      return latest;
-    } catch (e) {
-      Logger.warn(LOG_TAG, 'getEffectiveMemory failed: ' + String(e));
-      return null;
-    }
-  }
-
-  /**
-   * 获取注入 Prompt 的记忆上下文(旧版,兼容单条摘要)。
-   * 优先返回最新的 rolling memory,回退到最新 memory。
-   * @param worldId v42: 世界分组 ID(非空时 core/chapter 以世界共享记忆为准),默认 ''。
-   */
-  async getInjectionContext(branchId: string, worldId: string = ''): Promise<MemoryInjectionContext> {
-    const multi: MultiLayerMemoryInjection = await this.getMultiLayerInjectionContext(branchId, worldId);
-    if (!multi.enabled) {
-      return {
-        summary: '',
-        startPosition: 0,
-        endPosition: -1,
-        enabled: false
-      };
-    }
-    return {
-      summary: multi.combinedSummary,
-      startPosition: multi.startPosition,
-      endPosition: multi.endPosition,
-      enabled: true
-    };
-  }
 
   /**
    * v12: 获取多层记忆注入上下文。

@@ -2137,15 +2137,6 @@ export class ChatService {
     return -1;
   }
 
-  private findLastAssistantIndex(): number {
-    for (let i: number = this.messages.length - 1; i >= 0; i--) {
-      if (this.messages[i].role === ChatRole.Assistant) {
-        return i;
-      }
-    }
-    return -1;
-  }
-
   /**
    * 重新生成最后一条 Assistant 回复(T-6.4B-1.2: 创建 Conversation Branch)。
    *
