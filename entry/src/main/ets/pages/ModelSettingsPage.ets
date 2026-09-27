@@ -140,7 +140,7 @@ struct ModelSettingsPage {
   @Builder
   mainView() {
     Scroll() {
-      Column({ space: 16 }) {
+      Column({ space: 12 }) {
         this.statusBanner()
 
         if (this.configs.length === 0) {
@@ -153,12 +153,12 @@ struct ModelSettingsPage {
         // 新建配置按钮
         Button($r('app.string.model_settings_add_config'))
           .width('100%')
-          .height(48)
+          .height(44)
           .fontSize($r('app.float.app_font_body'))
           .fontColor($r('app.color.app_on_accent'))
           .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
           .borderRadius($r('app.float.app_radius_sm'))
-          .margin({ top: 8, bottom: 32 })
+          .margin({ top: 4, bottom: 32 })
           .onClick(() => {
             this.viewModel!.startCreate();
             this.viewModel!.setActiveEditTab(0);
@@ -166,7 +166,7 @@ struct ModelSettingsPage {
           })
       }
       .width('100%')
-      .padding({ left: 16, right: 16, top: 12, bottom: 16 })
+      .padding({ left: 16, right: 16, top: 8, bottom: 16 })
       .alignItems(HorizontalAlign.Start)
     }
     .width('100%')
@@ -180,7 +180,7 @@ struct ModelSettingsPage {
   @Builder
   currentConfigCard() {
     if (this.currentConfig !== undefined) {
-      Column({ space: 8 }) {
+      Column({ space: 6 }) {
         Row() {
           Text($r('app.string.model_settings_current_config_title'))
             .fontSize($r('app.float.app_font_caption'))
@@ -208,36 +208,38 @@ struct ModelSettingsPage {
 
         Row() {
           Text(this.providerDisplayName(this.currentConfig.type))
-            .fontSize($r('app.float.app_font_body'))
+            .fontSize($r('app.float.app_font_caption'))
             .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
           Text(' · ')
-            .fontSize($r('app.float.app_font_body'))
+            .fontSize($r('app.float.app_font_caption'))
             .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
           Text(this.currentConfig.modelName)
-            .fontSize($r('app.float.app_font_body'))
+            .fontSize($r('app.float.app_font_caption'))
             .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
             .layoutWeight(1)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
-        }
-        .width('100%')
 
-        Row() {
           SymbolGlyph($r('sys.symbol.key'))
-            .fontSize(16)
+            .fontSize(14)
             .fontColor([ThemePalette.textTertiaryColor(this.effectiveTheme)])
+            .margin({ left: 8 })
           Text(this.viewModel!.currentConfigApiKeyDisplay.length > 0
             ? this.viewModel!.currentConfigApiKeyDisplay
             : $r('app.string.model_settings_api_key_status_not_configured'))
             .fontSize($r('app.float.app_font_caption'))
             .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
             .margin({ left: 4 })
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .constraintSize({ maxWidth: 110 })
             .copyOption(CopyOptions.LocalDevice)
         }
         .width('100%')
+        .alignItems(VerticalAlign.Center)
       }
       .width('100%')
-      .padding(16)
+      .padding({ left: 12, right: 12, top: 10, bottom: 10 })
       .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
       .borderRadius($r('app.float.app_radius_md'))
       .alignItems(HorizontalAlign.Start)
@@ -246,7 +248,7 @@ struct ModelSettingsPage {
 
   @Builder
   configListSection() {
-    Column({ space: 12 }) {
+    Column({ space: 8 }) {
       Text($r('app.string.model_settings_config_list'))
         .fontSize($r('app.float.app_font_subtitle'))
         .fontWeight(FontWeight.Medium)
@@ -267,27 +269,21 @@ struct ModelSettingsPage {
     .alignItems(HorizontalAlign.Start)
   }
 
+  /**
+   * 配置列表项:左侧信息区点击进编辑;右侧内联"切换/当前"胶囊点击直接切换当前配置。
+   * 两个点击区为兄弟节点(不嵌套),避免点切换时误触进入编辑页。
+   */
   @Builder
   configListItem(config: ProviderConfig) {
     Row() {
-      Column({ space: 4 }) {
-        Row() {
-          Text(config.name)
-            .fontSize($r('app.float.app_font_body'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .layoutWeight(1)
-
-          if (this.viewModel!.currentConfigId === config.id) {
-            Text($r('app.string.model_settings_current_badge'))
-              .fontSize($r('app.float.app_font_caption'))
-              .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-              .margin({ left: 8 })
-          }
-        }
-        .width('100%')
+      Column({ space: 2 }) {
+        Text(config.name)
+          .fontSize($r('app.float.app_font_body'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
 
         Row() {
           Text(this.providerDisplayName(config.type))
@@ -307,21 +303,48 @@ struct ModelSettingsPage {
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
+      .onClick(() => {
+        this.viewModel!.selectConfig(config.id);
+        this.viewModel!.setActiveEditTab(0);
+        router.pushUrl({ url: 'pages/ModelConfigEditPage' });
+      })
+
+      if (this.viewModel!.currentConfigId === config.id) {
+        Text($r('app.string.model_settings_current_badge'))
+          .fontSize($r('app.float.app_font_caption'))
+          .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+          .margin({ left: 8 })
+      } else {
+        Text($r('app.string.model_settings_switch'))
+          .fontSize($r('app.float.app_font_caption'))
+          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+          .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+          .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+          .borderRadius($r('app.float.app_radius_sm'))
+          .opacity(this.viewModel!.isSaving ? 0.5 : 1)
+          .margin({ left: 8 })
+          .onClick(() => {
+            if (this.viewModel!.isSaving) {
+              return;
+            }
+            this.viewModel!.setCurrentById(config.id)
+              .then((): void => {
+                this.syncConfigs();
+              })
+              .catch((): void => {});
+          })
+      }
 
       SymbolGlyph($r('sys.symbol.chevron_right'))
         .fontSize(18)
         .fontColor([ThemePalette.textTertiaryColor(this.effectiveTheme)])
-        .margin({ left: 8 })
+        .margin({ left: 4 })
     }
     .width('100%')
-    .padding(16)
+    .padding({ left: 12, right: 12, top: 10, bottom: 10 })
     .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
     .borderRadius($r('app.float.app_radius_md'))
-    .onClick(() => {
-      this.viewModel!.selectConfig(config.id);
-      this.viewModel!.setActiveEditTab(0);
-      router.pushUrl({ url: 'pages/ModelConfigEditPage' });
-    })
+    .alignItems(VerticalAlign.Center)
   }
 
   @Builder

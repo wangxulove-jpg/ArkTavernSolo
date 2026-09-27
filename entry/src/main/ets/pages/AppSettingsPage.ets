@@ -3,9 +3,13 @@
  *
  * v9: 全局用户称呼设置入口。
  * v10 (ARK-UI-THEME-1): 新增"外观"区块,提供四种主题选择(跟随设备 / 浅色 / 深色 / 酒馆棕)。
- * - 通过 AppPreferences 读写 GLOBAL_USER_NAME_KEY
- * - 通过 ThemeManager(唯一主题 authority)读写主题模式,选择后立即应用
- * - 不存储 API Key / Authorization / 敏感数据
+ * v11 (2026-09-27 设置页排版): 改为"分区小标题 + 紧凑卡片行"版式(与对话设置面板同一范式):
+ * - 每个分区 = caption 小标题 + 一张 surface_1 卡片,卡内行高 44、1px 分隔线;
+ * - 主题选择由竖向 4 张大卡改为一行 4 张竖条色块卡(仅保留三色预览 + 名称);
+ * - 用户称呼改为行内输入 + 失焦/回车自动保存,不再有独立说明段与保存按钮;
+ * - 用户身份 / 市场缓存 / 诊断日志 / 清空日志各压成单行,值右对齐、动作以胶囊呈现。
+ * 通过 AppPreferences 读写 GLOBAL_USER_NAME_KEY;主题经 ThemeManager(唯一 authority)立即应用。
+ * 不存储 API Key / Authorization / 敏感数据。
  */
 
 import { router, promptAction } from '@kit.ArkUI';
@@ -18,14 +22,6 @@ import { ThemeMode } from '../models/ThemeMode';
 import { ThemePalette, ThemeColors } from '../theme/ThemePalette';
 import { GLOBAL_USER_NAME_KEY } from '../services/ChatTextContract';
 import { motion } from '@kit.MultimodalAwarenessKit';
-import { BusinessError } from '@kit.BasicServicesKit';
-
-/** 主题选项模型(供构建器使用) */
-interface ThemeOption {
-  mode: ThemeMode;
-  title: Resource;
-  desc: Resource;
-}
 
 @Entry
 @Component
@@ -36,8 +32,6 @@ struct AppSettingsPage {
   @StorageProp('effectiveTheme') effectiveTheme: string = 'dark';
   /** 当前输入的全局用户称呼(从 AppPreferences 加载) */
   @State globalUserName: string = '';
-  /** 保存中 */
-  @State isSaving: boolean = false;
   /** 加载中 */
   @State isLoading: boolean = true;
   /** 错误提示(空表示无错误) */
@@ -57,6 +51,8 @@ struct AppSettingsPage {
 
   private preferences: AppPreferences | null = null;
   private themeManager: ThemeManager | null = null;
+  /** 最近一次成功落盘的用户称呼(用于失焦自动保存时跳过无变化的写入) */
+  private lastSavedUserName: string = '';
 
   aboutToAppear(): void {
     this.logEntryCount = LogBuffer.getEntryCount();
@@ -83,6 +79,7 @@ struct AppSettingsPage {
     try {
       const value: string = await this.preferences.getString(GLOBAL_USER_NAME_KEY, '');
       this.globalUserName = value;
+      this.lastSavedUserName = value;
     } catch (e) {
       this.errorMessage = '加载失败';
     } finally {
@@ -90,20 +87,24 @@ struct AppSettingsPage {
     }
   }
 
-  private async saveGlobalUserName(): Promise<void> {
+  /** 失焦/回车时自动保存;内容未变化则跳过,避免重复写盘与重复提示 */
+  private async saveGlobalUserNameIfChanged(): Promise<void> {
+    const trimmed: string = this.globalUserName.trim();
+    if (trimmed === this.lastSavedUserName) {
+      return;
+    }
     if (this.preferences === null) {
       this.errorMessage = 'AppPreferences 未初始化';
       return;
     }
-    this.isSaving = true;
     try {
-      await this.preferences.putString(GLOBAL_USER_NAME_KEY, this.globalUserName.trim());
+      await this.preferences.putString(GLOBAL_USER_NAME_KEY, trimmed);
+      this.lastSavedUserName = trimmed;
+      this.globalUserName = trimmed;
       promptAction.showToast({ message: $r('app.string.settings_global_user_name_saved') });
     } catch (e) {
       this.errorMessage = '保存失败';
       promptAction.showToast({ message: $r('app.string.settings_global_user_name_save_failed') });
-    } finally {
-      this.isSaving = false;
     }
   }
 
@@ -287,20 +288,6 @@ struct AppSettingsPage {
     return $r('app.string.settings_theme_follow_system');
   }
 
-  /** 根据模式获取说明资源 */
-  private themeDesc(mode: ThemeMode): Resource {
-    if (mode === ThemeMode.LIGHT) {
-      return $r('app.string.settings_theme_light_desc');
-    }
-    if (mode === ThemeMode.DARK) {
-      return $r('app.string.settings_theme_dark_desc');
-    }
-    if (mode === ThemeMode.TAVERN) {
-      return $r('app.string.settings_theme_tavern_desc');
-    }
-    return $r('app.string.settings_theme_follow_system_desc');
-  }
-
   /** 获取预览色块色板(跟随设备按有效主题取色) */
   private previewColors(mode: ThemeMode): ThemeColors {
     let effective: string = this.effectiveTheme;
@@ -336,7 +323,7 @@ struct AppSettingsPage {
           .padding({ right: 40 })
       }
       .width('100%')
-      .padding({ top: this.statusBarHeight + 12, left: 12, right: 12, bottom: 12 })
+      .padding({ top: this.statusBarHeight + 12, left: 12, right: 12, bottom: 8 })
       .alignItems(VerticalAlign.Center)
 
       // 错误提示
@@ -366,319 +353,62 @@ struct AppSettingsPage {
       } else {
         Scroll() {
           Column() {
-            // ===== 外观:主题选择 =====
-            Text($r('app.string.settings_theme_section'))
-              .fontSize($r('app.float.app_font_subtitle'))
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.page_primary_text'))
-              .width('100%')
-              .margin({ bottom: 12 })
+            // ===== 外观 =====
+            this.sectionCaption($r('app.string.settings_theme_section'))
+            Column() {
+              this.themeRow()
+            }
+            .width('100%')
+            .backgroundColor($r('app.color.app_surface_1'))
+            .borderRadius($r('app.float.app_radius_md'))
 
-            Text($r('app.string.settings_theme_title'))
-              .fontSize($r('app.float.app_font_body'))
-              .fontColor($r('app.color.page_primary_text'))
-              .width('100%')
-              .margin({ bottom: 4 })
+            // ===== 对话 =====
+            this.sectionCaption('对话')
+            Column() {
+              this.userNameRow()
+              this.sendPositionRow()
+              if (this.smartGripSupported) {
+                this.smartGripRow()
+              }
+            }
+            .width('100%')
+            .backgroundColor($r('app.color.app_surface_1'))
+            .borderRadius($r('app.float.app_radius_md'))
 
-            Text($r('app.string.settings_theme_desc'))
-              .fontSize($r('app.float.app_font_caption'))
-              .fontColor($r('app.color.page_secondary_text'))
-              .width('100%')
-              .margin({ bottom: 12 })
-
-            this.themeOptionCard(ThemeMode.FOLLOW_SYSTEM)
-            this.themeOptionCard(ThemeMode.LIGHT)
-            this.themeOptionCard(ThemeMode.DARK)
-            this.themeOptionCard(ThemeMode.TAVERN)
-
-            // ===== 全局用户称呼分区 =====
-            Text($r('app.string.settings_global_user_name_section'))
-              .fontSize($r('app.float.app_font_subtitle'))
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.page_primary_text'))
-              .width('100%')
-              .margin({ top: 24, bottom: 12 })
-
-            Text($r('app.string.settings_global_user_name_label'))
-              .fontSize($r('app.float.app_font_body'))
-              .fontColor($r('app.color.page_primary_text'))
-              .width('100%')
-              .margin({ bottom: 8 })
-
-            TextInput({
-              placeholder: $r('app.string.settings_global_user_name_placeholder'),
-              text: this.globalUserName
-            })
-              .fontSize($r('app.float.app_font_body'))
-              .fontColor($r('app.color.page_primary_text'))
-              .backgroundColor($r('app.color.app_surface_2'))
-              .borderRadius($r('app.float.app_radius_md'))
-              .height(48)
-              .padding({ left: 16, right: 16 })
-              .width('100%')
-              .onChange((value: string) => {
-                this.globalUserName = value;
+            // ===== 身份 =====
+            this.sectionCaption('身份')
+            Column() {
+              this.valueRow('用户身份', '管理', true, false, (): void => {
+                router.pushUrl({ url: 'pages/PersonaListPage' });
               })
+            }
+            .width('100%')
+            .backgroundColor($r('app.color.app_surface_1'))
+            .borderRadius($r('app.float.app_radius_md'))
 
-            Text($r('app.string.settings_global_user_name_hint'))
-              .fontSize($r('app.float.app_font_caption'))
-              .fontColor($r('app.color.page_secondary_text'))
-              .width('100%')
-              .margin({ top: 8 })
-
-            Button($r('app.string.character_edit_save'))
-              .fontSize($r('app.float.app_font_body'))
-              .fontWeight(FontWeight.Medium)
-              .backgroundColor($r('app.color.app_accent'))
-              .fontColor($r('app.color.app_on_accent'))
-              .borderRadius($r('app.float.app_radius_sm'))
-              .height(40)
-              .width('100%')
-              .margin({ top: 24 })
-              .enabled(!this.isSaving)
-              .onClick(() => {
-                this.saveGlobalUserName();
+            // ===== 存储与诊断 =====
+            this.sectionCaption('存储与诊断')
+            Column() {
+              this.actionRow('市场缓存', this.marketCacheSize,
+                $r('app.string.settings_market_cache_clear_confirm_ok'), false, (): void => {
+                  this.confirmClearMarketCaches();
+                })
+              this.actionRow('诊断日志', this.logEntryCount.toString() + ' 条', '导出', true, (): void => {
+                this.exportLogs();
               })
-
-            // ===== 用户身份分区 =====
-            Text('用户身份')
-              .fontSize($r('app.float.app_font_subtitle'))
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.page_primary_text'))
-              .width('100%')
-              .margin({ top: 24, bottom: 12 })
-
-            Text('管理用户身份(Persona),用于在提示词中注入用户角色设定')
-              .fontSize($r('app.float.app_font_caption'))
-              .fontColor($r('app.color.page_secondary_text'))
-              .width('100%')
-              .margin({ bottom: 8 })
-
-            Row() {
-              Column() {
-                Text('身份管理')
-                  .fontSize($r('app.float.app_font_body'))
-                  .fontColor($r('app.color.page_primary_text'))
-                  .width('100%')
-                Text('创建和管理用户身份')
-                  .fontSize($r('app.float.app_font_caption'))
-                  .fontColor($r('app.color.page_secondary_text'))
-                  .width('100%')
-                  .margin({ top: 2 })
-              }
-              .layoutWeight(1)
-              .alignItems(HorizontalAlign.Start)
-
-              SymbolGlyph($r('sys.symbol.chevron_right'))
-                .fontSize(16)
-                .fontColor([$r('app.color.page_secondary_text')])
+              this.menuRow('清空日志', true, true, (): void => {
+                this.confirmClearLogs();
+              })
             }
             .width('100%')
-            .padding({ left: 12, right: 12, top: 12, bottom: 12 })
-            .borderRadius($r('app.float.app_radius_md'))
             .backgroundColor($r('app.color.app_surface_1'))
-            .border({ width: 1, color: $r('app.color.app_divider') })
-            .alignItems(VerticalAlign.Center)
-            .onClick(() => {
-              router.pushUrl({ url: 'pages/PersonaListPage' });
-            })
-
-            // ===== 市场缓存分区 =====
-            Text($r('app.string.settings_market_cache_section'))
-              .fontSize($r('app.float.app_font_subtitle'))
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.page_primary_text'))
-              .width('100%')
-              .margin({ top: 24, bottom: 12 })
-
-            Row() {
-              Text($r('app.string.settings_market_cache_size'))
-                .fontSize($r('app.float.app_font_caption'))
-                .fontColor($r('app.color.page_secondary_text'))
-              Text(this.marketCacheSize)
-                .fontSize($r('app.float.app_font_caption'))
-                .fontColor($r('app.color.page_primary_text'))
-            }
-            .width('100%')
-            .alignItems(VerticalAlign.Top)
-            .margin({ bottom: 8 })
-
-            Row() {
-              Column() {
-                Text($r('app.string.settings_market_cache_clear'))
-                  .fontSize($r('app.float.app_font_body'))
-                  .fontColor($r('app.color.page_primary_text'))
-                  .width('100%')
-                Text($r('app.string.settings_market_cache_clear_desc'))
-                  .fontSize($r('app.float.app_font_caption'))
-                  .fontColor($r('app.color.page_secondary_text'))
-                  .width('100%')
-                  .margin({ top: 2 })
-              }
-              .layoutWeight(1)
-              .alignItems(HorizontalAlign.Start)
-
-              SymbolGlyph($r('sys.symbol.trash'))
-                .fontSize(16)
-                .fontColor([$r('app.color.app_danger')])
-            }
-            .width('100%')
-            .padding({ left: 12, right: 12, top: 12, bottom: 12 })
             .borderRadius($r('app.float.app_radius_md'))
-            .backgroundColor($r('app.color.app_surface_1'))
-            .border({ width: 1, color: $r('app.color.app_divider') })
-            .alignItems(VerticalAlign.Center)
-            .onClick(() => {
-              this.confirmClearMarketCaches();
-            })
-
-            // ===== 诊断日志分区 =====
-            Text('诊断日志')
-              .fontSize($r('app.float.app_font_subtitle'))
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.page_primary_text'))
-              .width('100%')
-              .margin({ top: 24, bottom: 12 })
-
-            Text('应用运行日志会自动收集(含历史启动,error 后自动存档),遇到问题时导出发给我排查。日志已自动脱敏,不含 API Key。')
-              .fontSize($r('app.float.app_font_caption'))
-              .fontColor($r('app.color.page_secondary_text'))
-              .width('100%')
-              .margin({ bottom: 8 })
-
-            Row() {
-              Text('当前条数')
-                .fontSize($r('app.float.app_font_caption'))
-                .fontColor($r('app.color.page_secondary_text'))
-              Text(this.logEntryCount.toString())
-                .fontSize($r('app.float.app_font_caption'))
-                .fontColor($r('app.color.page_primary_text'))
-            }
-            .width('100%')
-            .alignItems(VerticalAlign.Top)
-            .margin({ bottom: 8 })
-
-            // 导出日志
-            Row() {
-              Column() {
-                Text('导出日志')
-                  .fontSize($r('app.float.app_font_body'))
-                  .fontColor($r('app.color.page_primary_text'))
-                  .width('100%')
-                Text('保存为 txt 文件到手机')
-                  .fontSize($r('app.float.app_font_caption'))
-                  .fontColor($r('app.color.page_secondary_text'))
-                  .width('100%')
-                  .margin({ top: 2 })
-              }
-              .layoutWeight(1)
-              .alignItems(HorizontalAlign.Start)
-
-              SymbolGlyph($r('sys.symbol.share'))
-                .fontSize(16)
-                .fontColor([$r('app.color.page_secondary_text')])
-            }
-            .width('100%')
-            .padding({ left: 12, right: 12, top: 12, bottom: 12 })
-            .borderRadius($r('app.float.app_radius_md'))
-            .backgroundColor($r('app.color.app_surface_1'))
-            .border({ width: 1, color: $r('app.color.app_divider') })
-            .alignItems(VerticalAlign.Center)
-            .onClick(() => {
-              this.exportLogs();
-            })
-
-            // 清空日志
-            Row() {
-              Column() {
-                Text('清空日志')
-                  .fontSize($r('app.float.app_font_body'))
-                  .fontColor($r('app.color.page_primary_text'))
-                  .width('100%')
-                Text('删除内存缓冲与已存档的日志')
-                  .fontSize($r('app.float.app_font_caption'))
-                  .fontColor($r('app.color.page_secondary_text'))
-                  .width('100%')
-                  .margin({ top: 2 })
-              }
-              .layoutWeight(1)
-              .alignItems(HorizontalAlign.Start)
-
-              SymbolGlyph($r('sys.symbol.trash'))
-                .fontSize(16)
-                .fontColor([$r('app.color.app_danger')])
-            }
-            .width('100%')
-            .padding({ left: 12, right: 12, top: 12, bottom: 12 })
-            .borderRadius($r('app.float.app_radius_md'))
-            .backgroundColor($r('app.color.app_surface_1'))
-            .border({ width: 1, color: $r('app.color.app_divider') })
-            .margin({ top: 8 })
-            .alignItems(VerticalAlign.Center)
-            .onClick(() => {
-              this.confirmClearLogs();
-            })
-
-            // ===== 发送按钮分区 =====
-            Text($r('app.string.settings_send_button_section'))
-              .fontSize($r('app.float.app_font_subtitle'))
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.page_primary_text'))
-              .width('100%')
-              .margin({ top: 24, bottom: 12 })
-
-            // 按钮位置选择
-            Text($r('app.string.settings_send_button_position'))
-              .fontSize($r('app.float.app_font_body'))
-              .fontColor($r('app.color.page_primary_text'))
-              .width('100%')
-              .margin({ bottom: 8 })
-
-            Row() {
-              this.positionOption(false)
-              this.positionOption(true)
-            }
-            .width('100%')
-            .justifyContent(FlexAlign.Start)
-
-            // 智感握姿开关
-            if (this.smartGripSupported) {
-              Row() {
-                Column() {
-                  Text($r('app.string.settings_smart_grip'))
-                    .fontSize($r('app.float.app_font_body'))
-                    .fontWeight(FontWeight.Medium)
-                    .fontColor($r('app.color.page_primary_text'))
-                    .width('100%')
-                  Text($r('app.string.settings_smart_grip_desc'))
-                    .fontSize($r('app.float.app_font_caption'))
-                    .fontColor($r('app.color.page_secondary_text'))
-                    .width('100%')
-                    .margin({ top: 2 })
-                }
-                .layoutWeight(1)
-                .alignItems(HorizontalAlign.Start)
-
-                Toggle({ type: ToggleType.Switch, isOn: this.smartGripEnabled })
-                  .onChange((isOn: boolean) => {
-                    this.saveSmartGrip(isOn);
-                  })
-              }
-              .width('100%')
-              .padding({ left: 12, right: 12, top: 12, bottom: 12 })
-              .borderRadius($r('app.float.app_radius_md'))
-              .backgroundColor($r('app.color.app_surface_1'))
-              .border({ width: 1, color: $r('app.color.app_divider') })
-              .margin({ top: 12 })
-              .alignItems(VerticalAlign.Center)
-            }
-
           }
           .width('100%')
           .padding({
             left: $r('app.float.app_spacing_16'),
             right: $r('app.float.app_spacing_16'),
-            top: $r('app.float.app_spacing_16'),
+            top: $r('app.float.app_spacing_4'),
             bottom: 100
           })
         }
@@ -696,153 +426,314 @@ struct AppSettingsPage {
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
   }
 
-  /** 主题选项卡片:名称 + 说明 + 小型颜色预览 + 当前选择标记 */
+  /** 分区小标题(与行内文字左对齐:卡片内边距 12 + 标题内边距 4) */
   @Builder
-  themeOptionCard(mode: ThemeMode) {
-    Column() {
-      Row() {
-        // 小型颜色预览(背景 / 表面 / 文字 / Accent 四色块)
-        Column() {
-          Column() {
-            Row() {
-              this.previewSwatch(this.previewColors(mode).pageBg, 1.0)
-              this.previewSwatch(this.previewColors(mode).surface1, 1.0)
-              this.previewSwatch(this.previewColors(mode).textPrimary, 0.6)
-              this.previewSwatch(this.previewColors(mode).accent, 1.0)
-            }
-            .width('100%')
-            .justifyContent(FlexAlign.Start)
-          }
-          .width(64)
-          .height(40)
-          .borderRadius(8)
-          .backgroundColor(this.previewColors(mode).pageBg)
-          .justifyContent(FlexAlign.Center)
-          .padding({ left: 6, right: 6 })
-          .border({ width: 1, color: this.previewColors(mode).border })
-        }
-        .margin({ right: 12 })
-
-        Column() {
-          Row() {
-            Text(this.themeTitle(mode))
-              .fontSize($r('app.float.app_font_body'))
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.page_primary_text'))
-
-            if (this.selectedThemeMode === mode) {
-              Text('✓')
-                .fontSize(14)
-                .fontColor($r('app.color.app_accent'))
-                .margin({ left: 6 })
-            }
-          }
-          .width('100%')
-          .alignItems(VerticalAlign.Center)
-
-          Text(this.themeDesc(mode))
-            .fontSize($r('app.float.app_font_caption'))
-            .fontColor($r('app.color.page_secondary_text'))
-            .maxLines(2)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .margin({ top: 2 })
-            .width('100%')
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-      }
+  sectionCaption(text: ResourceStr) {
+    Text(text)
+      .fontSize($r('app.float.app_font_caption'))
+      .fontColor($r('app.color.page_secondary_text'))
       .width('100%')
-      .padding({ left: 12, right: 12, top: 12, bottom: 12 })
-      .alignItems(VerticalAlign.Center)
+      .padding({ left: 4, top: 16, bottom: 6 })
+  }
+
+  /** 行顶分隔线(卡片内非首行使用) */
+  @Builder
+  rowDivider() {
+    Divider()
+      .color($r('app.color.app_divider'))
+      .margin({ left: 12, right: 12 })
+  }
+
+  /** 主题选择:一行四张竖条色块卡(三色预览 + 名称,选中加描边) */
+  @Builder
+  themeRow() {
+    Row() {
+      this.themeMiniCard(ThemeMode.FOLLOW_SYSTEM)
+      this.themeMiniCard(ThemeMode.LIGHT)
+      this.themeMiniCard(ThemeMode.DARK)
+      this.themeMiniCard(ThemeMode.TAVERN)
     }
     .width('100%')
-    .borderRadius($r('app.float.app_radius_md'))
-    .backgroundColor($r('app.color.app_surface_1'))
+    .padding({ left: 8, right: 8, top: 10, bottom: 10 })
+    .alignItems(VerticalAlign.Top)
+  }
+
+  @Builder
+  themeMiniCard(mode: ThemeMode) {
+    Column() {
+      Column() {
+        Text('')
+          .width('100%')
+          .height(11)
+          .backgroundColor(this.previewColors(mode).pageBg)
+        Text('')
+          .width('100%')
+          .height(11)
+          .backgroundColor(this.previewColors(mode).surface1)
+        Text('')
+          .width('100%')
+          .height(11)
+          .backgroundColor(this.previewColors(mode).textPrimary)
+      }
+      .width('100%')
+      .borderRadius($r('app.float.app_radius_sm'))
+      .clip(true)
+      .border({ width: 1, color: $r('app.color.app_divider') })
+
+      Text(this.themeTitle(mode))
+        .fontSize($r('app.float.app_font_caption'))
+        .fontColor(this.selectedThemeMode === mode
+          ? $r('app.color.app_accent')
+          : $r('app.color.page_secondary_text'))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .margin({ top: 4 })
+    }
+    .layoutWeight(1)
+    .margin({ left: 4, right: 4 })
+    .padding(4)
+    .borderRadius($r('app.float.app_radius_sm'))
     .border({
       width: this.selectedThemeMode === mode ? 2 : 1,
       color: this.selectedThemeMode === mode ? $r('app.color.app_accent') : $r('app.color.app_divider')
     })
-    .margin({ bottom: 8 })
     .onClick(() => {
       this.selectTheme(mode);
     })
   }
 
-  /** 单个预览色块 */
+  /** 用户称呼行:行内输入,失焦/回车自动保存 */
   @Builder
-  previewSwatch(color: string, opacity: number) {
-    Text('')
-      .width(10)
-      .height(10)
-      .borderRadius(2)
-      .backgroundColor(color)
-      .opacity(opacity)
-      .margin({ right: 4 })
+  userNameRow() {
+    Row() {
+      Text($r('app.string.settings_global_user_name_label'))
+        .fontSize($r('app.float.app_font_body'))
+        .fontColor($r('app.color.page_secondary_text'))
+        .maxLines(1)
+
+      TextInput({
+        placeholder: $r('app.string.settings_global_user_name_placeholder'),
+        text: this.globalUserName
+      })
+        .fontSize($r('app.float.app_font_body'))
+        .fontColor($r('app.color.page_primary_text'))
+        .backgroundColor($r('app.color.app_surface_2'))
+        .borderRadius($r('app.float.app_radius_sm'))
+        .height(34)
+        .padding({ left: 10, right: 10 })
+        .layoutWeight(1)
+        .margin({ left: 12 })
+        .onChange((value: string) => {
+          this.globalUserName = value;
+        })
+        .onSubmit(() => {
+          this.saveGlobalUserNameIfChanged().catch(() => {});
+        })
+        .onBlur(() => {
+          this.saveGlobalUserNameIfChanged().catch(() => {});
+        })
+    }
+    .width('100%')
+    .height(52)
+    .padding({ left: 12, right: 12 })
+    .alignItems(VerticalAlign.Center)
   }
 
-  /** 发送按钮位置选项卡片 */
+  /** 发送按钮位置行:段选控件 */
   @Builder
-  positionOption(isLeft: boolean) {
+  sendPositionRow() {
     Column() {
+      this.rowDivider()
       Row() {
-        if (isLeft) {
-          Stack() {
-            SymbolGlyph($r('sys.symbol.arrow_up'))
-              .fontSize(12)
-              .fontColor([$r('app.color.app_on_accent')])
-          }
-          .width(24)
-          .height(24)
-          .borderRadius(12)
-          .backgroundColor($r('app.color.app_accent'))
-          .margin({ right: 6 })
+        Text($r('app.string.settings_send_button_position'))
+          .fontSize($r('app.float.app_font_body'))
+          .fontColor($r('app.color.page_secondary_text'))
+          .maxLines(1)
 
-          Text('')
-            .width(60)
-            .height(20)
-            .borderRadius(4)
-            .backgroundColor($r('app.color.app_surface_2'))
-        } else {
-          Text('')
-            .width(60)
-            .height(20)
-            .borderRadius(4)
-            .backgroundColor($r('app.color.app_surface_2'))
-            .margin({ right: 6 })
-
-          Stack() {
-            SymbolGlyph($r('sys.symbol.arrow_up'))
-              .fontSize(12)
-              .fontColor([$r('app.color.app_on_accent')])
-          }
-          .width(24)
-          .height(24)
-          .borderRadius(12)
-          .backgroundColor($r('app.color.app_accent'))
+        Row() {
+          this.positionSegment(false)
+          this.positionSegment(true)
         }
+        .padding(2)
+        .backgroundColor($r('app.color.app_surface_2'))
+        .borderRadius($r('app.float.app_radius_sm'))
+        .margin({ left: 12 })
       }
+      .width('100%')
+      .height(44)
+      .padding({ left: 12, right: 12 })
       .alignItems(VerticalAlign.Center)
-
-      Text(isLeft
-        ? $r('app.string.settings_send_button_position_left')
-        : $r('app.string.settings_send_button_position_right'))
-        .fontSize($r('app.float.app_font_caption'))
-        .fontColor($r('app.color.page_primary_text'))
-        .margin({ top: 6 })
     }
-    .layoutWeight(1)
-    .padding({ top: 12, bottom: 12 })
-    .borderRadius($r('app.float.app_radius_md'))
-    .backgroundColor($r('app.color.app_surface_1'))
-    .border({
-      width: this.sendButtonLeft === isLeft ? 2 : 1,
-      color: this.sendButtonLeft === isLeft ? $r('app.color.app_accent') : $r('app.color.app_divider')
-    })
-    .margin({ right: isLeft ? 8 : 0 })
-    .alignItems(HorizontalAlign.Center)
-    .justifyContent(FlexAlign.Center)
+    .width('100%')
+  }
+
+  /** 段选控件中的单个选项 */
+  @Builder
+  positionSegment(isLeft: boolean) {
+    Text(isLeft
+      ? $r('app.string.settings_send_button_position_left')
+      : $r('app.string.settings_send_button_position_right'))
+      .fontSize($r('app.float.app_font_caption'))
+      .fontColor(this.sendButtonLeft === isLeft
+        ? $r('app.color.page_primary_text')
+        : $r('app.color.page_secondary_text'))
+      .backgroundColor(this.sendButtonLeft === isLeft
+        ? $r('app.color.app_surface_1')
+        : Color.Transparent)
+      .borderRadius($r('app.float.app_radius_sm'))
+      .padding({ left: 14, right: 14, top: 5, bottom: 5 })
+      .onClick(() => {
+        this.saveSendButtonPos(isLeft);
+      })
+  }
+
+  /** 智感握姿行:开关 */
+  @Builder
+  smartGripRow() {
+    Column() {
+      this.rowDivider()
+      Row() {
+        Text($r('app.string.settings_smart_grip'))
+          .fontSize($r('app.float.app_font_body'))
+          .fontColor($r('app.color.page_secondary_text'))
+          .maxLines(1)
+          .layoutWeight(1)
+
+        Toggle({ type: ToggleType.Switch, isOn: this.smartGripEnabled })
+          .selectedColor($r('app.color.app_accent'))
+          .onChange((isOn: boolean) => {
+            this.saveSmartGrip(isOn);
+          })
+      }
+      .width('100%')
+      .height(44)
+      .padding({ left: 12, right: 12 })
+      .alignItems(VerticalAlign.Center)
+    }
+    .width('100%')
+  }
+
+  /**
+   * 值行:标签(次要色) + 右对齐值(主色) + 箭头。
+   * @param showDivider 是否在行顶画分隔线(卡片内非首行传 true)
+   */
+  @Builder
+  valueRow(label: string, value: string, enabled: boolean, showDivider: boolean, onClick: () => void) {
+    Column() {
+      if (showDivider) {
+        this.rowDivider()
+      }
+      Row() {
+        Text(label)
+          .fontSize($r('app.float.app_font_body'))
+          .fontColor($r('app.color.page_secondary_text'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(value)
+          .fontSize($r('app.float.app_font_body'))
+          .fontColor(enabled
+            ? $r('app.color.page_primary_text')
+            : $r('app.color.page_secondary_text'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .textAlign(TextAlign.End)
+          .layoutWeight(1)
+          .margin({ left: 12 })
+        Text('›')
+          .fontSize(18)
+          .fontColor($r('app.color.page_secondary_text'))
+          .margin({ left: 4 })
+      }
+      .width('100%')
+      .height(44)
+      .padding({ left: 12, right: 12 })
+      .alignItems(VerticalAlign.Center)
+    }
+    .width('100%')
     .onClick(() => {
-      this.saveSendButtonPos(isLeft);
+      if (!enabled) {
+        return;
+      }
+      onClick();
+    })
+  }
+
+  /**
+   * 带动作胶囊的值行:标签 + 右对齐值 + 胶囊动作(点击整行触发)。
+   * @param showDivider 是否在行顶画分隔线
+   */
+  @Builder
+  actionRow(label: string, value: string, actionText: ResourceStr, showDivider: boolean,
+    onClick: () => void) {
+    Column() {
+      if (showDivider) {
+        this.rowDivider()
+      }
+      Row() {
+        Text(label)
+          .fontSize($r('app.float.app_font_body'))
+          .fontColor($r('app.color.page_secondary_text'))
+          .maxLines(1)
+
+        Text(value)
+          .fontSize($r('app.float.app_font_body'))
+          .fontColor($r('app.color.page_primary_text'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .textAlign(TextAlign.End)
+          .layoutWeight(1)
+          .margin({ left: 12 })
+
+        Text(actionText)
+          .fontSize($r('app.float.app_font_caption'))
+          .fontColor($r('app.color.page_primary_text'))
+          .backgroundColor($r('app.color.app_surface_2'))
+          .borderRadius($r('app.float.app_radius_sm'))
+          .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+          .margin({ left: 12 })
+      }
+      .width('100%')
+      .height(44)
+      .padding({ left: 12, right: 12 })
+      .alignItems(VerticalAlign.Center)
+    }
+    .width('100%')
+    .onClick(() => {
+      onClick();
+    })
+  }
+
+  /**
+   * 卡片内菜单行(无值列,可危险色)。
+   * @param showDivider 是否在行顶画分隔线
+   */
+  @Builder
+  menuRow(label: string, isDestructive: boolean, showDivider: boolean, onClick: () => void) {
+    Column() {
+      if (showDivider) {
+        this.rowDivider()
+      }
+      Row() {
+        Text(label)
+          .fontSize($r('app.float.app_font_body'))
+          .fontColor(isDestructive
+            ? $r('app.color.app_danger')
+            : $r('app.color.page_primary_text'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
+        Text('›')
+          .fontSize(18)
+          .fontColor($r('app.color.page_secondary_text'))
+      }
+      .width('100%')
+      .height(44)
+      .padding({ left: 12, right: 12 })
+      .alignItems(VerticalAlign.Center)
+    }
+    .width('100%')
+    .onClick(() => {
+      onClick();
     })
   }
 }

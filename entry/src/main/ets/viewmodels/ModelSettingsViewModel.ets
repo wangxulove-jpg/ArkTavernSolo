@@ -320,6 +320,30 @@ export class ModelSettingsViewModel {
     }
   }
 
+  /**
+   * 列表内联快捷切换:直接把指定配置设为当前,不进入编辑态。
+   * 与 setCurrent 的差别:不依赖 selectedConfigId(列表行切换时表单可能仍停留在别的配置)。
+   */
+  async setCurrentById(id: string): Promise<void> {
+    if (this.isSaving || id === this.currentConfigId) {
+      return;
+    }
+    this.isSaving = true;
+    this.errorMessage = '';
+    this.statusMessage = '';
+    try {
+      await this.modelService.setCurrentConfig(id);
+      this.currentConfigId = id;
+      await this.loadCurrentConfigApiKey(id);
+      const config: ProviderConfig | null = await this.modelService.getConfig(id);
+      this.statusMessage = config !== null ? '已切换到 ' + config.name : '已设为当前配置';
+    } catch (e) {
+      this.errorMessage = this.toUserMessage(e, '设置当前配置失败');
+    } finally {
+      this.isSaving = false;
+    }
+  }
+
   async testConnection(): Promise<void> {
     if (this.isTesting) {
       return;

@@ -41,7 +41,8 @@ bridge/：仅承载「页面 ↔ 组件」的宿主契约（例：FrontendCardHo
 | 用户称呼 / Persona 注入 | `services/ChatUserIdentityService.ets` | `services/PersonaService` | S |
 | **Prompt 如何拼装** | `services/PromptBuilder.ets` | `services/MacroReplacer` / `RecentMessageSelector` / `HistoryTrimmer` / `PromptSegment` 段序 | S |
 | 请求构建与注入（世界书 / 按需记忆 / 粘滞 / 锚点） | `services/ChatRequestBuilder.ets` | `services/ChatRequestPlan`（Token 预算 + 裁剪） | S |
-| 选模型 / 密钥 / 连接测试 | `services/ModelService.ets` → `pages/ModelSettingsPage.ets` / `ModelConfigEditPage.ets` | `storage/ProviderConfigStore` / `ProviderKeyStore` / `services/ProviderFactory` / `network/providers/` | UI→VM→S→storage→network |
+| 选模型 / 密钥 / 连接测试 / **列表内联快捷切换** | `services/ModelService.ets` → `pages/ModelSettingsPage.ets` / `ModelConfigEditPage.ets`（列表行内联「切换」胶囊 → `ModelSettingsViewModel.setCurrentById`，无需进编辑页） | `storage/ProviderConfigStore` / `ProviderKeyStore` / `services/ProviderFactory` / `network/providers/` | UI→VM→S→storage→network |
+| 应用设置（主题 / 用户称呼 / 发送按钮 / 市场缓存 / 诊断日志） | `pages/AppSettingsPage.ets` | `services/ThemeManager`（主题权威）+ `storage/AppPreferences` + `utils/LogBuffer`（T1 直连白名单） | UI→S |
 | 聊天记录 / 会话管理（分组/拖拽/归档） | `pages/tabs/ChatSessionRootView.ets`（2,786 行） | `viewmodels/ChatSessionListViewModel` → `services/ChatPersistenceService`；分组弹窗 `components/SessionGroupDialogs` | UI→VM→S |
 | 世界书 Lorebook（业务） | `pages/LorebookPage.ets` → `viewmodels/LorebookViewModel` | `services/LorebookService` → `repositories/LorebookRepository` | UI→VM→S→Repo |
 | 世界书面板（聊天页状态/世界书浮层） | `viewmodels/LorebookPanelVM.ets` + `components/ChatStatusWorldPanel.ets` | 类型 `models/LorebookPanel.ets` | VM |

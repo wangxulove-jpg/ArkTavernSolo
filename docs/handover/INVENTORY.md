@@ -87,6 +87,8 @@
 | **版本 → 语句映射** | `Map` 注册表，取值返回浅拷贝 | `database/DatabaseSchema.ets` 的 `SCHEMA_BY_VERSION` |
 | **跨表事务** | `dbHelper.runInTransaction(fn)`，Repository 传 `store` | `services/ChatPersistenceService.ets` |
 | **纯数据/共享类型** | 下沉 `models/`（跨模块复用必须 export） | `models/LorebookPanel.ets` |
+| **设置类页面紧凑行版式**（提高信息密度用） | 分区 = `caption` 小标题（tertiary 色，`padding-left 4`）+ 一张 `surface_1` 卡片；卡内行高 **44**、行间 `Divider`（左右缩进 12）、行 = 标签(次要色) + 值(主色，右对齐 `layoutWeight(1)`) + `›`；动作以 `surface_2` 胶囊呈现在行尾；危险项独立成行用 `app_danger` | `components/ChatMoreMenuSheet.ets`（sheet 场景）、`pages/AppSettingsPage.ets`（整页场景） |
+| **多选一控件（主题/位置等）压成一行** | 4 个以内用一行等宽小卡（色块预览 + 名称 + 选中描边）；2 个用段选胶囊（`surface_2` 轨道 + `surface_1` 滑块）；**不要**每项占一张整宽大卡 | `AppSettingsPage.themeRow` / `positionSegment` |
 | **机械校验**（改动是否等价） | 搬运→byte diff；对外 API→声明面 diff；数据产物→全量字符串 diff | 手法记录见 [PITFALLS](./PITFALLS.md) 第 4 节 |
 
 ## 4. 明确"不要重复造"的反例清单

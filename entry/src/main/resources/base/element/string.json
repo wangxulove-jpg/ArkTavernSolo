@@ -233,6 +233,10 @@
       "value": "当前"
     },
     {
+      "name": "model_settings_switch",
+      "value": "切换"
+    },
+    {
       "name": "model_settings_name",
       "value": "配置名称"
     },
