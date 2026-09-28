@@ -1,10 +1,20 @@
 # CURRENT — 当前状态与下一步
 
-> 最后更新：2026-09-27 · **每次会话结束前必须更新本文件**（纪律见 `AGENTS.md` §10）
+> 最后更新：2026-09-28 · **每次会话结束前必须更新本文件**（纪律见 `AGENTS.md` §10）
 
 ## 1. 现在在哪
 
 - **基线**：tag `refactor-baseline` @ `8dbd9df`（2026-09-27 建立，工作区干净）
+- **里程碑 tag**（2026-09-28 补齐，全部为**注释 tag**，只增不改；锚点规则：指向该批次**最后一次代码提交**，故含批次末尾的校验修复）：
+  | tag | 指向 | 含义 |
+  |---|---|---|
+  | `v1.0.0` | `af8b29b` | 旧版本线（轻量 tag，非本轮建立） |
+  | `refactor-baseline` | `8dbd9df` | 重构安全基线（轻量 tag） |
+  | `p1-complete` | `7983170` | P1 批次收官：组件抽取 + 死代码清理，ChatPage 4,898 行 |
+  | `p2-complete` | `36d809c` | P2 收官：ChatService 6,735 → 2,413 行（含 API 面校验后的 `async` 修复） |
+  | `p3-complete` | `92e13c4` | P3 收官：ChatViewModel 1,479 / MemoryService 1,451 / DatabaseSchema 1,443 行 |
+  | `smoke-p2p3-passed` | `30bba43` | P2+P3 统一实机冒烟通过（真机 MIS-AL00 / API 24） |
+  > tag 仅本地，**未 push**；不要 rebase/squash 历史——`docs/handover/` 里的短 hash 回滚锚点会全部失效
 - **本日完成**：
   1. 全项目只读审计（286 文件 / 112,801 行；结论：分层主干成立，痛点集中于巨型文件与重复实现）→ [审计报告](./2026-09-27-audit-and-roadmap.md)
   2. 交接文档体系重建（根 `AGENTS.md` + `docs/handover/`）
@@ -355,3 +365,4 @@
 | 2026-09-27 | **设置 Tab UI 优化（应用设置 + 模型设置，方案经可视化对比拍板）** | 起因：用户反馈设置页留白多、信息密度低，"切换模型太麻烦"。**方案先经 `dynamic-ui` 渲染对比图 → AskUserQuestion 拍板**（应用设置取"分组卡片紧凑行"；主题取"四个竖条色块卡排一行"；称呼改失焦自动保存并去掉说明文字；模型切换取"列表行内联切换"）。**实现**：① `AppSettingsPage` 整页改为 4 分区（外观 / 对话 / 身份 / 存储与诊断）= `caption` 小标题 + `surface_1` 卡片 + 行高 **44** + 卡内 1px 分隔线（与 `ChatMoreMenuSheet` 同一范式）；主题由 4 张整宽竖卡改**一行 4 张竖条色块卡**（三色预览 + 名称 + 选中描边）；用户称呼改**行内输入 + 失焦/回车自动保存**（删掉说明段、独立 label 与保存按钮；`lastSavedUserName` 去重避免重复写盘与重复 toast）；发送按钮位置改**段选胶囊**；用户身份 / 市场缓存 / 诊断日志 / 清空日志各压成**单行**（值右对齐 + `surface_2` 动作胶囊）；首屏可见分区约 **2 → 约 5**。② `ModelSettingsPage`：配置列表行右侧加**内联「切换」胶囊**（当前项显示「当前」徽标），新增 `ModelSettingsViewModel.setCurrentById(id)`（不依赖 `selectedConfigId`，供列表直接切换）；**切换模型由 3 步（点行→编辑页→设为当前→返回）压到 1 步**；顺带压缩当前配置卡（provider·model 与 API Key 同行、Key 文本限宽 110）与列表/新建按钮留白。新增字符串资源 `model_settings_switch`。**删除**：`isSaving` / `ThemeOption` 死接口 / 未用 import `BusinessError`。改动文件：`AppSettingsPage` / `ModelSettingsPage` / `ModelSettingsViewModel` / `string.json`。编译 **BUILD SUCCESSFUL**（仅既有 `deprecated` 与"Function may throw"告警）+ 单测 **96 通过 / 0 失败**；新增踩坑 P-28（行内双点击区做**兄弟节点**，不嵌套 `onClick`）。**设备侧未验证**（未要求"自动测试"）；**切换模型后 LLM 实际走新配置未在设备验证** |
 | 2026-09-27 | **对话设置子面板改上滑 Sheet（4 个）+ 用户身份重排** | 起因：用户反馈对话设置里点「记忆模式 / 对话称呼 / 用户身份」**直接蹦出居中弹框**很突兀，要求改成与对话设置一致的向上弹出；并反馈「切换用户身份」卡片很丑。**方案经 `dynamic-ui` 渲染对比图 → AskUserQuestion 拍板**（身份面板取"上下分段切换"；「新建章节」一并改）。**实现**：① 四个居中模态框（`memoryModeDialog` 88% 宽 / `userNameOverrideDialog` 80% 宽 / `personaPickerSheet` 85% 宽 / `chapterGreetingPickerDialog` 88% 宽，均为 `rgba(0,0,0,0.5)` 遮罩居中）全部改为 `bindSheet(SheetSize.FIT_CONTENT)` 上滑面板，走 `ChatMoreMenuSheet` 同一**两段式开关**（外层 `if` 挂载 0 高节点 → `onAppear` 置 `sheetShow = true` 触发上滑；关闭只置 `sheetShow = false`，由 `onDisappear` 再卸载 → 有下滑动画）；面板内容改用「标题 + 分区小标题 + `surface_2` 卡片 + 卡内 1px 分隔线 + 行高 44」范式。② **用户身份面板重排**：新增 `@State personaSheetTab` 分段（用户身份 / 性格总结），身份分段 = 一张卡（`跟随默认` + 各 Persona 行，右侧对勾表选中，`persona.description` 限 2 行）、性格总结分段 = 摘要卡 + 操作卡（`从角色卡提取` / `从对话总结` 忙碌时行尾换 `LoadingProgress`、有摘要时多一行危险色 `清除性格总结`）；去掉原「取消」按钮（改用遮罩/下拉关闭）。③ 新增 3 个可复用 `@Builder`：`sheetSectionCaption` / `sheetChoiceRow` / `sheetActionRow`（+ `personaTabItem`）；开场白预览由 `maxLines(4)` 收到 **2 行**、去掉内层 `Scroll(300)`（改由 Sheet 自身滚动）。④ **删除死代码** `closeChapterGreetingPicker()`（0 调用）。⑤ 记忆模式「自动归档」说明文案由长句精简为「未归档满 50 条或 2 万字符时,回复完成后自动生成」（去掉了"只在归档时刻一次性重建缓存前缀"这一实现细节）。改动文件：`pages/ChatPage.ets`（4,884 → 4,890 行）。编译 **BUILD SUCCESSFUL** + 单测 **96 通过 / 0 失败**；新增踩坑 P-29（bindSheet 必须两段式开关才有上滑动画）。**设备侧未验证**（未要求"自动测试"）；**四个面板的实际上滑动画与「更多菜单 → 子面板」的衔接观感需真机确认** |
 | 2026-09-28 | **进入会话直接停在最新消息（不再从最开始翻到最新）** | 起因：用户反馈每次进对话都"从最开始的对话突然跳到最后的对话内容"。**定位**：消息列表是 `Scroll` + `LazyForEach`，而 `autoScrollToBottom` 只在 `messages.length > lastMessageCount` 时滚底**一次**；懒加载的内容高度是逐帧长出来的，首帧 `scrollEdge(Bottom)` 只能落在"当时已量出的底部"（≈顶部），随后内容补齐才跳到最新 → 用户就看到"先顶部、后跳最新"。**修正**（用户拍板"加加载动画"；只改 `ChatPage` 单文件，未动 `ChatMessageList`）：① 新增 `@State chatListPositioned` 门控 + 追底锁 `bottomLockActive`，定位完成前消息列表 `.opacity(0)`（**仍保持挂载**，否则不参与布局、永远算不出真实高度 → 会死锁成永不显示），期间复用现有 `loadingView()`（"加载会话中…"）占位并加 `hitTestBehavior(HitTestMode.Block)` 阻断误触（`loadingView` 也用于初始加载分支，两处都该挡触摸）；② `autoScrollToBottom` 改为「锁生效时每次 `onAreaChange` 都 `scrollEdge(Bottom)`，直到 `scroller.isAtEnd()`」，另设 **40 次重试上限** + **800ms 兜底定时器**（`aboutToDisappear` 清理，符合定时器清理约束）；③ 只在**整列表被替换**时定位（首条消息 id 变化，或页面首次加载且尚未显示过），空会话发第一条消息不触发（否则会闪一下加载动画）。编译 **BUILD SUCCESSFUL** + 单测 **96 通过 / 0 失败**。踩坑单独成节：`PITFALLS.md` 新增 **§2b 聊天消息列表滚动** + **P-80**。**设备侧观感未验证**（未要求"自动测试"）——需真机确认：进长对话是否直接停在最新、无翻页残留、定位耗时（应 1~3 帧，兜底上限 800ms）是否可接受。**另发现（未修，见 §4）**：`userScrolledUp` 全仓无置 true 之处，"回到底部"按钮实际永不出现 |
+| 2026-09-28 | **里程碑 tag 补齐（不改写历史）** | 起因：用户问"master 上大量细小提交是否正常"。**结论**：正常且是刻意的——`AGENTS.md` 的"一次一操作 → 编译验证 → 提交，失败即回滚"要求细粒度提交，`CURRENT.md` 直接用短 hash 当回滚锚点、且"不建 changelog"依赖 `git log --grep`；实测 212 提交 / 中位数 **206 行** / 58 条 >500 行，细碎集中在 09-27 的 84 条（47 条是 P2/P3 重构接缝）。**决定**：不 rebase/squash（会让文档里的短 hash 锚点全部失效），改用 tag 导航。新增 4 个**注释 tag**：`p1-complete`@`7983170` · `p2-complete`@`36d809c` · `p3-complete`@`92e13c4` · `smoke-p2p3-passed`@`30bba43`，锚点规则统一为"该批次**最后一次代码提交**"（故含批次末尾的校验修复：P2 的 `async` 回归、P3-3① 快照归属）；清单记入 **§1**（唯一出处）。**另指出一处待收紧**：23 条 `docs(handover)` 全在 09-27 且基本是"代码接缝提交之后紧跟一条补文档"，违反 `AGENTS.md` §10 第 8 条"同一次提交内更新"，是当天提交数翻倍主因。tag 仅本地，**未 push** |
