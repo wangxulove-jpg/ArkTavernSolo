@@ -272,18 +272,15 @@ struct ChatPage {
   @State frontendPanelHtml: string = '';
   /** 前端面板标题(缺省用角色名) */
   @State frontendPanelTitle: string = '';
-  /** 前端面板建议宽度(vp,缺省 360) */
-  @State frontendPanelWidth: number = 360;
-  /** 前端面板建议高度(vp 或百分比,缺省 '65%') */
-  @State frontendPanelHeight: string = '65%';
+  /** 前端面板建议高度(vp 或百分比,缺省 '50%') */
+  @State frontendPanelHeight: string = '50%';
   /** 前端面板是否固定:固定后点击面板以外区域不会自动收起 */
   @State frontendPanelPinned: boolean = false;
-  /** 前端面板当前宽度(vp,打开时由建议值初始化,角落拖动可实时调整) */
+  /** 前端面板当前宽度(vp,打开时默认铺满全宽;长按角柄拖动可实时调整) */
   @State frontendPanelCurWidth: number = 360;
-  /** 前端面板当前高度(vp,打开时由建议值初始化,角落拖动可实时调整) */
+  /** 前端面板当前高度(vp,打开时由建议值初始化,长按角柄拖动可实时调整) */
   @State frontendPanelCurHeight: number = 0;
-  /** 前端面板相对右上角锚点的位移(vp,拖标题栏移动;收起后保留,换卡/离开页面重置) */
-  @State frontendPanelOffsetX: number = 0;
+  /** 前端面板纵向位移(vp,拖标题栏上下移动;收起后保留,换卡/离开页面重置) */
   @State frontendPanelOffsetY: number = 0;
   /**
    * 前端面板是否已挂载(ArkWeb 保活):
@@ -303,8 +300,7 @@ struct ChatPage {
   private frontendResizeStartW: number = 360;
   /** 角落拖动起始高度(vp) */
   private frontendResizeStartH: number = 0;
-  /** 标题栏拖动起始位移(vp) */
-  private frontendDragStartX: number = 0;
+  /** 标题栏纵向拖动起始位移(vp) */
   private frontendDragStartY: number = 0;
   /** 窗口宽度缓存(vp,首次布局时取) */
   private cachedScreenW: number = -1;
@@ -364,6 +360,9 @@ struct ChatPage {
 
   /** 前端界面面板尺寸持久化 key 前缀(按角色卡:id 后缀,值 "宽x高" vp) */
   private static readonly PREF_KEY_FRONTEND_PANEL_SIZE: string = 'fe_panel_size_';
+
+  /** 前端面板四角缩放热区边长(vp):放大触控目标,避免贴在圆角处难以命中 */
+  private static readonly FRONTEND_CORNER_HIT: number = 44;
 
   /** 发送按钮位置: true = 左侧, false = 右侧 */
   @State sendButtonLeft: boolean = false;
@@ -1684,8 +1683,7 @@ struct ChatPage {
     const spec: FrontendSpec = extractFrontendSpec(character.extensions);
     this.hasFrontend = spec.html.trim().length > 0;
     this.frontendMode = spec.mode;
-    this.frontendPanelWidth = spec.sizeWidth > 0 ? spec.sizeWidth : 360;
-    this.frontendPanelHeight = spec.sizeHeight.length > 0 ? spec.sizeHeight : '65%';
+    this.frontendPanelHeight = spec.sizeHeight.length > 0 ? spec.sizeHeight : '50%';
     this.frontendPanelTitle = spec.title;
     // 读取该卡上次调整过的面板尺寸(异步,取到后作为下次展开的初始值)
     this.loadPersistedPanelSize(character.id);
@@ -1699,7 +1697,6 @@ struct ChatPage {
     this.frontendMountedCardId = '';
     this.frontendPanelPinned = false;
     this.frontendPanelResized = false;
-    this.frontendPanelOffsetX = 0;
     this.frontendPanelOffsetY = 0;
     this.persistedPanelW = 0;
     this.persistedPanelH = 0;
@@ -1729,11 +1726,10 @@ struct ChatPage {
         this.frontendMountedCardId = character.id;
         this.frontendPanelMounted = true;
       }
-      // 尺寸初始化:上次调整过的持久化值 > 卡声明建议值 > 默认(360 / 65%)
-      this.frontendPanelCurWidth = this.clampPanelWidth(
-        this.persistedPanelW > 0
-          ? this.persistedPanelW
-          : (this.frontendPanelWidth > 0 ? this.frontendPanelWidth : 360));
+      // 尺寸初始化:宽度默认铺满全宽(仅当用户上次长按角柄调整过才沿用其值)
+      this.frontendPanelCurWidth = this.persistedPanelW > 0
+        ? this.clampPanelWidth(this.persistedPanelW)
+        : this.screenWidthVp();
       this.frontendPanelCurHeight = this.clampPanelHeight(
         this.persistedPanelH > 0 ? this.persistedPanelH : this.resolvePanelHeightVp());
       this.frontendPanelPinned = false;
@@ -1762,8 +1758,8 @@ struct ChatPage {
 
   /** 面板隐藏时的横向位移(vp):足以把面板整体移出右边界(不改变布局尺寸) */
   private panelHideOffset(): number {
-    // 面板可能已被拖到偏左位置,位移需再补上这段距离才能完全移出屏幕
-    return this.frontendPanelCurWidth + 120 - this.frontendPanelOffsetX;
+    // 面板默认铺满且只做纵向移动,横向位移固定为"整体宽度 + 余量"即可完全移出屏幕
+    return this.frontendPanelCurWidth + 120;
   }
 
   /** 读取该角色卡上次调整过的面板尺寸(vp);无记录/解析失败则保持 0 */
@@ -1823,10 +1819,10 @@ struct ChatPage {
     }
   }
 
-  /** 解析面板高度为 vp:百分比按窗口高度折算;数字原样;非法/空回退 65% */
+  /** 解析面板高度为 vp:百分比按窗口高度折算;数字原样;非法/空回退 50% */
   private resolvePanelHeightVp(): number {
     const h: string = this.frontendPanelHeight;
-    const fallback: number = Math.round(this.screenHeightVp() * 0.65);
+    const fallback: number = Math.round(this.screenHeightVp() * 0.5);
     if (h.length === 0) {
       return fallback;
     }
@@ -1871,9 +1867,9 @@ struct ChatPage {
     }
   }
 
-  /** 面板宽度限幅:最小 240vp,最大不超过窗口宽度减去左边距 */
+  /** 面板宽度限幅:最小 240vp,最大不超过窗口宽度(默认铺满全宽) */
   private clampPanelWidth(w: number): number {
-    const max: number = this.screenWidthVp() - 24;
+    const max: number = this.screenWidthVp();
     return Math.min(Math.max(w, 240), max);
   }
 
@@ -1884,18 +1880,39 @@ struct ChatPage {
     return Math.min(Math.max(h, 180), max);
   }
 
-  /** 拖动位移限幅:面板锚定右上角,向左最多留 8vp 边距,向右不越过屏幕右缘 */
-  private clampPanelOffsetX(x: number): number {
-    const min: number = Math.min(0, 8 + this.frontendPanelCurWidth - this.screenWidthVp());
-    return Math.min(Math.max(x, min), 0);
-  }
-
   /** 拖动位移限幅:不高于展开默认位置,底部不越过手势条 */
   private clampPanelOffsetY(y: number): number {
     const nav: number = (AppStorage.get<number>('navigationBarHeight') ?? 0) as number;
     const maxTop: number = this.screenHeightVp() - nav - 8;
     const max: number = maxTop - this.statusBarHeight - 54 - this.frontendPanelCurHeight;
     return Math.min(Math.max(y, 0), Math.max(0, max));
+  }
+
+  /** 角柄横向位置:0/1=贴左缘,2/3=贴右缘 */
+  private resizeHotspotX(corner: number): number {
+    const right: boolean = corner === 1 || corner === 3;
+    return right
+      ? Math.max(0, this.frontendPanelCurWidth - ChatPage.FRONTEND_CORNER_HIT)
+      : 0;
+  }
+
+  /** 角柄纵向位置:0/1=贴上缘,2/3=贴下缘 */
+  private resizeHotspotY(corner: number): number {
+    const bottom: boolean = corner === 2 || corner === 3;
+    return bottom
+      ? Math.max(0, this.frontendPanelCurHeight - ChatPage.FRONTEND_CORNER_HIT)
+      : 0;
+  }
+
+  /** 角标括号朝向:0=左上 1=右上 2=左下 3=右下(基准形为左上 L) */
+  private resizeBracketAngle(corner: number): number {
+    if (corner === 1) {
+      return 90;
+    }
+    if (corner === 2) {
+      return 270;
+    }
+    return corner === 3 ? 180 : 0;
   }
 
   /** 折叠态:贴屏右缘的「界面」标签(与「状态」标签同规格;由 rightRail 统一排布与定位) */
@@ -1951,7 +1968,7 @@ struct ChatPage {
           })
       }
 
-      // 面板:标题栏 + ArkWeb 内容(右下角把手可调整大小,标题栏可拖动移动)
+      // 面板:标题栏 + ArkWeb 内容(默认左右铺满、四角长按后缩放,标题栏可上下拖动移动)
       // 保活:收起只做位移+透明(布局尺寸不变,ArkWeb 节点不重建),再展开即刻显示,无白屏
       Stack({ alignContent: Alignment.TopStart }) {
         Column() {
@@ -1997,20 +2014,18 @@ struct ChatPage {
           }
           .width('100%')
           .height(44)
-          .padding({ left: 12, right: 8 })
-          // 拖动标题栏移动面板(按下后拖拽即可;左右上下位移受限幅保护,不会跑出屏幕)
+          // 左右留出角柄热区宽度,避免标题栏按钮被角落热区遮挡
+          .padding({ left: ChatPage.FRONTEND_CORNER_HIT, right: ChatPage.FRONTEND_CORNER_HIT })
+          // 拖动标题栏上下移动面板(左右铺满,仅纵向;下移受限幅保护,不会跑出屏幕)
           .gesture(
-            PanGesture({ direction: PanDirection.All })
+            PanGesture({ direction: PanDirection.Vertical })
               .onActionStart(() => {
-                this.frontendDragStartX = this.frontendPanelOffsetX;
                 this.frontendDragStartY = this.frontendPanelOffsetY;
               })
               .onActionUpdate((event: GestureEvent | undefined) => {
                 if (event === undefined) {
                   return;
                 }
-                this.frontendPanelOffsetX =
-                  this.clampPanelOffsetX(this.frontendDragStartX + event.offsetX);
                 this.frontendPanelOffsetY =
                   this.clampPanelOffsetY(this.frontendDragStartY + event.offsetY);
               })
@@ -2034,8 +2049,11 @@ struct ChatPage {
         .width('100%')
         .height('100%')
 
-        // 右下角调整大小把手(四个角行为完全一致,只保留一个可视图标,避免四个 L 括号压在网页上)
-        this.frontendResizeHandle()
+        // 四个角缩放热区(44vp):平时不响应,长按后拖动可自由改宽高
+        this.frontendResizeHotspot(0)
+        this.frontendResizeHotspot(1)
+        this.frontendResizeHotspot(2)
+        this.frontendResizeHotspot(3)
       }
       .width(this.frontendPanelCurWidth)
       .height(this.frontendPanelCurHeight)
@@ -2045,7 +2063,7 @@ struct ChatPage {
       .clip(true)
       .shadow({ radius: 10, color: 'rgba(0,0,0,0.18)' })
       .translate({
-        x: this.frontendPanelVisible ? this.frontendPanelOffsetX : this.panelHideOffset(),
+        x: this.frontendPanelVisible ? 0 : this.panelHideOffset(),
         y: this.frontendPanelOffsetY
       })
       .opacity(this.frontendPanelVisible ? 1 : 0)
@@ -2056,14 +2074,14 @@ struct ChatPage {
   }
 
   /**
-   * 右下角调整大小把手。
-   * 面板锚定右上角,四个角的拖动行为完全一致(收窄宽度 + 加高),因此只保留一个可视图标,
-   * 避免四个 L 形括号常显压在网页内容上。
+   * 角部缩放热区(corner:0=左上 1=右上 2=左下 3=右下)。
+   * 面板默认左右铺满、仅允许上下移动,缩放能力收进长按:长按约 350ms 后不松手拖动即可自由改宽高。
+   * 四角行为一致(锚定右缘:向左拖加宽,向下拖加高);热区放大到 44vp,避免角落难以命中。
    */
   @Builder
-  frontendResizeHandle() {
+  frontendResizeHotspot(corner: number) {
     Column() {
-      // 角标视觉提示:L 形括号
+      // 角标视觉提示:L 形括号(朝向对应角)
       Stack({ alignContent: Alignment.TopStart }) {
         Text('')
           .width(8)
@@ -2080,35 +2098,39 @@ struct ChatPage {
       }
       .width(12)
       .height(12)
-      .rotate({ angle: 180 })
+      .rotate({ angle: this.resizeBracketAngle(corner) })
     }
-    .width(26)
-    .height(26)
+    .width(ChatPage.FRONTEND_CORNER_HIT)
+    .height(ChatPage.FRONTEND_CORNER_HIT)
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
-    .position({ x: this.frontendPanelCurWidth - 26, y: this.frontendPanelCurHeight - 26 })
+    .position({ x: this.resizeHotspotX(corner), y: this.resizeHotspotY(corner) })
     .hitTestBehavior(HitTestMode.Block)
+    // 必须"长按激活 → 继续按住拖动":避免面板铺满后误触角落就改变尺寸
     .gesture(
-      PanGesture({ direction: PanDirection.All })
-        .onActionStart(() => {
-          this.frontendResizeStartW = this.frontendPanelCurWidth;
-          this.frontendResizeStartH = this.frontendPanelCurHeight;
-        })
-        .onActionUpdate((event: GestureEvent | undefined) => {
-          if (event === undefined) {
-            return;
-          }
-          // 面板锚定右上角:向右拖(offsetX>0)收窄宽度,向左拖加宽;向下拖加高,向上拖变矮
-          this.frontendPanelCurWidth =
-            this.clampPanelWidth(this.frontendResizeStartW - event.offsetX);
-          this.frontendPanelCurHeight =
-            this.clampPanelHeight(this.frontendResizeStartH + event.offsetY);
-        })
-        .onActionEnd(() => {
-          // 拖动结束落盘(按角色卡记忆,下次展开/重启后沿用)
-          this.frontendPanelResized = true;
-          this.persistPanelSize();
-        })
+      GestureGroup(GestureMode.Sequence,
+        LongPressGesture({ repeat: false, duration: 350 }),
+        PanGesture({ direction: PanDirection.All })
+          .onActionStart(() => {
+            this.frontendResizeStartW = this.frontendPanelCurWidth;
+            this.frontendResizeStartH = this.frontendPanelCurHeight;
+          })
+          .onActionUpdate((event: GestureEvent | undefined) => {
+            if (event === undefined) {
+              return;
+            }
+            // 面板锚定右上角:向右拖(offsetX>0)收窄宽度,向左拖加宽;向下拖加高,向上拖变矮
+            this.frontendPanelCurWidth =
+              this.clampPanelWidth(this.frontendResizeStartW - event.offsetX);
+            this.frontendPanelCurHeight =
+              this.clampPanelHeight(this.frontendResizeStartH + event.offsetY);
+          })
+          .onActionEnd(() => {
+            // 拖动结束落盘(按角色卡记忆,下次展开/重启后沿用)
+            this.frontendPanelResized = true;
+            this.persistPanelSize();
+          })
+      )
     )
   }
 
