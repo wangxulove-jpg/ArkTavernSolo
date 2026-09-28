@@ -396,6 +396,21 @@ struct ChatPage {
   /** 首批(加载)批次是否已消费(纯标记,无需触发重渲染) */
   private messageEntranceInitialBatchDone: boolean = false;
 
+  /**
+   * 消息列表是否已"定位到最新消息"。
+   *
+   * 懒加载列表的高度是逐帧长出来的,直接渲染会先看到最早的消息、随后才跳到最新。
+   * 因此进入会话 / 切换会话时先显示加载动画,让列表在不可见状态下完成追底定位,
+   * 落定后再一次性显示最新消息(见 autoScrollToBottom / beginListPositioning)。
+   */
+  @State chatListPositioned: boolean = false;
+  /** 追底锁:定位期间持续把视图钉到底部,直到真正到底或超时 */
+  private bottomLockActive: boolean = false;
+  /** 追底重试计数(安全上限,防止极端情况下不收敛) */
+  private bottomLockRetries: number = 0;
+  /** 定位兜底定时器(超时后强制显示,避免列表永久隐藏) */
+  private positionFallbackTimer: number = -1;
+
   aboutToAppear(): void {
     const modelService = AppServices.getModelService();
     const characterService = AppServices.getCharacterService();
@@ -406,10 +421,13 @@ struct ChatPage {
       chatService, modelService, characterService, promptPresetService
     );
     vm.onMessagesUpdate = (msgs: ChatMessage[]): void => {
+      // 首条消息 id 变化 = 整列表被替换(进入会话 / 切换会话 / 新建章节),需要重新定位到底部
+      const prevFirstId: string = this.messages.length > 0 ? this.messages[0].id : '';
       // 同步业务数据 + 同步稳定 RenderState 列表
       this.messages = msgs;
       this.syncRenderStates(msgs);
       this.maybeLoadChatBackground();
+      this.updateListPositioning(msgs, prevFirstId);
       // 入场动画门控:首批(加载)不animate,之后的批次才开(见字段注释)
       if (msgs.length > 0) {
         if (!this.messageEntranceInitialBatchDone) {
@@ -879,6 +897,7 @@ struct ChatPage {
   }
 
   aboutToDisappear(): void {
+    this.clearPositionFallback();
     this.unregisterKeyboardListener();
     this.unregisterGripListener();
     // 注销深色模式监听器
@@ -1069,6 +1088,13 @@ struct ChatPage {
                   }
                 }
               })
+                // 定位到底部之前先不显示列表(仍需挂载并完成布局,才能量出真实高度),
+                // 由下方加载动画占位;落定后一次性显示最新消息,避免看到"从最开始翻到最新"
+                .opacity(this.chatListPositioned ? 1 : 0)
+
+              if (!this.chatListPositioned) {
+                this.loadingView()
+              }
             }
 
             // 顶部擦除遮罩: 用 DST_IN alpha 渐变擦除消息顶部, 背景图和模型透出
@@ -2809,6 +2835,8 @@ struct ChatPage {
     .height('100%')
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
+    // 加载期间阻断触摸:定位阶段消息列表已挂载但不可见,避免误触到列表
+    .hitTestBehavior(HitTestMode.Block)
   }
 
   @Builder
@@ -3973,14 +4001,90 @@ struct ChatPage {
     }
   }
 
+  /**
+   * 整列表被替换时(进入会话 / 切换会话)重新定位到底部。
+   * 仅两种情况需要定位:①页面首次加载(列表还没显示过)②首条消息 id 变化且原有内容非空。
+   * 空会话里发出第一条消息不触发定位,避免闪一下加载动画。
+   */
+  private updateListPositioning(msgs: ChatMessage[], prevFirstId: string): void {
+    if (msgs.length === 0) {
+      this.finishListPositioning();
+      return;
+    }
+    const replaced: boolean = prevFirstId.length > 0
+      ? msgs[0].id !== prevFirstId
+      : !this.chatListPositioned;
+    if (replaced) {
+      this.beginListPositioning();
+    }
+  }
+
+  /**
+   * 开始"追底定位":隐藏消息列表(显示加载动画),把视图钉在最新消息处。
+   * 懒加载内容高度逐帧增长,单次滚动会落在顶部,故需持续追底直到真正到底。
+   */
+  private beginListPositioning(): void {
+    this.chatListPositioned = false;
+    this.bottomLockActive = true;
+    this.bottomLockRetries = 0;
+    this.lastMessageCount = this.messages.length;
+    this.schedulePositionFallback();
+    this.scroller.scrollEdge(Edge.Bottom);
+  }
+
+  /** 结束定位:显示消息列表并撤掉兜底定时器 */
+  private finishListPositioning(): void {
+    this.bottomLockActive = false;
+    this.clearPositionFallback();
+    this.chatListPositioned = true;
+  }
+
+  /** 定位兜底:极端情况下布局不再变化且未判定到底时,超时强制显示,避免列表永久隐藏 */
+  private schedulePositionFallback(): void {
+    this.clearPositionFallback();
+    this.positionFallbackTimer = setTimeout((): void => {
+      this.positionFallbackTimer = -1;
+      if (!this.bottomLockActive) {
+        return;
+      }
+      this.scroller.scrollEdge(Edge.Bottom);
+      this.finishListPositioning();
+    }, 800);
+  }
+
+  private clearPositionFallback(): void {
+    if (this.positionFallbackTimer >= 0) {
+      clearTimeout(this.positionFallbackTimer);
+      this.positionFallbackTimer = -1;
+    }
+  }
+
+  /**
+   * 内容区变化时的滚动处理。
+   * - 追底锁生效中(刚进入 / 切换会话):持续追底,直到真正到底、超时或用户上滑;
+   * - 否则只在新消息插入时滚到底(既有行为)。
+   */
   private autoScrollToBottom(): void {
     if (this.viewModel === null) {
       return;
     }
     if (this.viewModel.userScrolledUp) {
+      if (this.bottomLockActive) {
+        // 用户主动上滑:放弃追底,直接显示列表
+        this.finishListPositioning();
+      }
       return;
     }
     const newCount: number = this.messages.length;
+    if (this.bottomLockActive) {
+      this.bottomLockRetries++;
+      this.lastMessageCount = newCount;
+      this.scroller.scrollEdge(Edge.Bottom);
+      if (this.scroller.isAtEnd() || this.bottomLockRetries > 40) {
+        this.finishListPositioning();
+      }
+      return;
+    }
     if (newCount > this.lastMessageCount) {
       this.lastMessageCount = newCount;
       this.scroller.scrollEdge(Edge.Bottom);

@@ -42,6 +42,12 @@
 | P-28 | 同一行内既有"整行点击进 A"又有"行内按钮做 B"（模型列表行：点行进编辑页、点「切换」立即切换当前配置） | **不要用父子嵌套 `onClick`** —— 那样是否误触取决于事件冒泡语义，不可靠。做法：把两个点击区做成**兄弟节点**——左列（`layoutWeight(1)`）承载"整行"点击，右胶囊单独 `onClick`，两者互不包含；**行容器本身不带 `onClick`**（见 `ModelSettingsPage.configListItem`） |
 | P-29 | 把居中模态弹框改成 `bindSheet` 上滑面板后**没有上滑动画**（仍旧直接出现） | `bindSheet` 的开关若在**节点首次挂载时就为 true**，面板会直接出现、没有进场过渡。必须**两段式**：外层 `if (showXxx)` 挂载一个 0 高节点 → 该节点 `onAppear` 里把 `sheetShow` 置真 → 由 `false→true` 触发上滑。**关闭时只置 `sheetShow = false`**，再由 `bindSheet.onDisappear` 去置 `showXxx = false` 卸载，这样才有下滑动画。范式见 `components/ChatMoreMenuSheet.ets`、`ChatPage` 的 `memoryModeSheetContent` / `userNameSheetContent` / `personaSheetContent` / `chapterSheetContent` |
 
+## 2b. 聊天消息列表滚动
+
+| # | 坑 | 正确做法 / 证据 |
+|---|---|---|
+| P-80 | 懒加载消息列表直接 `scrollEdge(Edge.Bottom)` → **进入会话先看到最早的消息，随后"唰"地跳到最新** | 原因：`Scroll` + `LazyForEach` 的内容高度是**逐帧**长出来的，首帧滚底只能落在"当时已量出的底部"≈顶部。修正范式（见 `ChatPage` 的 `chatListPositioned` / `bottomLockActive`）：① 定位完成前消息列表 `.opacity(0)`——**必须仍然挂载**，否则不参与布局、永远算不出真实高度，会死锁成永远不显示；② 定位期间用 `loadingView()`（"加载会话中…"）占位，并加 `hitTestBehavior(HitTestMode.Block)` 阻断触摸，避免误触到不可见列表；③ **追底锁**：每次 `onAreaChange` 都 `scrollEdge(Edge.Bottom)`，直到 `scroller.isAtEnd()` 才结束（另设 **40 次重试上限** + **800ms 兜底定时器**，定时器须在 `aboutToDisappear` 清理）；④ 只在"**整列表被替换**"时定位（首条消息 id 变化，或页面首次加载且尚未显示过），空会话发第一条消息不触发（否则会闪一下加载动画）。**设备侧观感未验证** |
+
 ## 3. 分层与架构
 
 | # | 坑 | 正确做法 / 证据 |
