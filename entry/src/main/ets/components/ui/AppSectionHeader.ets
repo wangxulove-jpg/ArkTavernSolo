@@ -3,6 +3,8 @@
  *
  * 纯 UI,替代各页面内联的 sectionHeader 复本:caption(12) textTertiary Medium,
  * 顶 pad16 / 底 pad8,左对齐。
+ *
+ * 2026-09-28:顶距由 24 收到 16(与代码注释原本的口径一致),配合设置 Tab 收紧留白。
  */
 
 import { ThemePalette } from '../../theme/ThemePalette';
@@ -24,7 +26,7 @@ export struct AppSectionHeader {
       .padding({
         left: $r('app.float.app_spacing_16'),
         right: $r('app.float.app_spacing_16'),
-        top: $r('app.float.app_spacing_24'),
+        top: $r('app.float.app_spacing_16'),
         bottom: $r('app.float.app_spacing_8')
       })
   }

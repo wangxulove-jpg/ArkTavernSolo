@@ -5,7 +5,7 @@
 > 1. 写任何新组件 / 工具 / 服务 / 模式前，**先查本文件**；
 > 2. 若决定新建，提交说明里写一句「**为何不能复用现有 X**」；
 > 3. 新增了可复用资产，**同一次提交**内把它登记到本文件。
-> 最后核对：2026-09-27（条目均来自实际目录扫描）。
+> 最后核对：2026-09-28（条目均来自实际目录扫描）。
 
 ## 1. 组件层 —— `entry/src/main/ets/components/`
 
@@ -88,6 +88,7 @@
 | **跨表事务** | `dbHelper.runInTransaction(fn)`，Repository 传 `store` | `services/ChatPersistenceService.ets` |
 | **纯数据/共享类型** | 下沉 `models/`（跨模块复用必须 export） | `models/LorebookPanel.ets` |
 | **设置类页面紧凑行版式**（提高信息密度用） | 分区 = `caption` 小标题（tertiary 色，`padding-left 4`）+ 一张 `surface_1` 卡片；卡内行高 **44**、行间 `Divider`（左右缩进 12）、行 = 标签(次要色) + 值(主色，右对齐 `layoutWeight(1)`) + `›`；动作以 `surface_2` 胶囊呈现在行尾；危险项独立成行用 `app_danger` | `components/ChatMoreMenuSheet.ets`（sheet 场景）、`pages/AppSettingsPage.ets`（整页场景） |
+| **入口行版式（图标在行尾）** | 行 = 标题(主色 medium) + 小字说明(次要色 caption) 左对齐 + **行尾只放一个入口图标**（18，tertiary 色，兼作视觉锚点，**不放箭头**）；行高 **56**、卡内 1px 分隔线、卡片左右各缩进 16（`app_spacing_16`）；同组共用一张卡（不再每项一张整宽卡）。**替代已删除的 `components/ui/AppEntryCard.ets`**（该项每入口一张整宽卡，0 引用后删除，2026-09-28） | `pages/tabs/SettingsRootView.ets` 的 `entryRow`（6 个入口）；图标取仓内**已编译通过**的 `sys.symbol.*`（key / book / textformat / exposure / arrow_clockwise / speaker_wave_2） |
 | **多选一控件（主题/位置等）压成一行** | 4 个以内用一行等宽小卡（色块预览 + 名称 + 选中描边）；2 个用段选胶囊（`surface_2` 轨道 + `surface_1` 滑块）；**不要**每项占一张整宽大卡 | `AppSettingsPage.themeRow` / `positionSegment` |
 | **子入口统一走上滑面板**（替代居中弹框，避免"突兀"） | `bindSheet` + **两段式开关**（外层 `if` 挂载 → `onAppear` 置真；关闭只置 false，`onDisappear` 再卸载，详见 PITFALLS P-29）；面板内容复用「分区小标题 + 卡片 + 行高 44」范式 | `components/ChatMoreMenuSheet.ets`；`pages/ChatPage.ets` 的 `memoryModeSheetContent` / `userNameSheetContent` / `personaSheetContent`（分段）/ `chapterSheetContent` |
 | **懒加载列表"先定位再显示"**（避免进入时从顶部翻到最新） | 门控 `.opacity(0)` 保持挂载 → 加载动画占位 → 追底锁持续 `scrollEdge(Bottom)` 直到 `isAtEnd()` → 再显示；只在整列表被替换时触发（详见 PITFALLS P-80） | `pages/ChatPage.ets` 的 `chatListPositioned` / `beginListPositioning` / `autoScrollToBottom` |
