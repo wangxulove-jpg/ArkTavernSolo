@@ -12,6 +12,8 @@
  * - html 为提取出的完整 HTML 字符串
  * - 关键加载:loadData(rawHtml,'text/html','utf-8','data:','data:') 在首次 about:blank
  *   onPageEnd 时触发(Web 引擎就绪),规避 loadUrl URL 长度限制与 LoadWithData 缺陷(见 FrontendCardPage)
+ * - 双指缩放:加载前剥掉 HTML 里的 user-scalable=no / maximum-scale,并开启 Web 手势缩放,
+ *   使卡片页面可双指放大(画面变大,元素更易点按)
  *
  * 契约版本:与 CardFrontendBridge 同步,见 docs/frontend-card-contract.md
  */
@@ -149,7 +151,7 @@ export struct CardFrontendWeb {
   // ===== 加载 =====
 
   private loadFrontendHtml(): void {
-    const html: string = this.html;
+    const html: string = this.withPinchZoomAllowed(this.html);
     if (html.length === 0) {
       this.failLoad('前端 HTML 为空');
       return;
@@ -175,6 +177,17 @@ export struct CardFrontendWeb {
   private failLoad(reason: string): void {
     this.loadError = reason;
     this.isLoading = false;
+  }
+
+  /**
+   * 放宽卡片 HTML 的 viewport 限制,使双指缩放可用。
+   * 角色卡(尤其 AI 生成)常写 user-scalable=no / maximum-scale=1 禁用缩放,
+   * 这里在加载前剥掉这两项(保留 width / initial-scale,不影响原有布局),交由 ArkWeb 手势缩放处理。
+   */
+  private withPinchZoomAllowed(html: string): string {
+    return html
+      .replace(new RegExp('user-scalable\\s*=\\s*(?:no|0)(\\s*,\\s*)?', 'gi'), '')
+      .replace(new RegExp('maximum-scale\\s*=\\s*[0-9.]+(\\s*,\\s*)?', 'gi'), '');
   }
 
   private onPageEnd(): void {
@@ -288,6 +301,8 @@ export struct CardFrontendWeb {
             .javaScriptAccess(true)
             .domStorageAccess(true)
             .fileAccess(true)
+            // 允许双指手势缩放卡片页面(默认即为 true,此处显式声明意图)
+            .zoomAccess(true)
             .onPageEnd(() => {
               this.onPageEnd();
             })
