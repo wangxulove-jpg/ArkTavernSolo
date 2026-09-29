@@ -19,11 +19,13 @@
  */
 
 import { webview } from '@kit.ArkWeb';
+import { common } from '@kit.AbilityKit';
 import {
   CardFrontendBridge,
   FrontendCardHost,
   FrontendCardCharacterInfo
 } from '../bridge/CardFrontendBridge';
+import { loadStCompatScripts } from '../bridge/StCompatShim';
 import { Character } from '../models/Character';
 import { ChatMessage } from '../models/ChatMessage';
 import { ThemePalette } from '../theme/ThemePalette';
@@ -151,7 +153,7 @@ export struct CardFrontendWeb {
   // ===== 加载 =====
 
   private loadFrontendHtml(): void {
-    const html: string = this.withPinchZoomAllowed(this.html);
+    const html: string = this.withStCompat(this.withPinchZoomAllowed(this.html));
     if (html.length === 0) {
       this.failLoad('前端 HTML 为空');
       return;
@@ -188,6 +190,31 @@ export struct CardFrontendWeb {
     return html
       .replace(new RegExp('user-scalable\\s*=\\s*(?:no|0)(\\s*,\\s*)?', 'gi'), '')
       .replace(new RegExp('maximum-scale\\s*=\\s*[0-9.]+(\\s*,\\s*)?', 'gi'), '');
+  }
+
+  /**
+   * 注入 ST 兼容层(jQuery + 酒馆助手 API shim,见 bridge/StCompatShim.ets):
+   * 插到 <head> 开标签后(无 head 则置于文档最前),保证先于页面脚本执行。
+   * 原生 ArkTavern 卡不受影响——shim 只补 window.TavernHelper 等未定义的全局,
+   * 页面自定义的 arktavernPush 会覆盖 shim 版本(注入顺序在先)。
+   */
+  private withStCompat(html: string): string {
+    let scripts: string = '';
+    try {
+      scripts = loadStCompatScripts(getContext(this) as common.Context);
+    } catch (_e) {
+      scripts = '';
+    }
+    if (scripts.length === 0) {
+      return html;
+    }
+    const tag: string = '<script>' + scripts + '</script>';
+    const headIdx: number = html.search(new RegExp('<head[^>]*>', 'i'));
+    if (headIdx >= 0) {
+      const headEnd: number = html.indexOf('>', headIdx) + 1;
+      return html.slice(0, headEnd) + tag + html.slice(headEnd);
+    }
+    return tag + html;
   }
 
   private onPageEnd(): void {

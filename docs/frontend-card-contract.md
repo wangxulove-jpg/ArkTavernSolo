@@ -37,6 +37,24 @@
 - `autoOpen`：仅 `mode:"fullscreen"` 有意义，默认 `false`。`true` 时**进入会话自动打开界面页**（纯前端卡"整卡即应用"的入口体验）；每次会话进入只触发一次，从界面页返回后停在聊天页，不会循环弹出。
 - 其他 `extensions.arktavern.*` 子字段不受影响；未知子字段原样保留。
 
+## 1b. ST 兼容层（从 SillyTavern 原文导入的页面可用）
+
+App 渲染前端页面前自动注入（`bridge/StCompatShim.ets` + `resources/rawfile/st_compat/`）：
+**jQuery 3.7（MIT） + 酒馆助手 TavernHelper API shim + localStorage 兜底**，数据接 Bridge——
+使从 ST"原文导入零改写"的页面（依赖 `TavernHelper.*`/`$()`/酒馆事件）可直接运行：
+
+- **直接可用**：jQuery `$()`；localStorage/sessionStorage（不可用时内存兜底）；
+  `getChatMessages`/`getCurrentMessageId`/`getLastMessage(Id)`（楼层历史，映射 `getMessages`）；
+  `getVariables`/`insertOrAssignVariables`/`replaceVariables` 等**变量族（映射角色状态字段，形如 MVU 变量对象）**；
+  `eventOn`/`eventOnce`/`eventEmit` + `tavern_events`/`iframe_events` 常量（`message_update`/`status_update` 推送自动翻译为对应事件）；
+  `substituteMacros`（`{{user}}`/`{{char}}`）、`getCharacterCardFields`、`getCurrentCharName`、`formatAsDisplayedMessage`、`isDuringSTGenerating`；
+  未实现 API 返回"空壳"不抛错（页面不白屏，但数据为空）；`MvuHelper.*` 亦为空壳（防 ReferenceError）。
+- **给不了**（制卡工具的 `import_st_frontend` 会在导入时把这些接缝标出让 AI 修补）：
+  `getWorldbook`/`getLorebookEntries` 世界书数据（需内嵌数据替代）、`generate`/`generateRaw` 一次性生成（改 `send`）、
+  `replaceLastMessage`/`setChatMessages` 楼层改写（只读空实现）、`$N` 捕获组/`{{match}}`（显示期正则机制，改 `message_update`/`getMessages` 渲染）、
+  `triggerSlash`（仅 `/send` 映射为 `send`）。
+- 原生 ArkTavern 卡不受影响：shim 只补未定义的全局，页面自定义的 `arktavernPush` 会覆盖 shim 版本。
+
 ## 2. 运行方式
 
 App 在聊天页右下发出现"界面"折叠标签（仅当该角色卡含有效 frontend）：
