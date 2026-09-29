@@ -54,7 +54,7 @@ bridge/：仅承载「页面 ↔ 组件」的宿主契约（例：FrontendCardHo
 | 上下文预算 | `pages/ContextBudgetPage.ets` | `viewmodels/ContextBudgetViewModel` → `services/ContextBudgetService` / `Estimator` / `SnapshotStore` | UI→VM→S |
 | 用户身份 Persona | `pages/Persona{List,Edit}Page.ets` | `viewmodels/PersonaViewModel` → `services/PersonaService` → `repositories/PersonaRepository` / `storage/PersonaSelectionStore` | UI→VM→S→Repo |
 | 聊天归档导入/导出 | `pages/tabs/ChatSessionRootView.ets`（归档区） | `viewmodels/ChatArchiveViewModel` → `services/ChatArchive{Service,ImportService}` → `parser/ChatArchiveSchema` | UI→VM→S→parser |
-| 聊天背景 / 字体外观 | `pages/ChatBackgroundSettingsPage.ets` / `components/ChatAppearancePanel.ets` | `services/ChatBackgroundService` / `utils/ChatText{ColorTheme,StyleSettings}` | UI→S→utils |
+| 聊天背景 / 字体外观（正文字号 / 行距 / 字体） | `pages/ChatBackgroundSettingsPage.ets` / `components/ChatAppearancePanel.ets` | `services/ChatBackgroundService` / `utils/ChatText{ColorTheme,StyleSettings}` / 字体注册 `utils/ChatFontRegistry`（内置霞鹭文楷，字库在 `resources/rawfile/fonts/`，由 `pages/Index.ets` 启动时注册） | UI→S→utils |
 | 主题切换 | 全页 `@StorageProp effectiveTheme` | `services/ThemeManager` → `theme/ThemePalette` | UI→S |
 | Chub 角色卡市场 | `pages/tabs/MarketPage.ets` / `pages/MarketDetailPage.ets` | `viewmodels/{Market,MarketDetail}ViewModel` → `services/market/` | UI→VM→S→network |
 | AI 生成角色卡 | `pages/AiCharacterMakerPage.ets` / `AiCharacterPreviewPage.ets` / `AiCardRevisePage.ets` | `viewmodels/AiCharacter*ViewModel` → `services/ai/AiCharacterGenerationService` | UI→VM→S |

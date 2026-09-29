@@ -9,6 +9,7 @@
  */
 import { ThemePalette } from '../theme/ThemePalette';
 import { ChatTextStyle } from '../utils/ChatTextStyleSettings';
+import { CHAT_FONT_OPTIONS, CHAT_FONT_SYSTEM, ChatFontOption, chatFontLabel } from '../utils/ChatFontRegistry';
 import {
   ChatTextColorMode,
   ChatMarkdownColorTheme,
@@ -74,6 +75,8 @@ export struct ChatAppearancePanel {
   onPersistContentHeightRatio: (ratio: number) => void = (_: number) => {};
   /** 应用字体大小(实时更新 ChatTextStyle) */
   onApplyFontSize: (fontSize: number) => void = (_: number) => {};
+  /** 切换正文字体族(含持久化) */
+  onApplyFontFamily: (family: string) => void = (_: string) => {};
   /** 切换文字配色模式(含持久化) */
   onSelectTextColorMode: (mode: string) => void = (_: string) => {};
   /** 设置自定义颜色(点击预设色块;含持久化) */
@@ -261,6 +264,47 @@ export struct ChatAppearancePanel {
         }
         .width('100%')
         .margin({ top: 4 })
+
+        Divider()
+          .color(ThemePalette.dividerColor(this.effectiveTheme))
+          .margin({ top: 16, bottom: 12 })
+
+        // ===== 正文字体 =====
+        Row() {
+          Text('正文字体')
+            .fontSize($r('app.float.app_font_caption'))
+            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+          Blank()
+          Text(chatFontLabel(this.currentFontFamily()))
+            .fontSize($r('app.float.app_font_caption'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+        .margin({ bottom: 8 })
+
+        // 字体按钮:按钮文字直接用对应字体渲染,便于直观对比
+        Row({ space: 6 }) {
+          ForEach(CHAT_FONT_OPTIONS, (option: ChatFontOption) => {
+            Button(option.label)
+              .fontSize($r('app.float.app_font_caption'))
+              .fontFamily(option.familyName)
+              .fontColor(this.currentFontFamily() === option.familyName
+                ? $r('app.color.app_on_accent')
+                : ThemePalette.textPrimaryColor(this.effectiveTheme))
+              .backgroundColor(this.currentFontFamily() === option.familyName
+                ? ThemePalette.accentColor(this.effectiveTheme)
+                : ThemePalette.surface2Color(this.effectiveTheme))
+              .borderRadius(14)
+              .height(28)
+              .padding({ left: 10, right: 10 })
+              .onClick(() => {
+                this.onApplyFontFamily(option.familyName);
+              })
+          }, (option: ChatFontOption) => option.id)
+        }
+        .width('100%')
 
         Divider()
           .color(ThemePalette.dividerColor(this.effectiveTheme))
@@ -727,6 +771,11 @@ export struct ChatAppearancePanel {
       && this.linkTextColor === DEFAULT_LINK_TEXT_COLOR
       && this.quoteTextColor === DEFAULT_QUOTE_TEXT_COLOR
       && this.userTextColor === DEFAULT_USER_TEXT_COLOR;
+  }
+
+  /** 当前正文字体族(未设置时回退系统默认) */
+  private currentFontFamily(): string {
+    return this.chatTextStyle !== null ? this.chatTextStyle!.fontFamily : CHAT_FONT_SYSTEM;
   }
 
   /** 获取模式按钮显示文本 */

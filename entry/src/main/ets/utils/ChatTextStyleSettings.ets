@@ -13,12 +13,14 @@
  * - enableCharacterColor: 角色独立颜色
  * - fontSize: 字体大小(fp)
  * - lineHeight: 行间距倍数
+ * - fontFamily: 正文字体族(见 ChatFontRegistry)
  * - quoteStyle: 引用样式
  * - codeStyle: 代码样式
  */
 
 import { AppPreferences } from '../storage/AppPreferences';
 import { Logger } from './Logger';
+import { CHAT_FONT_SYSTEM } from './ChatFontRegistry';
 
 const LOG_TAG: string = 'ChatTextStyleSettings';
 
@@ -34,6 +36,7 @@ export interface ChatTextStyle {
   readonly enableCharacterColor: boolean;
   readonly fontSize: number;
   readonly lineHeight: number;
+  readonly fontFamily: string;
   readonly quoteStyle: QuoteStyle;
   readonly codeStyle: CodeStyle;
 }
@@ -45,6 +48,7 @@ export const DEFAULT_CHAT_TEXT_STYLE: ChatTextStyle = {
   enableCharacterColor: true,
   fontSize: 16,
   lineHeight: 1.5,
+  fontFamily: CHAT_FONT_SYSTEM,
   quoteStyle: 'line',
   codeStyle: 'bg'
 };
@@ -55,6 +59,7 @@ const KEY_ENABLE_DIALOGUE: string = 'chat_text_enable_dialogue';
 const KEY_ENABLE_CHARACTER_COLOR: string = 'chat_text_enable_character_color';
 const KEY_FONT_SIZE: string = 'chat_text_font_size';
 const KEY_LINE_HEIGHT: string = 'chat_text_line_height';
+const KEY_FONT_FAMILY: string = 'chat_text_font_family';
 const KEY_QUOTE_STYLE: string = 'chat_text_quote_style';
 const KEY_CODE_STYLE: string = 'chat_text_code_style';
 
@@ -85,6 +90,7 @@ export class ChatTextStyleSettings {
       const enableCharacterColor: boolean = await this.prefs.getBoolean(KEY_ENABLE_CHARACTER_COLOR, DEFAULT_CHAT_TEXT_STYLE.enableCharacterColor);
       const fontSizeStr: string = await this.prefs.getString(KEY_FONT_SIZE, DEFAULT_CHAT_TEXT_STYLE.fontSize.toString());
       const lineHeightStr: string = await this.prefs.getString(KEY_LINE_HEIGHT, DEFAULT_CHAT_TEXT_STYLE.lineHeight.toString());
+      const fontFamilyStr: string = await this.prefs.getString(KEY_FONT_FAMILY, DEFAULT_CHAT_TEXT_STYLE.fontFamily);
       const quoteStyleStr: string = await this.prefs.getString(KEY_QUOTE_STYLE, DEFAULT_CHAT_TEXT_STYLE.quoteStyle);
       const codeStyleStr: string = await this.prefs.getString(KEY_CODE_STYLE, DEFAULT_CHAT_TEXT_STYLE.codeStyle);
 
@@ -97,6 +103,7 @@ export class ChatTextStyleSettings {
         enableCharacterColor,
         fontSize: isNaN(fontSize) ? DEFAULT_CHAT_TEXT_STYLE.fontSize : fontSize,
         lineHeight: isNaN(lineHeight) ? DEFAULT_CHAT_TEXT_STYLE.lineHeight : lineHeight,
+        fontFamily: fontFamilyStr.length > 0 ? fontFamilyStr : DEFAULT_CHAT_TEXT_STYLE.fontFamily,
         quoteStyle: quoteStyleStr === 'indent' ? 'indent' : 'line',
         codeStyle: codeStyleStr === 'plain' ? 'plain' : 'bg'
       };
@@ -131,6 +138,7 @@ export class ChatTextStyleSettings {
       enableCharacterColor: partial.enableCharacterColor !== undefined ? partial.enableCharacterColor : this.current.enableCharacterColor,
       fontSize: partial.fontSize !== undefined ? partial.fontSize : this.current.fontSize,
       lineHeight: partial.lineHeight !== undefined ? partial.lineHeight : this.current.lineHeight,
+      fontFamily: partial.fontFamily !== undefined ? partial.fontFamily : this.current.fontFamily,
       quoteStyle: partial.quoteStyle !== undefined ? partial.quoteStyle : this.current.quoteStyle,
       codeStyle: partial.codeStyle !== undefined ? partial.codeStyle : this.current.codeStyle
     };
@@ -158,6 +166,7 @@ export class ChatTextStyleSettings {
       await this.prefs.putBoolean(KEY_ENABLE_CHARACTER_COLOR, style.enableCharacterColor);
       await this.prefs.putString(KEY_FONT_SIZE, style.fontSize.toString());
       await this.prefs.putString(KEY_LINE_HEIGHT, style.lineHeight.toString());
+      await this.prefs.putString(KEY_FONT_FAMILY, style.fontFamily);
       await this.prefs.putString(KEY_QUOTE_STYLE, style.quoteStyle);
       await this.prefs.putString(KEY_CODE_STYLE, style.codeStyle);
     } catch (e) {

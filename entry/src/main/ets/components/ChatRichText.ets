@@ -28,6 +28,7 @@
 import { ChatTextSegment, parseChatChunks, ChatRenderChunk, ChatTextParserOptions, TableChatRenderChunk, TableChunkRow } from '../parser/ChatTextParser';
 import { getCharacterColor } from '../utils/ChatPalette';
 import { ChatTextStyle } from '../utils/ChatTextStyleSettings';
+import { CHAT_FONT_SYSTEM } from '../utils/ChatFontRegistry';
 import { ChatMarkdownColorTheme } from '../utils/ChatTextColorTheme';
 import { ChatCollapsibleBlock } from './ChatCollapsibleBlock';
 import { ChatBranchBlock } from './ChatBranchBlock';
@@ -260,6 +261,7 @@ export struct ChatRichText {
       enableCharacterColor: true,
       fontSize: 16,
       lineHeight: 1.5,
+      fontFamily: CHAT_FONT_SYSTEM,
       quoteStyle: 'line',
       codeStyle: 'bg'
     };
@@ -488,6 +490,11 @@ export struct ChatRichText {
     .padding({ top: 2, bottom: 4 })
   }
 
+  /** 正文字体族(未设置时回退系统默认;family 变化只影响渲染,不影响分块缓存) */
+  private currentFontFamily(): string {
+    return this.settings !== null ? this.settings.fontFamily : CHAT_FONT_SYSTEM;
+  }
+
   build() {
     if (this.chunks.length === 0) {
       // 空内容占位
@@ -504,6 +511,7 @@ export struct ChatRichText {
           Span(seg.text)
             .fontColor(this.getSegmentColor(seg))
             .fontSize(this.getSegmentFontSize(this.settings !== null ? this.settings.fontSize : 16, seg))
+            .fontFamily(this.currentFontFamily())
             .fontWeight(seg.bold ? FontWeight.Bold : FontWeight.Normal)
             .fontStyle(seg.italic ? FontStyle.Italic : FontStyle.Normal)
             .decoration({
@@ -513,6 +521,7 @@ export struct ChatRichText {
         }, (seg: ChatTextSegment, index: number) => index.toString() + '_' + seg.text.length.toString())
       }
       .lineHeight((this.settings !== null ? this.settings.fontSize : 16) * (this.settings !== null ? this.settings.lineHeight : 1.5))
+      .fontFamily(this.currentFontFamily())
       .copyOption(this.selectable ? CopyOptions.LocalDevice : CopyOptions.None)
     } else {
       // 含交互块(折叠块/分支选项):Column + ForEach over chunks。
@@ -525,6 +534,7 @@ export struct ChatRichText {
                 Span(seg.text)
                   .fontColor(this.getSegmentColor(seg))
                   .fontSize(this.getSegmentFontSize(this.settings !== null ? this.settings.fontSize : 16, seg))
+                  .fontFamily(this.currentFontFamily())
                   .fontWeight(seg.bold ? FontWeight.Bold : FontWeight.Normal)
                   .fontStyle(seg.italic ? FontStyle.Italic : FontStyle.Normal)
                   .decoration({
@@ -534,6 +544,7 @@ export struct ChatRichText {
               }, (seg: ChatTextSegment, spanIndex: number) => spanIndex.toString() + '_' + seg.text.length.toString())
             }
             .lineHeight((this.settings !== null ? this.settings.fontSize : 16) * (this.settings !== null ? this.settings.lineHeight : 1.5))
+            .fontFamily(this.currentFontFamily())
             .copyOption(this.selectable ? CopyOptions.LocalDevice : CopyOptions.None)
           } else if (chunk.type === 'collapsible') {
             // 展开内容用尾随闭包注入 contentBuilder,嵌套 ChatRichText 复用同一渲染管线

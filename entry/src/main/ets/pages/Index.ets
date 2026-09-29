@@ -21,6 +21,7 @@
 import { HdsTabs, HdsTabsController, hdsMaterial } from '@kit.UIDesignKit';
 import { SymbolGlyphModifier, router } from '@kit.ArkUI';
 import { AppServices } from '../services/AppServices';
+import { registerBuiltinChatFonts } from '../utils/ChatFontRegistry';
 import { ThemePalette } from '../theme/ThemePalette';
 import { Logger } from '../utils/Logger';
 import { CharacterRootView } from './tabs/CharacterRootView';
@@ -41,6 +42,8 @@ struct Index {
   @StorageProp('effectiveTheme') effectiveTheme: string = 'dark';
 
   async aboutToAppear(): Promise<void> {
+    // 注册内置正文字体(霞鹭文楷,需 UI 上下文解析 $rawfile),供聊天"正文字体"设置使用
+    registerBuiltinChatFonts();
     try {
       // 确保全局 Service 已就绪(数据库、Preferences 等)
       await AppServices.whenReady();

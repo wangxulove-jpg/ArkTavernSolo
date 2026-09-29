@@ -2575,6 +2575,9 @@ struct ChatPage {
       onApplyFontSize: (fontSize: number): void => {
         this.applyFontSize(fontSize);
       },
+      onApplyFontFamily: (family: string): void => {
+        this.applyFontFamily(family);
+      },
       onSelectTextColorMode: (mode: string): void => {
         this.setChatTextColorMode(mode);
       },
@@ -4737,6 +4740,18 @@ struct ChatPage {
     settings.update({ fontSize: fontSize }).then((): void => {
       this.chatTextStyle = settings.get();
     });
+  }
+
+  /** 应用正文字体族设置(实时更新 ChatTextStyle) */
+  private applyFontFamily(family: string): void {
+    const settings = AppServices.getInstance().chatTextStyleSettings;
+    settings.update({ fontFamily: family })
+      .then((): void => {
+        this.chatTextStyle = settings.get();
+      })
+      .catch((e: Object): void => {
+        Logger.warn('ChatPage', 'applyFontFamily failed: ' + (e as Error).message);
+      });
   }
 
   // ===== 字体配色主题 =====
