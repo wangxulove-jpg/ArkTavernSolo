@@ -364,6 +364,10 @@ struct ChatPage {
   /** 前端面板四角缩放热区边长(vp):放大触控目标,避免贴在圆角处难以命中 */
   private static readonly FRONTEND_CORNER_HIT: number = 44;
 
+  /** 折叠态右缘入口标签的细线尺寸(vp):只留一条线,尽量不遮挡画面 */
+  private static readonly RAIL_TAB_LINE_W: number = 3;
+  private static readonly RAIL_TAB_LINE_H: number = 40;
+
   /** 发送按钮位置: true = 左侧, false = 右侧 */
   @State sendButtonLeft: boolean = false;
 
@@ -1915,40 +1919,27 @@ struct ChatPage {
     return corner === 3 ? 180 : 0;
   }
 
-  /** 折叠态:贴屏右缘的「界面」标签(与「状态」标签同规格;由 rightRail 统一排布与定位) */
+  /**
+   * 折叠态:「界面」入口(贴屏右缘的一条细线,中性色;由 rightRail 统一排布与定位)。
+   * 视觉仅 3vp 宽,避免遮挡画面;点击热区经 responseRegion 扩到约 31x56vp,保证好点。
+   */
   @Builder
   frontendFloatingTab() {
-    Column() {
-      Text('界')
-        .fontSize(12)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-      Text('面')
-        .fontSize(12)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-        .margin({ top: 2 })
-      Text('')
-        .width(6)
-        .height(6)
-        .borderRadius(3)
-        .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
-        .margin({ top: 6 })
-    }
-    .width(30)
-    .height(96)
-    .justifyContent(FlexAlign.Center)
-    .alignItems(HorizontalAlign.Center)
-    .borderRadius({ topLeft: 14, topRight: 0, bottomLeft: 14, bottomRight: 0 })
-    .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-    .shadow({ radius: 6, color: 'rgba(0,0,0,0.12)' })
-    .transition(
-      TransitionEffect.opacity(0).combine(TransitionEffect.translate({ x: 40 }))
-        .animation({ duration: 200, curve: Curve.EaseOut })
-    )
-    .onClick(() => {
-      this.openFrontendCard();
-    })
+    Column()
+      .width(ChatPage.RAIL_TAB_LINE_W)
+      .height(ChatPage.RAIL_TAB_LINE_H)
+      .borderRadius({ topLeft: 2, topRight: 0, bottomLeft: 2, bottomRight: 0 })
+      .backgroundColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+      .shadow({ radius: 4, color: 'rgba(0,0,0,0.18)' })
+      // 细线本体只有 3vp 宽,把点击热区向左扩到约 31x56vp(不改变视觉),避免难点
+      .responseRegion({ x: -27, y: -8, width: 31, height: 56 })
+      .transition(
+        TransitionEffect.opacity(0).combine(TransitionEffect.translate({ x: 40 }))
+          .animation({ duration: 200, curve: Curve.EaseOut })
+      )
+      .onClick(() => {
+        this.openFrontendCard();
+      })
   }
 
   /** 前端界面浮层面板(仅 mode=panel):右上展开 ArkWeb,对话仍可在下方继续 */
@@ -2188,40 +2179,24 @@ struct ChatPage {
     .hitTestBehavior(HitTestMode.Transparent)
   }
 
-  /** 折叠态:右上角小标签(竖排“状态” + 有状态时的小圆点;由 rightRail 统一排布与定位) */
+  /** 折叠态:右上角「状态」入口(贴屏右缘的一条细线,强调色;由 rightRail 统一排布与定位) */
   @Builder
   statusFloatingTab() {
-    Column() {
-      Text('状')
-        .fontSize(12)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-      Text('态')
-        .fontSize(12)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-        .margin({ top: 2 })
-      Text('')
-        .width(6)
-        .height(6)
-        .borderRadius(3)
-        .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
-        .margin({ top: 6 })
-    }
-    .width(30)
-    .height(96)
-    .justifyContent(FlexAlign.Center)
-    .alignItems(HorizontalAlign.Center)
-    .borderRadius({ topLeft: 14, topRight: 0, bottomLeft: 14, bottomRight: 0 })
-    .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-    .shadow({ radius: 6, color: 'rgba(0,0,0,0.12)' })
-    .transition(
-      TransitionEffect.opacity(0).combine(TransitionEffect.translate({ x: 40 }))
-        .animation({ duration: 200, curve: Curve.EaseOut })
-    )
-    .onClick(() => {
-      this.toggleStatusPanel(true);
-    })
+    Column()
+      .width(ChatPage.RAIL_TAB_LINE_W)
+      .height(ChatPage.RAIL_TAB_LINE_H)
+      .borderRadius({ topLeft: 2, topRight: 0, bottomLeft: 2, bottomRight: 0 })
+      .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
+      .shadow({ radius: 4, color: 'rgba(0,0,0,0.18)' })
+      // 细线本体只有 3vp 宽,把点击热区向左扩到约 31x56vp(不改变视觉),避免难点
+      .responseRegion({ x: -27, y: -8, width: 31, height: 56 })
+      .transition(
+        TransitionEffect.opacity(0).combine(TransitionEffect.translate({ x: 40 }))
+          .animation({ duration: 200, curve: Curve.EaseOut })
+      )
+      .onClick(() => {
+        this.toggleStatusPanel(true);
+      })
   }
 
   /** 展开态:右上角状态面板(只读列表 + 锁定 + AI 重新生成,字段由 AI 依据角色卡自动生成) */

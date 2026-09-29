@@ -359,7 +359,7 @@ export struct ChatMessageBubble {
         top: $r('app.float.chat_bubble_padding_v'),
         bottom: $r('app.float.chat_bubble_padding_v')
       })
-      .constraintSize({ maxWidth: '94%' })
+      .constraintSize({ maxWidth: '100%' })
       .alignItems(HorizontalAlign.Start)
       // 微阴影:让 Assistant 气泡在浅色背景上有浮起感
       .shadow({

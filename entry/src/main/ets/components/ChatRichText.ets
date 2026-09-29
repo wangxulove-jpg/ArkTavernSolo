@@ -517,7 +517,7 @@ export struct ChatRichText {
     } else {
       // 含交互块(折叠块/分支选项):Column + ForEach over chunks。
       // 此时交互块一般已闭合(内容基本定型),不再需要逐字流式,稳定/变化 key 均可。
-      Column({ space: 6 }) {
+      Column({ space: 3 }) {
         ForEach(this.chunks, (chunk: ChatRenderChunk, index: number) => {
           if (chunk.type === 'text') {
             Text() {
