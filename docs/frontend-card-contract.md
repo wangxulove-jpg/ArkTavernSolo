@@ -30,10 +30,11 @@
 }
 ```
 
-- `frontend` 可以是**字符串**（旧写法，等价 `mode:"fullscreen"`、`chrome:"auto"`）或**对象** `{ html, mode?, title?, size?, chrome? }`。
+- `frontend` 可以是**字符串**（旧写法，等价 `mode:"fullscreen"`、`chrome:"auto"`）或**对象** `{ html, mode?, title?, size?, chrome?, autoOpen? }`。
 - `html` 是完整 HTML 页面（CSS 与脚本全部内联）。**大小上限 512KB**（UTF-8 序列化）。超过上限导入时**保留**，但 App 界面提示"界面过大未启用"。
 - `mode`：`"panel"`（聊天页内浮层面板，推荐展示型/轻交互卡）| `"fullscreen"`（独立全屏页，默认值）。
 - `chrome`：仅 `mode:"fullscreen"` 有意义。`"auto"`（默认，App 顶栏 + 返回按钮）| `"none"`（沉浸，不渲染 App 顶栏，内容自状态栏下方铺满；退出靠系统返回手势/返回键或页面 `close()`）。
+- `autoOpen`：仅 `mode:"fullscreen"` 有意义，默认 `false`。`true` 时**进入会话自动打开界面页**（纯前端卡"整卡即应用"的入口体验）；每次会话进入只触发一次，从界面页返回后停在聊天页，不会循环弹出。
 - 其他 `extensions.arktavern.*` 子字段不受影响；未知子字段原样保留。
 
 ## 2. 运行方式

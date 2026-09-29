@@ -38,7 +38,7 @@ const MAX_MESSAGE_LIMIT: number = 200;
 /**
  * 前端页面规格(arktavern-card-extensions v1)。
  * - 兼容旧写法:extensions.arktavern.frontend 为字符串 → mode='fullscreen'(全屏页)
- * - 新写法:对象 { html, mode?, title?, size?, chrome? }
+ * - 新写法:对象 { html, mode?, title?, size?, chrome?, autoOpen? }
  */
 export interface FrontendSpec {
   /** 完整 HTML 字符串(含 <style>/<script>,全部内联) */
@@ -53,11 +53,13 @@ export interface FrontendSpec {
   sizeHeight: string;
   /** 全屏页外观:'auto'(默认,带 App 顶栏) | 'none'(沉浸,无 App 顶栏) */
   chrome: string;
+  /** fullscreen 模式下进入会话时自动打开界面页(纯前端卡:整卡即应用);仅每次会话进入时触发一次 */
+  autoOpen: boolean;
 }
 
 function emptyFrontendSpec(): FrontendSpec {
   return {
-    html: '', mode: 'fullscreen', title: '', sizeWidth: 0, sizeHeight: '', chrome: 'auto'
+    html: '', mode: 'fullscreen', title: '', sizeWidth: 0, sizeHeight: '', chrome: 'auto', autoOpen: false
   };
 }
 
@@ -81,7 +83,8 @@ export function extractFrontendSpec(extensions: Record<string, Object>): Fronten
       title: '',
       sizeWidth: 0,
       sizeHeight: '',
-      chrome: 'auto'
+      chrome: 'auto',
+      autoOpen: false
     };
   }
   if (!(frontend instanceof Object)) {
@@ -116,7 +119,8 @@ export function extractFrontendSpec(extensions: Record<string, Object>): Fronten
     title: title,
     sizeWidth: sizeWidth,
     sizeHeight: sizeHeight,
-    chrome: fo['chrome'] === 'none' ? 'none' : 'auto'
+    chrome: fo['chrome'] === 'none' ? 'none' : 'auto',
+    autoOpen: fo['autoOpen'] === true
   };
 }
 

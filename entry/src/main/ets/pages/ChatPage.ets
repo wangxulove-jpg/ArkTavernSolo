@@ -290,6 +290,11 @@ struct ChatPage {
   @State frontendPanelMounted: boolean = false;
   /** 面板挂载时的角色卡 id(换卡时用于重置挂载) */
   private frontendMountedCardId: string = '';
+  /**
+   * 本页实例是否已自动打开过界面页(frontend.autoOpen,纯前端卡"整卡即应用"):
+   * 每次进入会话只触发一次;从界面页返回原生聊天不再重复弹出。
+   */
+  private frontendAutoOpened: boolean = false;
   /** 已持久化的面板宽度(vp,0=无记录) */
   private persistedPanelW: number = 0;
   /** 已持久化的面板高度(vp,0=无记录) */
@@ -1691,6 +1696,12 @@ struct ChatPage {
     this.frontendPanelTitle = spec.title;
     // 读取该卡上次调整过的面板尺寸(异步,取到后作为下次展开的初始值)
     this.loadPersistedPanelSize(character.id);
+    // 纯前端卡(autoOpen + fullscreen):进入会话自动打开界面页,整卡即应用;
+    // 每次会话进入只触发一次,从界面页返回后停在原生聊天。
+    if (spec.autoOpen && spec.mode === 'fullscreen' && this.hasFrontend && !this.frontendAutoOpened) {
+      this.frontendAutoOpened = true;
+      this.openFrontendCard();
+    }
   }
 
   /** 释放前端面板(收起并卸下 ArkWeb 挂载),用于换卡/离开会话 */
