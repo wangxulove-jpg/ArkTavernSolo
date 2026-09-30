@@ -33,7 +33,7 @@ import { ChatRole } from '../models/ChatRole';
 import { CharacterImageView } from './CharacterImageView';
 import { ChatRichText, ChatSenderType } from './ChatRichText';
 import { ChatTextStyle } from '../utils/ChatTextStyleSettings';
-import { ChatMarkdownColorTheme } from '../utils/ChatTextColorTheme';
+import { ChatMarkdownColorTheme, ChatSymbolColorRule } from '../utils/ChatTextColorTheme';
 import { ChatMessageRenderState } from '../models/ChatMessageRenderState';
 import { ThemePalette } from '../theme/ThemePalette';
 
@@ -75,6 +75,10 @@ export struct ChatMessageBubble {
    * 或自定义颜色变化均无法同步,导致聊天界面文字颜色不更新。
    */
   @Prop colorTheme: ChatMarkdownColorTheme | null = null;
+  /**
+   * 自定义符号配色规则(透传给 ChatRichText,@Prop 保证规则增删改后同步刷新)。
+   */
+  @Prop symbolRules: ChatSymbolColorRule[] = [];
   /** 气泡背景不透明度(0.40~0.90,仅控制背景 Alpha,不影响文字/头像/按钮) */
   @Prop bubbleOpacity: number = 1.0;
   /** 当前是否为深色模式(用于动态计算气泡背景 RGB) */
@@ -155,6 +159,7 @@ export struct ChatMessageBubble {
           isStreaming: false,
           settings: this.settings,
           colorTheme: this.colorTheme,
+          symbolRules: this.symbolRules,
           selectable: true,
           onInteractiveAction: this.onInteractiveAction
         })
@@ -180,6 +185,7 @@ export struct ChatMessageBubble {
           isStreaming: false,
           settings: this.settings,
           colorTheme: this.colorTheme,
+          symbolRules: this.symbolRules,
           selectable: true,
           onInteractiveAction: this.onInteractiveAction
         })
@@ -248,6 +254,7 @@ export struct ChatMessageBubble {
             isStreaming: this.renderState.isStreaming,
             settings: this.settings,
             colorTheme: this.colorTheme,
+            symbolRules: this.symbolRules,
             selectable: true,
             onInteractiveAction: this.onInteractiveAction
           })
@@ -412,6 +419,7 @@ export struct ChatMessageBubble {
           isStreaming: this.renderState.isStreaming,
           settings: this.settings,
           colorTheme: this.colorTheme,
+          symbolRules: this.symbolRules,
           selectable: true,
           onInteractiveAction: this.onInteractiveAction
         })

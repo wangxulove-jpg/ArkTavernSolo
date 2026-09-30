@@ -6,6 +6,7 @@
  * - 支持 Markdown 子集(加粗/斜体/删除线/行内代码/链接/引用/列表)
  * - 支持角色对白识别(中英文引号、日式引号、角色名前缀)
  * - 支持动作和旁白识别(括号包裹、——开头)
+ * - 支持自定义符号配色规则(用户定义符号对,命中片段携带 symbolColor)
  * - 流式未闭合语法安全降级为普通文本
  *
  * 不负责:
@@ -21,13 +22,15 @@
  * 5. 识别斜体 * 或 _
  * 6. 识别删除线 ~~
  * 7. 识别引用和列表(行级)
- * 8. 在剩余普通文本中识别对白(引号包裹)
- * 9. 合并连续且样式相同的片段
+ * 8. 在剩余普通文本中识别自定义符号(用户规则,优先于对白/动作)
+ * 9. 在剩余普通文本中识别对白(引号包裹)
+ * 10. 合并连续且样式相同的片段
  *
  * 安全降级:
  * - 解析失败时返回 [ { text: 原始文本, styleType: 'normal' } ]
  * - 未闭合语法保留为普通文本,不丢字
  */
+import { ChatSymbolColorRule } from '../utils/ChatTextColorTheme';
 
 /**
  * 文本片段的样式类型。
@@ -73,6 +76,7 @@ export type ChatTextStyleType =
  * - quote: 引用
  * - system: 系统提示
  * - character: 角色专用色(由调用方按 senderCharacterId 解析)
+ * - symbol: 自定义符号(颜色取自片段的 symbolColor,不使用语义色表)
  */
 export type ChatColorRole =
   | 'default'
@@ -86,7 +90,8 @@ export type ChatColorRole =
   | 'quote'
   | 'header'
   | 'system'
-  | 'character';
+  | 'character'
+  | 'symbol';
 
 /**
  * 解析后的文本片段。
@@ -113,6 +118,12 @@ export interface ChatTextSegment {
   readonly narrator: boolean;
   /** 链接目标(link 类型有效) */
   readonly linkTarget: string;
+  /**
+   * 自定义符号颜色(#RRGGBB)。
+   * 命中用户符号规则时由解析器写入,渲染时优先级最高;
+   * 空字符串表示未命中,走常规语义色查询。
+   */
+  readonly symbolColor: string;
   /** 是否为新行起始(用于引用线、列表缩进等布局) */
   readonly lineStart: boolean;
   /** 列表缩进层级(0=非列表) */
@@ -145,6 +156,7 @@ export function createSegment(
     dialogue,
     narrator,
     linkTarget: extras.linkTarget !== undefined ? extras.linkTarget : '',
+    symbolColor: extras.symbolColor !== undefined ? extras.symbolColor : '',
     lineStart: extras.lineStart !== undefined ? extras.lineStart : false,
     listLevel: extras.listLevel !== undefined ? extras.listLevel : 0
   };
@@ -163,6 +175,13 @@ export interface ChatTextParserOptions {
    * 折叠块内部嵌套渲染时必须传 false,否则源码会被再次折叠(套娃)。
    */
   readonly extractFrontendHtml?: boolean;
+  /**
+   * 自定义符号配色规则(可选)。
+   * 非空时在 Markdown/代码还原之后、对白/动作识别之前扫描:
+   * 命中片段携带 symbolColor 且优先级最高(覆盖对白/动作等语义色)。
+   * 为空或未传时不改变任何解析行为。
+   */
+  readonly symbolRules?: ChatSymbolColorRule[];
 }
 
 /** 默认解析选项 */
@@ -297,6 +316,7 @@ function parseLine(
         dialogue: false,
         narrator: false,
         linkTarget: s.linkTarget,
+        symbolColor: s.symbolColor,
         lineStart: i === 0,
         listLevel: level
       });
@@ -330,6 +350,7 @@ function parseLine(
         dialogue: s.dialogue,
         narrator: s.narrator,
         linkTarget: s.linkTarget,
+        symbolColor: s.symbolColor,
         lineStart: i === 0,
         listLevel: 0
       });
@@ -360,6 +381,7 @@ function parseLine(
         dialogue: s.dialogue,
         narrator: s.narrator,
         linkTarget: s.linkTarget,
+        symbolColor: s.symbolColor,
         lineStart: false,
         listLevel: level
       });
@@ -390,6 +412,7 @@ function parseLine(
         dialogue: s.dialogue,
         narrator: s.narrator,
         linkTarget: s.linkTarget,
+        symbolColor: s.symbolColor,
         lineStart: false,
         listLevel: level
       });
@@ -456,6 +479,11 @@ function parseInlineMarkdown(
 
   // 还原代码占位符
   segments = restoreCode(segments, codePlaceholders);
+
+  // 自定义符号识别(用户规则优先于对白/动作;代码还原后做,避免代码内容被误判)
+  if (!skipDecorations && options.symbolRules !== undefined && options.symbolRules.length > 0) {
+    segments = applyCustomSymbols(segments, options.symbolRules);
+  }
 
   // 对白识别(在代码还原后做,避免代码内容被误判)
   if (options.enableDialogue && !skipDecorations) {
@@ -623,6 +651,74 @@ function applyDialogue(segments: ChatTextSegment[]): ChatTextSegment[] {
     }
   }
   return result;
+}
+
+/**
+ * 正则元字符转义(用于把用户输入的符号安全拼进正则)。
+ */
+function escapeRegExp(text: string): string {
+  let out: string = '';
+  for (let i = 0; i < text.length; i++) {
+    const c: string = text.charAt(i);
+    if ('\\^$.*+?()[]{}|/-'.indexOf(c) >= 0) {
+      out += '\\';
+    }
+    out += c;
+  }
+  return out;
+}
+
+/**
+ * 转义为字符类内部安全的字面量([ ] \ ^ - 需转义,其余按字面)。
+ */
+function escapeInCharClass(c: string): string {
+  if (c === '\\' || c === ']' || c === '^' || c === '-') {
+    return '\\' + c;
+  }
+  return c;
+}
+
+/**
+ * 构造单个符号规则的匹配正则:起始符号 + 内容 + 结束符号(不跨行、不嵌套)。
+ */
+function buildSymbolPattern(rule: ChatSymbolColorRule): RegExp {
+  const contentClass: string = escapeInCharClass(rule.open) + escapeInCharClass(rule.close);
+  return new RegExp(escapeRegExp(rule.open) + '([^' + contentClass + '\\n]+)' + escapeRegExp(rule.close), 'g');
+}
+
+/**
+ * 识别用户自定义符号对(如 【】)。
+ *
+ * - 只处理 normal 片段(代码/链接/引用等已格式化片段跳过)
+ * - 按规则顺序依次扫描,先命中的规则生效(不支持嵌套)
+ * - 命中片段携带 symbolColor,渲染时优先级最高
+ * - 未闭合符号保留为普通文本
+ */
+function applyCustomSymbols(segments: ChatTextSegment[], rules: ChatSymbolColorRule[]): ChatTextSegment[] {
+  let current: ChatTextSegment[] = segments;
+  for (let r = 0; r < rules.length; r++) {
+    const rule: ChatSymbolColorRule = rules[r];
+    if (rule.open.length === 0 || rule.close.length === 0) {
+      continue;
+    }
+    const pattern: RegExp = buildSymbolPattern(rule);
+    const next: ChatTextSegment[] = [];
+    for (let i = 0; i < current.length; i++) {
+      const seg: ChatTextSegment = current[i];
+      if (seg.styleType !== 'normal') {
+        next.push(seg);
+        continue;
+      }
+      const parts: ChatTextSegment[] = splitByPattern(seg.text, pattern, (match: RegExpExecArray): ChatTextSegment => {
+        return createSegment(match[0], 'normal', 'symbol', { symbolColor: rule.color });
+      });
+      for (let j = 0; j < parts.length; j++) {
+        next.push(parts[j]);
+      }
+    }
+    current = next;
+  }
+  return current;
 }
 
 /**
@@ -820,6 +916,7 @@ function mergeConsecutive(segments: ChatTextSegment[]): ChatTextSegment[] {
         dialogue: last.dialogue,
         narrator: last.narrator,
         linkTarget: last.linkTarget,
+        symbolColor: last.symbolColor,
         lineStart: last.lineStart,
         listLevel: last.listLevel
       };
@@ -844,6 +941,7 @@ function canMerge(a: ChatTextSegment, b: ChatTextSegment): boolean {
     && a.dialogue === b.dialogue
     && a.narrator === b.narrator
     && a.linkTarget === b.linkTarget
+    && a.symbolColor === b.symbolColor
     && a.listLevel === b.listLevel
     && !b.lineStart; // 行首标记不合并
 }

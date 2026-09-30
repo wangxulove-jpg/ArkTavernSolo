@@ -44,6 +44,55 @@ export class ChatTextColorMode {
 }
 
 /**
+ * 自定义符号配色规则。
+ *
+ * 文本被 open/close 包裹时(如 【内容】)使用 color 渲染。
+ * 优先级最高:命中后覆盖对白/动作等所有语义色,且在所有配色模式下生效。
+ */
+export interface ChatSymbolColorRule {
+  /** 规则标识(= open + close,同一符号对唯一) */
+  readonly id: string;
+  /** 起始符号(单字符) */
+  readonly open: string;
+  /** 结束符号(单字符) */
+  readonly close: string;
+  /** 颜色(#RRGGBB) */
+  readonly color: string;
+}
+
+/** 符号对(起始 + 结束) */
+export interface ChatSymbolPair {
+  readonly open: string;
+  readonly close: string;
+}
+
+/** 新建符号规则的默认颜色(紫色,取自预设色板) */
+export const DEFAULT_SYMBOL_TEXT_COLOR: string = '#8B5CF6';
+
+/** 常用符号对快捷项(添加区一键添加) */
+export const SYMBOL_PAIR_PRESETS: string[] = ['【】', '「」', '『』', '〈〉'];
+
+/**
+ * 解析用户输入的符号对。
+ * 要求恰好 2 个字符:第 1 个为起始符号,第 2 个为结束符号。
+ * 首尾空白会被去除;长度不为 2 时返回 null(调用方应提示用户)。
+ */
+export function parseSymbolPair(input: string): ChatSymbolPair | null {
+  const trimmed: string = input.trim();
+  if (trimmed.length !== 2) {
+    return null;
+  }
+  return { open: trimmed.charAt(0), close: trimmed.charAt(1) };
+}
+
+/**
+ * 由符号对构造规则(id = open + close)。
+ */
+export function createSymbolRule(open: string, close: string, color: string): ChatSymbolColorRule {
+  return { id: open + close, open: open, close: close, color: color };
+}
+
+/**
  * Markdown 渲染器颜色主题。
  *
  * 传入 ChatRichText 后,仅覆盖片段颜色查询逻辑(getSegmentColor),

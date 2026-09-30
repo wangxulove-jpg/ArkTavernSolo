@@ -11,7 +11,7 @@ import { ChatMessage, ChatMessageStatus } from '../models/ChatMessage';
 import { ChatRole } from '../models/ChatRole';
 import { ChatMessageSource } from '../models/ChatMessageSource';
 import { ChatTextStyle } from '../utils/ChatTextStyleSettings';
-import { ChatMarkdownColorTheme } from '../utils/ChatTextColorTheme';
+import { ChatMarkdownColorTheme, ChatSymbolColorRule } from '../utils/ChatTextColorTheme';
 import { ThemePalette } from '../theme/ThemePalette';
 import { ChatMessageBubble } from './ChatMessageBubble';
 import { MessageSwipeControls } from './MessageSwipeControls';
@@ -27,6 +27,8 @@ export struct ChatMessageList {
   @Prop bubbleOpacity: number = 1.0;
   /** Markdown 文字配色主题(null 表示不覆盖) */
   @Prop colorTheme: ChatMarkdownColorTheme | null = null;
+  /** 自定义符号配色规则(透传给气泡内富文本) */
+  @Prop symbolRules: ChatSymbolColorRule[] = [];
   /** 聊天文字样式设置 */
   @Prop chatTextStyle: ChatTextStyle | null = null;
   /** 角色头像 URI */
@@ -98,6 +100,7 @@ export struct ChatMessageList {
                 settings: this.chatTextStyle,
                 senderCharacterId: this.characterId,
                 colorTheme: this.colorTheme,
+                symbolRules: this.symbolRules,
                 bubbleOpacity: this.bubbleOpacity,
                 isDarkMode: this.isDarkMode,
                 onInteractiveAction: (text: string): void => {

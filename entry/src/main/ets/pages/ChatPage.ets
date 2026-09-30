@@ -55,6 +55,9 @@ import { ChatTextStyle } from '../utils/ChatTextStyleSettings';
 import {
   ChatTextColorMode,
   ChatMarkdownColorTheme,
+  ChatSymbolColorRule,
+  createSymbolRule,
+  DEFAULT_SYMBOL_TEXT_COLOR,
   DEFAULT_BODY_TEXT_COLOR,
   DEFAULT_EMPHASIS_TEXT_COLOR,
   DEFAULT_DIALOGUE_TEXT_COLOR,
@@ -246,6 +249,12 @@ struct ChatPage {
 
   /** 自定义模式下用户消息文字颜色(#RRGGBB) */
   @State chatUserTextColor: string = DEFAULT_USER_TEXT_COLOR;
+
+  /**
+   * 自定义符号配色规则(如 【】「」)。
+   * 与配色模式无关,所有模式下都生效;持久化到 Preferences。
+   */
+  @State chatSymbolRules: ChatSymbolColorRule[] = [];
 
   /** 显示设置面板可见性(轻量卡片,非 Dialog) */
   @State chatAppearancePanelVisible: boolean = false;
@@ -806,10 +815,12 @@ struct ChatPage {
    *   { "mode": "AUTO|LIGHT|DARK|CUSTOM",
    *     "body": "#RRGGBB", "emphasis": "#RRGGBB", "dialogue": "#RRGGBB",
    *     "action": "#RRGGBB", "code": "#RRGGBB", "link": "#RRGGBB",
-   *     "quote": "#RRGGBB", "user": "#RRGGBB" }
+   *     "quote": "#RRGGBB", "user": "#RRGGBB",
+   *     "symbols": [ { "open": "【", "close": "】", "color": "#RRGGBB" } ] }
    *
    * 读取失败或未初始化时静默使用默认值。
    * 非法字段回退为对应默认值,确保渲染安全。
+   * symbols 为可选字段(旧版本数据缺失时回退为空列表)。
    */
   private loadPersistedTextColor(): void {
     try {
@@ -835,6 +846,7 @@ struct ChatPage {
           this.chatLinkColor = this.readColorField(obj, 'link', DEFAULT_LINK_TEXT_COLOR);
           this.chatQuoteColor = this.readColorField(obj, 'quote', DEFAULT_QUOTE_TEXT_COLOR);
           this.chatUserTextColor = this.readColorField(obj, 'user', DEFAULT_USER_TEXT_COLOR);
+          this.chatSymbolRules = this.readSymbolRules(obj);
         })
         .catch((_e: Object): void => {
           // 读取失败静默使用默认值
@@ -854,6 +866,30 @@ struct ChatPage {
   }
 
   /**
+   * 从持久化 JSON 对象读取自定义符号规则列表。
+   * 缺失/非法(非数组、单字符不满足、颜色非法)的条目一律跳过,保证渲染安全。
+   */
+  private readSymbolRules(obj: Record<string, Object>): ChatSymbolColorRule[] {
+    const raw: Object | undefined = obj['symbols'];
+    if (raw === undefined || !Array.isArray(raw)) {
+      return [];
+    }
+    const items: Object[] = raw as Object[];
+    const result: ChatSymbolColorRule[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item: Record<string, Object> = items[i] as Record<string, Object>;
+      const open: Object | undefined = item['open'];
+      const close: Object | undefined = item['close'];
+      const color: string = this.readColorField(item, 'color', '');
+      if (typeof open === 'string' && typeof close === 'string'
+        && open.length === 1 && close.length === 1 && color.length > 0) {
+        result.push(createSymbolRule(open, close, color));
+      }
+    }
+    return result;
+  }
+
+  /**
    * 将当前字体配色持久化到 Preferences。
    *
    * 包含模式 + 8 个语义化颜色值,即使从 CUSTOM 切回 AUTO 也写入当前状态,
@@ -866,7 +902,17 @@ struct ChatPage {
       if (!prefs.isInitialized()) {
         return;
       }
-      const obj: Record<string, string> = {
+      const symbolItems: Record<string, string>[] = [];
+      for (let i = 0; i < this.chatSymbolRules.length; i++) {
+        const rule: ChatSymbolColorRule = this.chatSymbolRules[i];
+        const item: Record<string, string> = {
+          'open': rule.open,
+          'close': rule.close,
+          'color': rule.color
+        };
+        symbolItems.push(item);
+      }
+      const obj: Record<string, Object> = {
         'mode': this.chatTextColorMode,
         'body': this.chatBodyTextColor,
         'emphasis': this.chatEmphasisColor,
@@ -875,7 +921,8 @@ struct ChatPage {
         'code': this.chatCodeColor,
         'link': this.chatLinkColor,
         'quote': this.chatQuoteColor,
-        'user': this.chatUserTextColor
+        'user': this.chatUserTextColor,
+        'symbols': symbolItems
       };
       prefs.putString(ChatPage.PREF_KEY_TEXT_COLOR, JSON.stringify(obj))
         .catch((_e: Object): void => {
@@ -1030,6 +1077,7 @@ struct ChatPage {
                 isDarkMode: this.isDarkMode,
                 bubbleOpacity: this.chatBubbleOpacity,
                 colorTheme: this.getCurrentColorTheme(),
+                symbolRules: this.chatSymbolRules,
                 chatTextStyle: this.chatTextStyle,
                 characterAvatarUri: this.character !== null ? this.character!.avatarUri : '',
                 characterName: this.viewModel !== null ? this.viewModel!.characterName : '',
@@ -2565,6 +2613,7 @@ struct ChatPage {
       linkTextColor: this.chatLinkColor,
       quoteTextColor: this.chatQuoteColor,
       userTextColor: this.chatUserTextColor,
+      symbolRules: this.chatSymbolRules,
       clampBubbleOpacity: (value: number): number => this.normalizeChatBubbleOpacity(value),
       onPersistBubbleOpacity: (value: number): void => {
         this.persistBubbleOpacity(value);
@@ -2581,11 +2630,25 @@ struct ChatPage {
       onSelectTextColorMode: (mode: string): void => {
         this.setChatTextColorMode(mode);
       },
-      onSetCustomColor: (target: CustomColorTarget, color: string): void => {
-        this.setCustomColor(target, color);
+      onSetCustomColor: (target: CustomColorTarget, ruleId: string, color: string): void => {
+        if (ruleId.length > 0) {
+          this.setSymbolRuleColor(ruleId, color);
+        } else {
+          this.setCustomColor(target, color);
+        }
       },
-      onSetCustomColorLive: (target: CustomColorTarget, color: string): void => {
-        this.setCustomColorLive(target, color);
+      onSetCustomColorLive: (target: CustomColorTarget, ruleId: string, color: string): void => {
+        if (ruleId.length > 0) {
+          this.setSymbolRuleColorLive(ruleId, color);
+        } else {
+          this.setCustomColorLive(target, color);
+        }
+      },
+      onAddSymbolRule: (open: string, close: string): void => {
+        this.addSymbolRule(open, close);
+      },
+      onRemoveSymbolRule: (ruleId: string): void => {
+        this.removeSymbolRule(ruleId);
       },
       onResetTextColor: (): void => {
         this.resetChatTextColor();
@@ -2642,7 +2705,16 @@ struct ChatPage {
           ColorWheelPicker({
             color: this.colorPickerRequest.color,
             onChange: (c: string): void => {
-              this.setCustomColorLive(this.colorPickerRequest!.target, c);
+              const request: ColorPickerRequest | null = this.colorPickerRequest;
+              if (request === null) {
+                return;
+              }
+              // 符号规则(drag 实时预览)与语义色分流
+              if (request.ruleId.length > 0) {
+                this.setSymbolRuleColorLive(request.ruleId, c);
+              } else {
+                this.setCustomColorLive(request.target, c);
+              }
             }
           })
 
@@ -4844,6 +4916,74 @@ struct ChatPage {
     }
   }
 
+  // ===== 自定义符号配色规则(所有配色模式下都生效) =====
+
+  /**
+   * 新增符号规则。
+   * 默认颜色由页面决定(DEFAULT_SYMBOL_TEXT_COLOR),去重由面板校验。
+   * 不可变更新(整体替换数组)以触发 @State/@Prop 刷新与消息重解析。
+   */
+  private addSymbolRule(open: string, close: string): void {
+    const next: ChatSymbolColorRule[] = [];
+    for (let i = 0; i < this.chatSymbolRules.length; i++) {
+      next.push(this.chatSymbolRules[i]);
+    }
+    next.push(createSymbolRule(open, close, DEFAULT_SYMBOL_TEXT_COLOR));
+    this.chatSymbolRules = next;
+    this.persistTextColor();
+  }
+
+  /** 删除符号规则(整体替换数组触发刷新)。 */
+  private removeSymbolRule(ruleId: string): void {
+    const next: ChatSymbolColorRule[] = [];
+    for (let i = 0; i < this.chatSymbolRules.length; i++) {
+      const rule: ChatSymbolColorRule = this.chatSymbolRules[i];
+      if (rule.id !== ruleId) {
+        next.push(rule);
+      }
+    }
+    this.chatSymbolRules = next;
+    this.persistTextColor();
+  }
+
+  /** 设置符号规则颜色(含持久化)。 */
+  private setSymbolRuleColor(ruleId: string, color: string): void {
+    if (this.applySymbolRuleColor(ruleId, color)) {
+      this.persistTextColor();
+    }
+  }
+
+  /** 仅更新符号规则颜色,不持久化(色盘拖动实时预览)。 */
+  private setSymbolRuleColorLive(ruleId: string, color: string): void {
+    this.applySymbolRuleColor(ruleId, color);
+  }
+
+  /**
+   * 应用符号规则颜色(校验 + 归一化 + 不可变替换)。
+   * 返回是否发生变更(未命中规则或颜色非法时为 false)。
+   */
+  private applySymbolRuleColor(ruleId: string, color: string): boolean {
+    const normalized: string | null = normalizeHexColor(color);
+    if (normalized === null) {
+      return false;
+    }
+    const next: ChatSymbolColorRule[] = [];
+    let changed: boolean = false;
+    for (let i = 0; i < this.chatSymbolRules.length; i++) {
+      const rule: ChatSymbolColorRule = this.chatSymbolRules[i];
+      if (rule.id === ruleId) {
+        next.push(createSymbolRule(rule.open, rule.close, normalized));
+        changed = true;
+      } else {
+        next.push(rule);
+      }
+    }
+    if (changed) {
+      this.chatSymbolRules = next;
+    }
+    return changed;
+  }
+
   /** 关闭色盘选择器,并持久化当前配色。 */
   private closeColorPicker(): void {
     if (this.colorPickerRequest !== null) {
@@ -4868,6 +5008,8 @@ struct ChatPage {
     this.chatLinkColor = DEFAULT_LINK_TEXT_COLOR;
     this.chatQuoteColor = DEFAULT_QUOTE_TEXT_COLOR;
     this.chatUserTextColor = DEFAULT_USER_TEXT_COLOR;
+    // 自定义符号规则一并清空(恢复默认 = 回到无规则状态)
+    this.chatSymbolRules = [];
     this.persistTextColor();
   }
 

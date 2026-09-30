@@ -3,9 +3,10 @@
  *
  * 设计:组件不持有 VM/服务,依赖全部经 @Prop 值 + @Link + 回调上抛:
  * - 渲染态:effectiveTheme / chatTextStyle / chatTextColorMode / isDarkMode / 8 个自定义语义色
+ *         / symbolRules(自定义符号配色规则,所有配色模式下都生效)
  * - 双向:chatAppearancePanelVisible(关闭按钮) / chatBubbleOpacity 与 chatContentHeightRatio(滑块)
- *         / colorPickerRequest(色盘请求,携带 target + 打开时当前色,由页面渲染全屏色盘覆盖层)
- * - 业务动作:全部回调上抛,由页面执行(Preferences 持久化、字体设置、恢复默认)
+ *         / colorPickerRequest(色盘请求,携带 target + ruleId + 打开时当前色,由页面渲染全屏色盘覆盖层)
+ * - 业务动作:全部回调上抛,由页面执行(Preferences 持久化、字体设置、恢复默认、符号规则增删)
  */
 import { ThemePalette } from '../theme/ThemePalette';
 import { ChatTextStyle } from '../utils/ChatTextStyleSettings';
@@ -13,6 +14,11 @@ import { CHAT_FONT_OPTIONS, CHAT_FONT_SYSTEM, ChatFontOption, chatFontLabel } fr
 import {
   ChatTextColorMode,
   ChatMarkdownColorTheme,
+  ChatSymbolColorRule,
+  ChatSymbolPair,
+  DEFAULT_SYMBOL_TEXT_COLOR,
+  SYMBOL_PAIR_PRESETS,
+  parseSymbolPair,
   DEFAULT_BODY_TEXT_COLOR,
   DEFAULT_EMPHASIS_TEXT_COLOR,
   DEFAULT_DIALOGUE_TEXT_COLOR,
@@ -25,17 +31,19 @@ import {
   getDarkColorTheme
 } from '../utils/ChatTextColorTheme';
 
-/** 自定义配色目标字段(语义化:正文/加粗斜体/对白/动作/代码/链接/引用/用户) */
+/** 自定义配色目标字段(语义化:正文/加粗斜体/对白/动作/代码/链接/引用/用户/自定义符号) */
 export type CustomColorTarget =
   | 'body' | 'emphasis' | 'dialogue' | 'action'
-  | 'code' | 'link' | 'quote' | 'user';
+  | 'code' | 'link' | 'quote' | 'user' | 'symbol';
 
 /**
- * 色盘打开请求:target + 打开时的当前色。
+ * 色盘打开请求:target + ruleId + 打开时的当前色。
  * 页面的全屏色盘覆盖层据此渲染(初始色 + 实时写回的目标字段)。
+ * ruleId 非空时表示目标是自定义符号规则(按规则 id 写回颜色)。
  */
 export interface ColorPickerRequest {
   target: CustomColorTarget;
+  ruleId: string;
   color: string;
 }
 
@@ -66,6 +74,13 @@ export struct ChatAppearancePanel {
   @Prop linkTextColor: string = DEFAULT_LINK_TEXT_COLOR;
   @Prop quoteTextColor: string = DEFAULT_QUOTE_TEXT_COLOR;
   @Prop userTextColor: string = DEFAULT_USER_TEXT_COLOR;
+  /** 自定义符号配色规则(只读;增删改经回调) */
+  @Prop symbolRules: ChatSymbolColorRule[] = [];
+
+  /** 符号输入框内容 */
+  @State symbolInput: string = '';
+  /** 符号输入校验提示(空字符串表示无错误) */
+  @State symbolInputError: string = '';
 
   /** 气泡不透明度 clamp 到 [0,1](页面提供,与加载路径共用同一实现) */
   clampBubbleOpacity: (value: number) => number = (value: number): number => value;
@@ -79,12 +94,17 @@ export struct ChatAppearancePanel {
   onApplyFontFamily: (family: string) => void = (_: string) => {};
   /** 切换文字配色模式(含持久化) */
   onSelectTextColorMode: (mode: string) => void = (_: string) => {};
-  /** 设置自定义颜色(点击预设色块;含持久化) */
-  onSetCustomColor: (target: CustomColorTarget, color: string) => void =
-    (_target: CustomColorTarget, _color: string) => {};
+  /** 设置自定义颜色(点击预设色块;含持久化)。ruleId 非空时表示自定义符号规则 */
+  onSetCustomColor: (target: CustomColorTarget, ruleId: string, color: string) => void =
+    (_target: CustomColorTarget, _ruleId: string, _color: string) => {};
   /** 设置自定义颜色(色盘拖动实时预览,不持久化) */
-  onSetCustomColorLive: (target: CustomColorTarget, color: string) => void =
-    (_target: CustomColorTarget, _color: string) => {};
+  onSetCustomColorLive: (target: CustomColorTarget, ruleId: string, color: string) => void =
+    (_target: CustomColorTarget, _ruleId: string, _color: string) => {};
+  /** 新增自定义符号规则(含持久化;默认颜色由页面决定) */
+  onAddSymbolRule: (open: string, close: string) => void =
+    (_open: string, _close: string) => {};
+  /** 删除自定义符号规则(含持久化) */
+  onRemoveSymbolRule: (ruleId: string) => void = (_ruleId: string) => {};
   /** 恢复默认文字配色(不修改气泡不透明度) */
   onResetTextColor: () => void = () => {};
   /** 全部恢复默认(气泡不透明度 + 文字配色) */
@@ -410,28 +430,123 @@ export struct ChatAppearancePanel {
             .margin({ bottom: 8 })
 
           // 普通正文
-          this.colorSwatchRow('普通正文', 'body')
+          this.colorSwatchRow('普通正文', 'body', '')
 
           // 加粗/斜体
-          this.colorSwatchRow('**加粗** / *斜体*', 'emphasis')
+          this.colorSwatchRow('**加粗** / *斜体*', 'emphasis', '')
 
           // 对白 “”
-          this.colorSwatchRow('“对白”', 'dialogue')
+          this.colorSwatchRow('“对白”', 'dialogue', '')
 
           // 动作/旁白 ()
-          this.colorSwatchRow('(动作)', 'action')
+          this.colorSwatchRow('(动作)', 'action', '')
 
           // 行内代码
-          this.colorSwatchRow('`代码`', 'code')
+          this.colorSwatchRow('`代码`', 'code', '')
 
           // 链接
-          this.colorSwatchRow('[链接](url)', 'link')
+          this.colorSwatchRow('[链接](url)', 'link', '')
 
           // 引用
-          this.colorSwatchRow('> 引用', 'quote')
+          this.colorSwatchRow('> 引用', 'quote', '')
 
           // 用户消息文字
-          this.colorSwatchRow('用户消息', 'user')
+          this.colorSwatchRow('用户消息', 'user', '')
+        }
+
+        // ===== 自定义符号颜色(所有配色模式下都生效) =====
+        Divider()
+          .color(ThemePalette.dividerColor(this.effectiveTheme))
+          .margin({ top: 12, bottom: 12 })
+
+        Text('自定义符号颜色')
+          .fontSize($r('app.float.app_font_caption'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+          .width('100%')
+          .margin({ bottom: 4 })
+
+        Text('符号包裹的内容使用指定颜色(如 【内容】),优先于对白/动作识别,四种配色模式下都生效')
+          .fontSize(10)
+          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+          .width('100%')
+
+        // 添加行:输入一对符号 + 添加按钮
+        Row({ space: 8 }) {
+          TextInput({ text: this.symbolInput, placeholder: '输入符号对,如 【】' })
+            .fontSize($r('app.float.app_font_caption'))
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .placeholderColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+            .borderRadius(8)
+            .height(34)
+            .layoutWeight(1)
+            .onChange((value: string) => {
+              this.symbolInput = value;
+              this.symbolInputError = '';
+            })
+          Button('添加')
+            .type(ButtonType.Normal)
+            .fontSize($r('app.float.app_font_caption'))
+            .fontColor($r('app.color.app_on_accent'))
+            .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
+            .borderRadius(8)
+            .height(34)
+            .padding({ left: 14, right: 14 })
+            .onClick(() => {
+              this.handleAddSymbolInput();
+            })
+        }
+        .width('100%')
+        .margin({ top: 8 })
+
+        // 输入校验提示
+        if (this.symbolInputError.length > 0) {
+          Text(this.symbolInputError)
+            .fontSize(10)
+            .fontColor('#EF4444')
+            .width('100%')
+            .margin({ top: 4 })
+        }
+
+        // 常用符号快捷添加
+        Row({ space: 6 }) {
+          Text('常用')
+            .fontSize(11)
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+          ForEach(SYMBOL_PAIR_PRESETS, (pair: string) => {
+            Button(pair)
+              .type(ButtonType.Normal)
+              .fontSize(11)
+              .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+              .backgroundColor(Color.Transparent)
+              .border({ width: 1, color: ThemePalette.accentColor(this.effectiveTheme) })
+              .borderRadius(10)
+              .height(26)
+              .padding({ left: 8, right: 8 })
+              .onClick(() => {
+                this.handleAddSymbolPreset(pair);
+              })
+          }, (pair: string) => pair)
+        }
+        .width('100%')
+        .margin({ top: 8 })
+
+        // 规则列表(每条:符号对 + 预设色块 + 色盘 + 删除)
+        if (this.symbolRules.length === 0) {
+          Text('暂无规则,添加后立即生效')
+            .fontSize(10)
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            .width('100%')
+            .margin({ top: 8 })
+        } else {
+          Column() {
+            ForEach(this.symbolRules, (rule: ChatSymbolColorRule) => {
+              this.colorSwatchRow(rule.open + rule.close, 'symbol', rule.id)
+            }, (rule: ChatSymbolColorRule) => rule.id)
+          }
+          .width('100%')
+          .margin({ top: 10 })
         }
 
         Divider()
@@ -485,27 +600,37 @@ export struct ChatAppearancePanel {
   }
 
   /**
-   * 颜色色块行:标签 + 预设色块 + 色盘入口。
-   * 仅在 CUSTOM 模式下渲染。
+   * 颜色色块行:标签 + 预设色块 + 色盘入口(+ 符号规则行的删除按钮)。
+   * 语义色行仅在 CUSTOM 模式下渲染;符号规则行在所有模式下渲染。
    * 色块点击即应用(经页面回调持久化),色盘入口上抛 colorPickerRequest。
    *
-   * 注意:当前颜色通过 this.getCustomColorByTarget(target) 在 Builder 体内响应式获取,
+   * 注意:当前颜色通过 this.resolveSwatchColor(target, ruleId) 在 Builder 体内响应式获取,
    * 不通过参数传入,确保 @Prop 变化时选中标记和预览圆点立即更新。
    */
   @Builder
-  colorSwatchRow(label: string, target: CustomColorTarget) {
+  colorSwatchRow(label: string, target: CustomColorTarget, ruleId: string) {
     Column() {
       Row() {
         Text(label)
           .fontSize($r('app.float.app_font_caption'))
           .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
         Blank()
+        // 删除入口(仅符号规则行)
+        if (ruleId.length > 0) {
+          Text('删除')
+            .fontSize($r('app.float.app_font_caption'))
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            .padding({ left: 8, right: 8 })
+            .onClick(() => {
+              this.onRemoveSymbolRule(ruleId);
+            })
+        }
         // 当前颜色预览圆点(响应式:访问组件内颜色属性)
         Stack()
           .width(16)
           .height(16)
           .borderRadius(8)
-          .backgroundColor(this.getCustomColorByTarget(target))
+          .backgroundColor(this.resolveSwatchColor(target, ruleId))
           .border({ width: 1, color: ThemePalette.dividerColor(this.effectiveTheme) })
       }
       .width('100%')
@@ -516,7 +641,7 @@ export struct ChatAppearancePanel {
       Flex({ wrap: FlexWrap.Wrap }) {
         ForEach(this.presetSwatches, (swatch: string) => {
           Stack() {
-            if (this.getCustomColorByTarget(target).toUpperCase() === swatch.toUpperCase()) {
+            if (this.resolveSwatchColor(target, ruleId).toUpperCase() === swatch.toUpperCase()) {
               // 选中标记:勾选(按亮度自动选择深/浅勾色)
               Text('✓')
                 .fontSize(12)
@@ -529,14 +654,14 @@ export struct ChatAppearancePanel {
           .borderRadius(12)
           .backgroundColor(swatch)
           .border({
-            width: this.getCustomColorByTarget(target).toUpperCase() === swatch.toUpperCase() ? 2 : 1,
-            color: this.getCustomColorByTarget(target).toUpperCase() === swatch.toUpperCase()
+            width: this.resolveSwatchColor(target, ruleId).toUpperCase() === swatch.toUpperCase() ? 2 : 1,
+            color: this.resolveSwatchColor(target, ruleId).toUpperCase() === swatch.toUpperCase()
               ? ThemePalette.accentColor(this.effectiveTheme)
               : ThemePalette.dividerColor(this.effectiveTheme)
           })
           .margin({ right: 8, bottom: 6 })
           .onClick(() => {
-            this.onSetCustomColor(target, swatch);
+            this.onSetCustomColor(target, ruleId, swatch);
           })
         }, (swatch: string, index: number) => swatch + index.toString())
       }
@@ -555,7 +680,8 @@ export struct ChatAppearancePanel {
         .onClick(() => {
           const request: ColorPickerRequest = {
             target: target,
-            color: this.getCustomColorByTarget(target)
+            ruleId: ruleId,
+            color: this.resolveSwatchColor(target, ruleId)
           };
           this.colorPickerRequest = request;
         })
@@ -638,6 +764,20 @@ export struct ChatAppearancePanel {
       }
       .width('100%')
       .justifyContent(FlexAlign.End)
+
+      // 自定义符号示例(仅当存在规则时显示)
+      if (this.symbolRules.length > 0) {
+        Row() {
+          Text() {
+            ForEach(this.symbolRules, (rule: ChatSymbolColorRule) => {
+              Span(rule.open + '示例' + rule.close + ' ')
+                .fontSize($r('app.float.app_font_caption'))
+                .fontColor(rule.color)
+            }, (rule: ChatSymbolColorRule) => rule.id)
+          }
+        }
+        .width('100%')
+      }
     }
     .width('100%')
     .padding(10)
@@ -678,6 +818,70 @@ export struct ChatAppearancePanel {
       return this.quoteTextColor;
     }
     return this.userTextColor;
+  }
+
+  /**
+   * 解析色块行当前颜色(语义色按 target;自定义符号按 ruleId 查规则)。
+   * 在 @Builder 体内调用,访问 @Prop 触发依赖收集,保证颜色变化即时刷新。
+   */
+  private resolveSwatchColor(target: CustomColorTarget, ruleId: string): string {
+    if (target === 'symbol') {
+      const rule: ChatSymbolColorRule | null = this.findSymbolRule(ruleId);
+      return rule !== null ? rule.color : DEFAULT_SYMBOL_TEXT_COLOR;
+    }
+    return this.getCustomColorByTarget(target);
+  }
+
+  /** 按 id 查找自定义符号规则(未找到返回 null) */
+  private findSymbolRule(ruleId: string): ChatSymbolColorRule | null {
+    for (let i = 0; i < this.symbolRules.length; i++) {
+      const rule: ChatSymbolColorRule = this.symbolRules[i];
+      if (rule.id === ruleId) {
+        return rule;
+      }
+    }
+    return null;
+  }
+
+  /** 输入框添加符号对(校验 + 去重,失败时显示行内提示) */
+  private handleAddSymbolInput(): void {
+    const pair: ChatSymbolPair | null = parseSymbolPair(this.symbolInput);
+    if (pair === null) {
+      this.symbolInputError = '请输入两个字符的符号对,如 【】';
+      return;
+    }
+    if (this.hasSymbolRule(pair.open, pair.close)) {
+      this.symbolInputError = '该符号已存在';
+      return;
+    }
+    this.symbolInputError = '';
+    this.symbolInput = '';
+    this.onAddSymbolRule(pair.open, pair.close);
+  }
+
+  /** 常用符号快捷添加(已存在时提示) */
+  private handleAddSymbolPreset(pairText: string): void {
+    const pair: ChatSymbolPair | null = parseSymbolPair(pairText);
+    if (pair === null) {
+      return;
+    }
+    if (this.hasSymbolRule(pair.open, pair.close)) {
+      this.symbolInputError = '该符号已存在';
+      return;
+    }
+    this.symbolInputError = '';
+    this.onAddSymbolRule(pair.open, pair.close);
+  }
+
+  /** 判断符号对是否已存在规则(同一符号对唯一) */
+  private hasSymbolRule(open: string, close: string): boolean {
+    const id: string = open + close;
+    for (let i = 0; i < this.symbolRules.length; i++) {
+      if (this.symbolRules[i].id === id) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -770,7 +974,8 @@ export struct ChatAppearancePanel {
       && this.codeTextColor === DEFAULT_CODE_TEXT_COLOR
       && this.linkTextColor === DEFAULT_LINK_TEXT_COLOR
       && this.quoteTextColor === DEFAULT_QUOTE_TEXT_COLOR
-      && this.userTextColor === DEFAULT_USER_TEXT_COLOR;
+      && this.userTextColor === DEFAULT_USER_TEXT_COLOR
+      && this.symbolRules.length === 0;
   }
 
   /** 当前正文字体族(未设置时回退系统默认) */

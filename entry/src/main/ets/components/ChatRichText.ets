@@ -29,7 +29,7 @@ import { ChatTextSegment, parseChatChunks, ChatRenderChunk, ChatTextParserOption
 import { getCharacterColor } from '../utils/ChatPalette';
 import { ChatTextStyle } from '../utils/ChatTextStyleSettings';
 import { CHAT_FONT_SYSTEM } from '../utils/ChatFontRegistry';
-import { ChatMarkdownColorTheme } from '../utils/ChatTextColorTheme';
+import { ChatMarkdownColorTheme, ChatSymbolColorRule } from '../utils/ChatTextColorTheme';
 import { ChatCollapsibleBlock } from './ChatCollapsibleBlock';
 import { ChatBranchBlock } from './ChatBranchBlock';
 
@@ -71,6 +71,12 @@ export struct ChatRichText {
    * @Watch 触发重新解析,确保缓存 key 包含主题指纹。
    */
   @Prop @Watch('onThemeChange') colorTheme: ChatMarkdownColorTheme | null = null;
+  /**
+   * 自定义符号配色规则(所有配色模式下都生效)。
+   * 命中片段按规则颜色渲染,优先级高于语义色;
+   * @Watch 触发重新解析,确保缓存 key 包含规则指纹。
+   */
+  @Prop @Watch('onSymbolRulesChange') symbolRules: ChatSymbolColorRule[] = [];
   /** 是否可选择(长按复制) */
   @Prop selectable: boolean = true;
   /**
@@ -159,6 +165,13 @@ export struct ChatRichText {
    * @Watch 回调:senderCharacterId 变化时立即重新解析(应用角色颜色)。
    */
   private onSenderChange(): void {
+    this.doParse();
+  }
+
+  /**
+   * @Watch 回调:自定义符号规则变化时立即重新解析(应用新规则颜色)。
+   */
+  private onSymbolRulesChange(): void {
     this.doParse();
   }
 
@@ -269,7 +282,8 @@ export struct ChatRichText {
     const options: ChatTextParserOptions = {
       enableMarkdown: settings.enableMarkdown,
       enableDialogue: settings.enableDialogue,
-      extractFrontendHtml: this.foldFrontendHtml
+      extractFrontendHtml: this.foldFrontendHtml,
+      symbolRules: this.symbolRules.length > 0 ? this.symbolRules : undefined
     };
 
     // 打字机揭示中(流式或排空):跳过缓存,直接解析当前已揭示文本
@@ -316,7 +330,24 @@ export struct ChatRichText {
       + settings.quoteStyle + '_'
       + settings.codeStyle + '_'
       + (this.foldFrontendHtml ? 'fe1' : 'fe0') + '_'
-      + this.buildThemeFingerprint();
+      + this.buildThemeFingerprint() + '_'
+      + this.buildSymbolRulesFingerprint();
+  }
+
+  /**
+   * 构建自定义符号规则指纹(参与缓存 key)。
+   * 无规则时返回 'sym0',保持与旧缓存 key 一致。
+   */
+  private buildSymbolRulesFingerprint(): string {
+    if (this.symbolRules.length === 0) {
+      return 'sym0';
+    }
+    let out: string = 'sym';
+    for (let i = 0; i < this.symbolRules.length; i++) {
+      const rule: ChatSymbolColorRule = this.symbolRules[i];
+      out += '|' + rule.open + rule.close + rule.color;
+    }
+    return out;
   }
 
   /**
@@ -360,6 +391,11 @@ export struct ChatRichText {
    * 不改变解析行为、节点结构、字体粗细、链接行为或换行逻辑。
    */
   private getSegmentColor(seg: ChatTextSegment): ResourceColor {
+    // 自定义符号颜色:用户显式规则优先级最高(覆盖角色独立色与所有语义色)
+    if (seg.symbolColor.length > 0) {
+      return seg.symbolColor;
+    }
+
     // 角色独立颜色优先(对白)
     if (seg.dialogue && this.senderType === 'character' && this.settings !== null && this.settings.enableCharacterColor && this.senderCharacterId.length > 0) {
       return getCharacterColor(this.senderCharacterId);
@@ -558,6 +594,7 @@ export struct ChatRichText {
                 isStreaming: false,
                 settings: this.settings,
                 colorTheme: this.colorTheme,
+                symbolRules: this.symbolRules,
                 selectable: true,
                 foldFrontendHtml: false,
                 onInteractiveAction: this.onInteractiveAction
