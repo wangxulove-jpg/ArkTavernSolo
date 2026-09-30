@@ -43,6 +43,9 @@
         "mode": "panel",
         "title": "世界地图",
         "size": { "width": 360, "height": "65%" }
+      },
+      "impres": {
+        "direction": "故事背景与发展方向压缩文本(见 §5,由制卡工具生成,也可手写)"
       }
     }
   }
@@ -121,9 +124,39 @@
 
 ---
 
-## 5. Bridge 契约（与 `frontend-card-contract.md` 对齐，并补充）
+## 5. `impres`：代写方向
 
-### 5.1 `window.arktavern` 方法（JS → App）
+### 5.1 结构
+
+```json
+{
+  "extensions": {
+    "arktavern": {
+      "impres": {
+        "direction": "故事背景与发展方向压缩文本"
+      }
+    }
+  }
+}
+```
+
+- `direction`：string，**代写方向**文本——把角色卡全文与世界书提炼压缩成的「背景设定 + 角色与关系 + 剧情发展脉络」说明。
+
+### 5.2 行为契约
+
+- **用途**：App 聊天页「🎭代写」生成待选发言候选时的背景与剧情方向；**不注入主对话**（不进入 PromptBuilder 主链路），
+  只在用户点「代写」时随开场白 / 最近对话 / 当前角色状态发给模型（顺序：开场白 → 最近对话 → 当前状态）。
+- **无声明即回退**：`impres` 缺失 / `direction` 缺失 / 非字符串 / 空串（含纯空白）→ App 视为未提供，
+  代写退回「最近对话 + 用户性格总结 + 全局代写引导」的原有行为。
+- **长度**：建议 600~1200 字；App 注入时按 **4000 字符**截断（超出部分静默丢弃）。
+- **生成方**：Card Studio 编辑器「代写方向」Tab（AI 读角色卡 + 世界书生成）；卡作者也可手写。
+- **纯新增子字段**：向前兼容，不影响旧卡；`bridge_version` 不因此变更。
+
+---
+
+## 6. Bridge 契约（与 `frontend-card-contract.md` 对齐，并补充）
+
+### 6.1 `window.arktavern` 方法（JS → App）
 
 | 方法 | 参数 | 返回 | 说明 |
 |---|---|---|---|
@@ -136,7 +169,7 @@
 | `send(text)` | `string` | `string` | 发送消息到当前会话（同聊天链路）。返回 `"ok"`/`"busy"`/`"empty"`/`"disposed"` |
 | `close()` | 无 | `string` | 关闭：全屏页 `router.back`；面板模式收起面板。返回 `"ok"` |
 
-### 5.2 App → 页面事件（`window.arktavernPush.dispatch(jsonString)`）
+### 6.2 App → 页面事件（`window.arktavernPush.dispatch(jsonString)`）
 
 入参为 JSON **字符串**，解析得 `{ kind, data }`：
 
@@ -149,12 +182,12 @@
 
 ---
 
-## 6. `character_book.extensions.arktavern`：世界书注入建议（v50）
+## 7. `character_book.extensions.arktavern`：世界书注入建议（v50）
 
 > 与 `data.extensions.arktavern`（状态/前端）平行的另一扩展点：**挂在 `character_book.extensions` 上**，
 > 由制卡工具（Card Studio）写入，App 导入角色卡创建专属世界书时读取。
 
-### 6.1 结构
+### 7.1 结构
 
 ```json
 {
@@ -170,7 +203,7 @@
 }
 ```
 
-### 6.2 字段
+### 7.2 字段
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
@@ -178,13 +211,13 @@
 | `scanDepth` | number | 关键词扫描深度（最近 N 条消息，0=默认 10，上限 50） |
 | `injectionBudgetChars` | number | 注入预算（字符，0=默认 12000，上限 200000） |
 
-### 6.3 App 导入读取规则
+### 7.3 App 导入读取规则
 
 - 优先读取 `character_book.extensions.arktavern` 的三个字段，应用到创建的 Lorebook；
 - 无建议时的回退：`scanDepth` 取 V2 标准 `scan_depth`；`injectionBudgetChars` 由 `token_budget`（按 1 token ≈ 4 字符）折算；
 - 条目级 `constant: true` 条目常驻注入头部（与激活方式无关）；其余条目按激活方式的关键词匹配注入。
 
-### 6.4 制卡工具约定（缓存命中率导向）
+### 7.4 制卡工具约定（缓存命中率导向）
 
 - **constant 从严**：仅世界观根基/贯穿全程的机制规则/高频核心场景设为 constant（建议 ≤ 总条目数 1/3）；
   特定人物支线/一次性事件/稀有地点用关键词触发。
@@ -194,7 +227,7 @@
 
 ---
 
-## 7. 可扩展性指导
+## 8. 可扩展性指导
 
 - **新增能力走模式/配置字段**：`frontend` 对象保留任意自定义 `meta.*`，App 未知字段透传，不阻塞。
 - **新增 UI 控件类型由 HTML 自身承担**：地图、面板、倒计时、交互组件都在 `html` 内用 HTML/CSS/JS 实现，
@@ -204,7 +237,7 @@
 
 ---
 
-## 8. 与本仓库其他文档的关系
+## 9. 与本仓库其他文档的关系
 
 | 文档 | 关系 |
 |---|---|
@@ -213,7 +246,7 @@
 
 ---
 
-## 9. 待办（实现阶段，本规范确认后执行）
+## 10. 待办（实现阶段，本规范确认后执行）
 
 - [ ] `ChatStatusState` / `ChatService`：状态骨架改为从 `status.fields` 读取；仅更新已声明字段；无声明禁用状态功能
 - [ ] `buildStatusInstruction`：改为「只输出已声明字段的当前值」，去掉“推断/增删字段”指令
