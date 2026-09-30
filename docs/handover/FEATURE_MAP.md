@@ -30,7 +30,7 @@ bridge/：仅承载「页面 ↔ 组件」的宿主契约（例：FrontendCardHo
 | **聊天主界面** | `pages/ChatPage.ets`（4,890 行，**改动风险最高**） | `viewmodels/ChatViewModel` → `services/ChatService`；子面板统一走上滑 `bindSheet`（记忆模式 / 对话称呼 / 用户身份 / 新建章节） | UI→VM→S |
 | **AI 对话 / 流式核心** | `services/ChatService.ets`（**不授权勿动**：`doStream` / `finalizeAssistantTurn` / delta 持久化 / 句柄定时器） | `services/ModelService` → `network/providers/OpenAIProvider` | S→network |
 | 消息发送入口 | `services/ChatMessageSender.ets` | `ChatService.doStream`（委托） | S |
-| 代写 / 性格提取与总结 / 续写 ⚡ | `services/ChatOneShotGenerator.ets` | `services/ChatService`（薄包装） | S |
+| 代写 / 性格提取与总结 / 续写 ⚡ | `services/ChatOneShotGenerator.ets` | `services/ChatService`（薄包装）；代写输入含卡扩展 `extensions.arktavern.impres.direction`（读取 `models/CardImpres`，由制卡工具生成）+ 开场白 + 角色状态 | S |
 | 角色状态（面板 / AI 生成字段 / 状态块合并） | `services/ChatStatusService.ets` | `models/ChatStatusState` / `parser/ChatStatusBlockParser` | S→parser |
 | 消息 Swipe（候选切换 / 重新生成候选） | `services/ChatSwipeController.ets` | `components/MessageSwipeControls` / `services/MessageSwipePersistenceService` | UI→S→Repo |
 | 对话分支（判定 / 切换 / 生成族 / fork） | `services/ConversationBranchService.ets` | `services/ForkChatService` / `repo:ConversationBranchRepository` | S→Repo |

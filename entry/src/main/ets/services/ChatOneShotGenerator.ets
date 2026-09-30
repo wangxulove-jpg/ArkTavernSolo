@@ -21,6 +21,8 @@ import { ChatMessageSource } from '../models/ChatMessageSource';
 import { ChatRole } from '../models/ChatRole';
 import { Chat } from '../models/Chat';
 import { Character, resolveCharacterDisplayName } from '../models/Character';
+import { extractImpresDirection } from '../models/CardImpres';
+import { ChatStatusEntry, parseChatStatusState } from '../models/ChatStatusState';
 import { ChatRequest } from '../models/ChatRequest';
 import { ChatResponse } from '../models/ChatResponse';
 import { ProviderConfig } from '../models/ProviderConfig';
@@ -39,6 +41,13 @@ import { generateUuid } from '../utils/Uuid';
 import { Logger } from '../utils/Logger';
 
 const LOG_TAG: string = 'ChatOneShotGenerator';
+
+/** 代写注入上限:代写方向(字符,超出截断) */
+const IMPRES_DIRECTION_MAX_CHARS: number = 4000;
+/** 代写注入上限:开场白(字符,超出截断) */
+const IMPRES_OPENING_MAX_CHARS: number = 2000;
+/** 代写注入上限:角色状态条数 */
+const IMPRES_STATUS_MAX_ENTRIES: number = 30;
 
 /** 续写单次请求解析结果:用户下一句发言 + 角色回应 */
 interface AutoContinueTurn {
@@ -325,12 +334,15 @@ export class ChatOneShotGenerator {
    * 生成代写候选:AI 生成 3 条简短的用户消息候选,不持久化。
    *
    * 流程:
-   * 1. 构建请求消息(复用 buildRequestMessages,保持缓存前缀稳定)
-   * 2. 注入代写 System 指令(要求生成 3 条,用 --- 分隔)
+   * 1. 构建代写 System 指令(要求生成 3 条):身份/任务/规则 + 故事背景与发展方向(卡扩展
+   *    extensions.arktavern.impres.direction) + 开场白说明 + 用户性格总结 + 全局代写引导
+   * 2. 拼装请求消息(顺序):[System 指令] → [开场白消息(角色行,对话起点)] →
+   *    [最近 6 条对话(角色/用户互换,现状逻辑)] → [当前角色状态(System,放最后)]
    * 3. 非流式调用 ModelService.sendChat
-   * 4. 解析响应,按 --- 拆分为最多 3 条候选
+   * 4. 解析响应,拆分为最多 3 条候选
    *
-   * 不修改 this.messages,不持久化任何消息。
+   * 代写方向 / 开场白 / 角色状态均为可选项:缺省(或开场白与最近消息重复)时不追加任何消息,
+   * 行为与旧版一致。不修改 this.messages,不持久化任何消息。
    */
   async generateImpersonateCandidates(): Promise<ImpersonateCandidate[]> {
     if (this.disposed) {
@@ -378,6 +390,52 @@ export class ChatOneShotGenerator {
       '- 每条占一行，是一条完整独立的回复\n' +
       '- 不要替' + charName + '发言\n' +
       '- 不要把一个回复拆成多行';
+
+    // ===== 故事背景与发展方向(卡扩展 extensions.arktavern.impres.direction,可选项) =====
+    const directionRaw: string = this.character !== null
+      ? extractImpresDirection(this.character.extensions) : '';
+    let directionText: string = directionRaw;
+    if (directionText.length > IMPRES_DIRECTION_MAX_CHARS) {
+      directionText = directionText.substring(0, IMPRES_DIRECTION_MAX_CHARS);
+    }
+    if (directionText.length > 0) {
+      impersonateContent += '\n\n【故事背景与发展方向】\n' + directionText;
+    }
+
+    // ===== 开场白(截断后作为对话起点消息,紧贴最近消息之前) =====
+    let openingText: string = this.character !== null ? this.character.firstMessage.trim() : '';
+    if (openingText.length > IMPRES_OPENING_MAX_CHARS) {
+      openingText = openingText.substring(0, IMPRES_OPENING_MAX_CHARS);
+    }
+    // 最近消息里已含同一内容(刚开局的短会话)时不重复注入
+    let openingDuplicated: boolean = false;
+    if (openingText.length > 0) {
+      for (let i = 0; i < recentMessages.length; i++) {
+        if (recentMessages[i].content.trim() === openingText) {
+          openingDuplicated = true;
+          break;
+        }
+      }
+    }
+    if (openingText.length > 0 && !openingDuplicated) {
+      impersonateContent += '\n\n消息序列的第一条是' + charName
+        + '的故事开场白(故事开始处),仅供你理解语境,不要重复或改写它。';
+    }
+
+    // ===== 当前角色状态(会话 statusConfigJson,可选项;消息追加在请求最后) =====
+    let statusText: string = '';
+    if (this.currentChat !== null && this.currentChat.statusConfigJson.length > 0) {
+      const entries: ChatStatusEntry[] = parseChatStatusState(this.currentChat.statusConfigJson).entries;
+      const lines: string[] = [];
+      for (let i = 0; i < entries.length && lines.length < IMPRES_STATUS_MAX_ENTRIES; i++) {
+        const e: ChatStatusEntry = entries[i];
+        if (e.value.trim().length > 0) {
+          lines.push('- ' + e.name + '：' + e.value);
+        }
+      }
+      statusText = lines.join('\n');
+    }
+
     if (this.currentChat !== null && this.currentChat.userPersonaSummary.length > 0) {
       impersonateContent += '\n\n' + userName + '的性格特征：' + this.currentChat.userPersonaSummary;
     }
@@ -404,7 +462,35 @@ export class ChatOneShotGenerator {
       source: ChatMessageSource.ExternalSystem
     };
 
-    const requestMessages: ChatMessage[] = [impersonateSystem, ...swapped];
+    const requestMessages: ChatMessage[] = [impersonateSystem];
+    // [1] 开场白:作为对话起点,紧贴最近消息之前;角色行互换后为 User 角色
+    if (openingText.length > 0 && !openingDuplicated) {
+      const openingMsg: ChatMessage = {
+        id: 'usr-impres-opening',
+        role: ChatRole.User,
+        content: openingText,
+        createdAt: Date.now(),
+        status: ChatMessageStatus.Completed,
+        source: ChatMessageSource.ExternalSystem
+      };
+      requestMessages.push(openingMsg);
+    }
+    // [2..] 最近 6 条(角色/用户互换逻辑不动)
+    for (let i = 0; i < swapped.length; i++) {
+      requestMessages.push(swapped[i]);
+    }
+    // [最后] 当前角色状态:追加在会话之后,最贴近"此刻"
+    if (statusText.length > 0) {
+      const statusMsg: ChatMessage = {
+        id: 'sys-impres-status',
+        role: ChatRole.System,
+        content: '【当前状态】\n' + statusText,
+        createdAt: Date.now(),
+        status: ChatMessageStatus.Completed,
+        source: ChatMessageSource.ExternalSystem
+      };
+      requestMessages.push(statusMsg);
+    }
 
     const config: ProviderConfig | null = await this.modelService.getCurrentConfig();
     if (config === null) {
