@@ -939,11 +939,12 @@ export class CharacterService {
 
   /**
    * 计算下一个 sort_order(用于新建/导入角色时分配)。
-   * 空表返回 0。
+   * 取当前最小值 - 1,使新角色排在列表最前(便于用户点击)。
+   * 空表返回 0;持续新建会产生负值,上移/下移为交换操作,负值安全。
    */
   private async nextSortOrder(): Promise<number> {
-    const max: number = await this.repository.getMaxSortOrder();
-    return max < 0 ? 0 : max + 1;
+    const min: number = await this.repository.getMinSortOrder();
+    return min - 1;
   }
 
   /**

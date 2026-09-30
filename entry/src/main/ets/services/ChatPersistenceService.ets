@@ -832,11 +832,12 @@ export class ChatPersistenceService {
 
   /**
    * 计算下一个 sort_order(用于新建会话时分配)。
-   * 空表返回 0。
+   * 取当前最小值 - 1,使新会话排在列表最前(便于用户点击)。
+   * 空表返回 0;持续新建会产生负值,拖拽重排会整体重编号,负值安全。
    */
   private async nextSortOrder(): Promise<number> {
-    const max: number = await this.chatRepository.getMaxSortOrder();
-    return max < 0 ? 0 : max + 1;
+    const min: number = await this.chatRepository.getMinSortOrder();
+    return min - 1;
   }
 
   /**

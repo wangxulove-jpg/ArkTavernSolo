@@ -727,23 +727,23 @@ export class ChatRepository {
   }
 
   /**
-   * 查询当前最大 sort_order(用于新建会话时分配新值)。
-   * 空表返回 -1(新建会话 sortOrder = 0)。
+   * 查询当前最小 sort_order(用于新建会话时分配新值,新会话排列表最前)。
+   * 空表返回 1(新建会话 sortOrder = 0)。
    */
-  async getMaxSortOrder(): Promise<number> {
+  async getMinSortOrder(): Promise<number> {
     const store: relationalStore.RdbStore = this.dbHelper.getStore();
     const predicates: relationalStore.RdbPredicates =
       new relationalStore.RdbPredicates(TABLE_CHATS);
-    predicates.orderByDesc(COLUMN_SORT_ORDER);
+    predicates.orderByAsc(COLUMN_SORT_ORDER);
     predicates.limitAs(1);
     const rs: relationalStore.ResultSet = await store.query(predicates);
     try {
       if (!rs.goToNextRow()) {
-        return -1;
+        return 1;
       }
       const col: number = rs.getColumnIndex(COLUMN_SORT_ORDER);
       if (col < 0) {
-        return -1;
+        return 1;
       }
       return rs.getLong(col);
     } finally {
