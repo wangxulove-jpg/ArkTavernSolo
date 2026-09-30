@@ -35,8 +35,10 @@ const LOG_TAG: string = 'ChatSessionListViewModel';
  * 会话列表加载上限。
  * 新会话 sortOrder = max+1 排在列表最后,若上限过小(如默认 50),
  * 会话数达到上限后新建会话会被 SQL LIMIT 截断,出现"新对话不显示"的假象。
+ * 注意:不得超过 ChatRepository.MAX_LIMIT(200),否则抛 limit out of range
+ * 导致整列表加载失败(2026-09-30 真机实测,曾设 500 引发回归)。
  */
-const SESSION_LIST_LOAD_LIMIT: number = 500;
+const SESSION_LIST_LOAD_LIMIT: number = 200;
 
 /** 未知角色显示名称 */
 export const UNKNOWN_CHARACTER_NAME: string = '未知角色';

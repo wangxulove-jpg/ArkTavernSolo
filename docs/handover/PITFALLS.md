@@ -87,8 +87,9 @@
 | P-53 | `senderType='character'` 的消息没填 `senderCharacterId` | `MessageRepository` 会抛 `invalid data` |
 | P-54 | 依赖已废弃功能的表（如 `worlds`） | 属**预期残留**（迁移只增不改），**勿依赖** |
 | P-55 | 以为 `bm clean -n <bundle> -d` 只清聊天数据 | 它清**整个应用数据目录**（含 Preferences / Asset KeyStore）→ **模型 API Key 一并丢失**，清数据后所有 AI 相关验证都要先重新配置模型。清数据首启可用来验建库：hilog 里可见 `HandleSchemaDDL … schema<k-1->k>` 逐版跑完且无 error |
-| P-81 | 列表查询默认 LIMIT 截断 + 新内容 sortOrder 追加末尾 → **会话满 50 条后新建会话"不显示"**（删几条才出现，2026-09-30 用户实测） | "全量列表"类查询必须**显式传足够大的 limit**（`ChatSessionListViewModel.reload()` → `listAllSessions(500)`）；新内容 sortOrder 分配在末尾，与 LIMIT 叠加即在 SQL 层截断、根本不进内存。排查"不显示"先查 SQL 截断，再查渲染 |
+| P-81 | 列表查询默认 LIMIT 截断 + 新内容 sortOrder 追加末尾 → **会话满 50 条后新建会话"不显示"**（删几条才出现，2026-09-30 用户实测） | "全量列表"类查询必须**显式传足够大的 limit**（`ChatSessionListViewModel.reload()` → `listAllSessions(200)`，且不得越过 `MAX_LIMIT`，见 P-83）；新内容 sortOrder 分配在末尾，与 LIMIT 叠加即在 SQL 层截断、根本不进内存。排查"不显示"先查 SQL 截断，再查渲染 |
 | P-82 | 看到 chats / characters 表里 **sortOrder 为负数**，以为是 bug 要"修平" | 2026-09-30 起新建会话/角色取 `min-1` 置顶（用户要求新内容排最前），持续新建会递减为负——**这是预期**。上移/下移是相邻交换、拖拽重排 `moveChatByDrag` 会整组重编号为 `(i+1)*10`，负值安全，**勿改** |
+| P-83 | 给 Repository 查询方法传更大的 limit 前没查上限校验 → **运行时抛 `DatabaseError: invalid data('limit out of range')`，整列表加载失败**（2026-09-30 真机实测：`SESSION_LIST_LOAD_LIMIT` 设 500 越过 `ChatRepository.MAX_LIMIT=200`，编译期完全不可见） | 传 limit 前先 Grep 目标 Repository 的 `MAX_LIMIT` 常量；此类**参数校验错误编译不可见**，改查询参数必须沿调用链核对校验，不能只靠编译通过 |
 
 ## 6. 领域概念坑
 
