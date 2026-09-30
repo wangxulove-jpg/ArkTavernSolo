@@ -87,6 +87,7 @@
 | P-53 | `senderType='character'` 的消息没填 `senderCharacterId` | `MessageRepository` 会抛 `invalid data` |
 | P-54 | 依赖已废弃功能的表（如 `worlds`） | 属**预期残留**（迁移只增不改），**勿依赖** |
 | P-55 | 以为 `bm clean -n <bundle> -d` 只清聊天数据 | 它清**整个应用数据目录**（含 Preferences / Asset KeyStore）→ **模型 API Key 一并丢失**，清数据后所有 AI 相关验证都要先重新配置模型。清数据首启可用来验建库：hilog 里可见 `HandleSchemaDDL … schema<k-1->k>` 逐版跑完且无 error |
+| P-81 | 列表查询默认 LIMIT 截断 + 新内容 sortOrder 追加末尾 → **会话满 50 条后新建会话"不显示"**（删几条才出现，2026-09-30 用户实测） | "全量列表"类查询必须**显式传足够大的 limit**（`ChatSessionListViewModel.reload()` → `listAllSessions(500)`）；新内容 sortOrder 分配在末尾，与 LIMIT 叠加即在 SQL 层截断、根本不进内存。排查"不显示"先查 SQL 截断，再查渲染 |
 
 ## 6. 领域概念坑
 

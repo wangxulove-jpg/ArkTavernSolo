@@ -31,6 +31,13 @@ import { Logger } from '../utils/Logger';
 
 const LOG_TAG: string = 'ChatSessionListViewModel';
 
+/**
+ * 会话列表加载上限。
+ * 新会话 sortOrder = max+1 排在列表最后,若上限过小(如默认 50),
+ * 会话数达到上限后新建会话会被 SQL LIMIT 截断,出现"新对话不显示"的假象。
+ */
+const SESSION_LIST_LOAD_LIMIT: number = 500;
+
 /** 未知角色显示名称 */
 export const UNKNOWN_CHARACTER_NAME: string = '未知角色';
 
@@ -106,7 +113,7 @@ export class ChatSessionListViewModel {
     this.isLoading = true;
     this.errorMessage = '';
     try {
-      const chats: Chat[] = await this.persistenceService.listAllSessions();
+      const chats: Chat[] = await this.persistenceService.listAllSessions(SESSION_LIST_LOAD_LIMIT);
 
       // 收集所有 characterId(去重),一次查询避免 N+1
       const characterIdSet: Set<string> = new Set<string>();
