@@ -17,12 +17,20 @@
 import { router } from '@kit.ArkUI';
 import { CardFrontendWeb } from '../components/CardFrontendWeb';
 import { extractFrontendSpec, FrontendSpec } from '../bridge/CardFrontendBridge';
+import { detectStFrontendHtml, StFrontendFallback } from '../bridge/StFrontendFallback';
 import { ChatViewModel } from '../viewmodels/ChatViewModel';
 import { Character } from '../models/Character';
 import { ThemePalette } from '../theme/ThemePalette';
 
 /** AppStorage 中当前活动聊天 ViewModel 的 key(ChatPage 推入本页面读取) */
 export const ACTIVE_CHAT_VM_KEY: string = 'activeChatViewModel';
+
+/**
+ * 「浮窗」切换请求序号(AppStorage):
+ * 本页「浮窗」按钮置为递增值并 router.back(),ChatPage.onPageShow 读到 >0 即
+ * 消费(清零)并以 panel 模式重新打开前端——实现全屏页 ↔ 聊天页浮窗的显示方式切换。
+ */
+export const FRONTEND_OPEN_PANEL_SEQ: string = 'frontendOpenPanelSeq';
 
 @Entry
 @Component
@@ -47,8 +55,17 @@ struct FrontendCardPage {
     const character: Character | null = vm.currentCharacter;
     if (character !== null) {
       const spec: FrontendSpec = extractFrontendSpec(character.extensions);
-      this.frontendHtml = spec.html;
-      this.hideChrome = spec.chrome === 'none';
+      if (spec.html.trim().length > 0) {
+        this.frontendHtml = spec.html;
+        this.hideChrome = spec.chrome === 'none';
+      } else {
+        // 原版 ST 卡散落前端回退检测(开场白/备用开场白/美化正则):无 arktavern 声明时兜底接入;
+        // 兜底卡 chrome 按 auto 处理(带 App 顶栏,便于返回与切换浮窗)
+        const fallback: StFrontendFallback | null = detectStFrontendHtml(character);
+        if (fallback !== null) {
+          this.frontendHtml = fallback.html;
+        }
+      }
     }
   }
 
@@ -60,8 +77,16 @@ struct FrontendCardPage {
     router.back();
   }
 
+  /** 「浮窗」切换:置请求序号并返回聊天页,由 ChatPage.onPageShow 以 panel 模式重新打开 */
+  private switchToPanel(): void {
+    const seq: number = AppStorage.get<number>(FRONTEND_OPEN_PANEL_SEQ) ?? 0;
+    AppStorage.setOrCreate<number>(FRONTEND_OPEN_PANEL_SEQ, seq + 1);
+    this.goBack();
+  }
+
   build() {
-    Column() {
+    Stack({ alignContent: Alignment.BottomEnd }) {
+      Column() {
       // 顶栏(chrome:'none' 的沉浸卡不渲染,内容直接铺满)
       if (!this.hideChrome) {
         Row() {
@@ -82,6 +107,20 @@ struct FrontendCardPage {
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .layoutWeight(1)
+
+          // 浮窗切换:回聊天页并以内嵌面板模式打开同一份前端页面
+          Text('浮窗')
+            .fontSize(13)
+            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+            .height(30)
+            .padding({ left: 12, right: 12 })
+            .borderRadius(15)
+            .textAlign(TextAlign.Center)
+            .margin({ left: 8 })
+            .onClick(() => {
+              this.switchToPanel();
+            })
         }
         .width('100%')
         .height(48)
@@ -134,6 +173,27 @@ struct FrontendCardPage {
         .layoutWeight(1)
         .justifyContent(FlexAlign.Center)
         .alignItems(HorizontalAlign.Center)
+      }
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+
+      // 沉浸模式(chrome=none)没有 App 顶栏:右下角半透明「浮窗」悬浮钮,
+      // 避开卡页面自身按钮的常见位置(左上/右上),不遮挡主内容
+      if (this.hideChrome && this.vmRef !== null && this.frontendHtml.trim().length > 0) {
+        Text('⧉ 浮窗')
+          .fontSize(12)
+          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+          .backgroundColor('rgba(30,30,38,0.55)')
+          .height(30)
+          .padding({ left: 12, right: 12 })
+          .borderRadius(15)
+          .textAlign(TextAlign.Center)
+          .margin({ right: 14, bottom: 28 })
+          .onClick(() => {
+            this.switchToPanel();
+          })
       }
     }
     .width('100%')

@@ -81,8 +81,9 @@ import {
 import { ForkChatMode } from '../models/ForkChatOptions';
 import { Character, resolveCharacterDisplayName } from '../models/Character';
 import { extractFrontendSpec, FrontendSpec } from '../bridge/CardFrontendBridge';
+import { detectStFrontendHtml, StFrontendFallback } from '../bridge/StFrontendFallback';
 import { CardFrontendWeb } from '../components/CardFrontendWeb';
-import { ACTIVE_CHAT_VM_KEY } from './FrontendCardPage';
+import { ACTIVE_CHAT_VM_KEY, FRONTEND_OPEN_PANEL_SEQ } from './FrontendCardPage';
 import { Persona } from '../models/Persona';
 import { Logger } from '../utils/Logger';
 import { MacroReplacer } from '../services/MacroReplacer';
@@ -381,6 +382,8 @@ struct ChatPage {
   /** 折叠态右缘入口标签的细线尺寸(vp):只留一条线,尽量不遮挡画面 */
   private static readonly RAIL_TAB_LINE_W: number = 3;
   private static readonly RAIL_TAB_LINE_H: number = 40;
+  /** 「全屏」入口细线高度(比「界面」细线短,视觉区分两种打开方式) */
+  private static readonly RAIL_TAB_LINE_H_SM: number = 28;
 
   /** 发送按钮位置: true = 左侧, false = 右侧 */
   @State sendButtonLeft: boolean = false;
@@ -1009,6 +1012,12 @@ struct ChatPage {
     // 失效缓存确保使用最新配置(如 recentWindowTarget)重建
     if (this.viewModel !== null && !this.viewModel!.isDisposed) {
       this.viewModel!.invalidateEstimateCache();
+    }
+    // FrontendCardPage「浮窗」按钮的切换请求:返回聊天页并展开前端面板
+    const openPanelSeq: number = AppStorage.get<number>(FRONTEND_OPEN_PANEL_SEQ) ?? 0;
+    if (openPanelSeq > 0 && this.hasFrontend) {
+      AppStorage.set<number>(FRONTEND_OPEN_PANEL_SEQ, 0);
+      this.openFrontendCard('panel');
     }
     this.refreshBudgetSnapshot();
     this.loadTtsSettings();
@@ -1738,8 +1747,19 @@ struct ChatPage {
       return;
     }
     const spec: FrontendSpec = extractFrontendSpec(character.extensions);
-    this.hasFrontend = spec.html.trim().length > 0;
-    this.frontendMode = spec.mode;
+    let html: string = spec.html;
+    let mode: string = spec.mode;
+    if (html.trim().length === 0) {
+      // 原版 ST 卡散落前端回退检测(开场白/备用开场白/美化正则里的界面 HTML):
+      // 无 arktavern.frontend 声明但有 ST 前端资产时,运行时兜底接入(不写卡数据),默认 panel 展示
+      const fallback: StFrontendFallback | null = detectStFrontendHtml(character);
+      if (fallback !== null) {
+        html = fallback.html;
+        mode = 'panel';
+      }
+    }
+    this.hasFrontend = html.trim().length > 0;
+    this.frontendMode = mode;
     this.frontendPanelHeight = spec.sizeHeight.length > 0 ? spec.sizeHeight : '50%';
     this.frontendPanelTitle = spec.title;
     // 读取该卡上次调整过的面板尺寸(异步,取到后作为下次展开的初始值)
@@ -1750,6 +1770,19 @@ struct ChatPage {
       this.frontendAutoOpened = true;
       this.openFrontendCard();
     }
+  }
+
+  /**
+   * 解析前端页面 HTML:优先 arktavern.frontend 声明,无声明时回退检测
+   * ST 卡散落前端(开场白/备用开场白/美化正则,见 bridge/StFrontendFallback.ets)。
+   */
+  private resolveFrontendHtml(character: Character): string {
+    const spec: FrontendSpec = extractFrontendSpec(character.extensions);
+    if (spec.html.trim().length > 0) {
+      return spec.html;
+    }
+    const fallback: StFrontendFallback | null = detectStFrontendHtml(character);
+    return fallback !== null ? fallback.html : '';
   }
 
   /** 释放前端面板(收起并卸下 ArkWeb 挂载),用于换卡/离开会话 */
@@ -1769,12 +1802,16 @@ struct ChatPage {
    * 打开前端页面:
    * - mode=panel → 在聊天页内展开浮层面板(对话仍可继续)
    * - mode=fullscreen → 推入独立全屏页 FrontendCardPage
+   * @param modeOverride 显示方式覆盖('panel'/'fullscreen');缺省用角色卡声明的 frontendMode。
+   *   悬浮导航「全屏」细线与面板「全屏」按钮传 'fullscreen',全屏页「浮窗」按钮经
+   *   AppStorage 标志回来后传 'panel'——显示方式由用户在 App 内切换,不受卡声明限制。
    */
-  private openFrontendCard(): void {
+  private openFrontendCard(modeOverride?: string): void {
     if (this.viewModel === null) {
       return;
     }
-    if (this.frontendMode === 'panel') {
+    const mode: string = modeOverride !== undefined ? modeOverride : this.frontendMode;
+    if (mode === 'panel') {
       const character: Character | null = this.viewModel!.currentCharacter;
       if (character === null) {
         return;
@@ -1784,8 +1821,7 @@ struct ChatPage {
         this.resetFrontendPanel();
       }
       if (!this.frontendPanelMounted) {
-        const spec: FrontendSpec = extractFrontendSpec(character.extensions);
-        this.frontendPanelHtml = spec.html;
+        this.frontendPanelHtml = this.resolveFrontendHtml(character);
         this.frontendMountedCardId = character.id;
         this.frontendPanelMounted = true;
       }
@@ -2033,6 +2069,21 @@ struct ChatPage {
               .textOverflow({ overflow: TextOverflow.Ellipsis })
               .layoutWeight(1)
 
+            // 全屏切换:收起面板并以 fullscreen 模式打开同一份前端页面(悬浮导航窗切换的另一入口)
+            Text('全屏')
+              .fontSize(12)
+              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+              .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+              .height(26)
+              .padding({ left: 10, right: 10 })
+              .borderRadius(13)
+              .textAlign(TextAlign.Center)
+              .margin({ right: 6 })
+              .onClick(() => {
+                this.closeFrontendPanel();
+                this.openFrontendCard('fullscreen');
+              })
+
             // 固定开关:与「✕」同规格的热区,不固定时也保留底色,避免按钮时有时无
             Text(this.frontendPanelPinned ? '已固定' : '固定')
               .fontSize(12)
@@ -2201,6 +2252,10 @@ struct ChatPage {
         if (this.hasFrontend && !this.frontendPanelVisible) {
           this.frontendFloatingTab()
         }
+        // 「全屏」入口:仅 panel 卡显示(卡声明 fullscreen 时「界面」细线本就全屏打开)
+        if (this.hasFrontend && this.frontendMode === 'panel' && !this.frontendPanelVisible) {
+          this.frontendFullscreenTab()
+        }
       }
       .margin({ top: this.statusBarHeight + 54 })
       .alignItems(HorizontalAlign.End)
@@ -2210,6 +2265,29 @@ struct ChatPage {
     .height('100%')
     // 外层透明:空白处点击穿透到下层(消息列表/顶栏/输入区),仅标签自身可点
     .hitTestBehavior(HitTestMode.Transparent)
+  }
+
+  /**
+   * 折叠态:「全屏界面」入口(panel 卡专用,贴屏右缘的短细线;由 rightRail 统一排布)。
+   * 点按以 fullscreen 模式打开同一份前端页面——显示方式由用户在 App 内选择,
+   * 不再受角色卡声明的 mode 限制。
+   */
+  @Builder
+  frontendFullscreenTab() {
+    Column()
+      .width(ChatPage.RAIL_TAB_LINE_W)
+      .height(ChatPage.RAIL_TAB_LINE_H_SM)
+      .borderRadius({ topLeft: 2, topRight: 0, bottomLeft: 2, bottomRight: 0 })
+      .backgroundColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+      .shadow({ radius: 4, color: 'rgba(0,0,0,0.18)' })
+      .responseRegion({ x: -27, y: -8, width: 31, height: 44 })
+      .transition(
+        TransitionEffect.opacity(0).combine(TransitionEffect.translate({ x: 40 }))
+          .animation({ duration: 200, curve: Curve.EaseOut })
+      )
+      .onClick(() => {
+        this.openFrontendCard('fullscreen');
+      })
   }
 
   /** 展开态:角色状态面板 + 点面板以外任意位置收起 */
