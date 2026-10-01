@@ -56,6 +56,7 @@
 |---|---|---|
 | P-86 | 以为在 `skills.uris` 里写了 `utd` 应用就会出现在分享面板 | `uris` 的 **`maxFileSupported` 默认为 0（= 不支持该类文件）**——不写就**静默不出现**，必须显式 ≥1。本仓 PNG 卡：`scheme:"file"` + `utd:"general.png"` + `maxFileSupported:1`（`module.json5`，commit `c014825`）；UTD 需穷举声明（如 `general.image` 覆盖全部图片） |
 | P-87 | 接收系统分享只处理 `onCreate` → **应用已在前台时分享进来无反应** | 必须 **`onCreate`（冷启动）+ `onNewWant`（热启动）都处理**；`systemShare.getSharedData(want)` **只在 `want.action === 'ohos.want.action.sendData'` 时调用**（普通启动调用会失败，官方示例 catch 里 `terminateSelf()` 不能照抄）。另：分享数据**异步**解析，冷启动时可能晚于根页面创建——只靠 `@StorageProp @Watch` 会漏（值在组件创建前已就位 → 无变化事件），需 `onPageShow` 兜底消费 + 消费后清空标志（范式：`Index.openSharedCardImport`） |
+| P-88 | **测试里用非空对象字面量构造 Record**：`const s: Record<string, Object> = { a: 1 }` 报 `arkts-no-untyped-obj-literals`（空 `{}` 带类型注解合法，非空不行；主代码走 `as Record` 不受影响） | 测试 fixture 统一**空 Record + 逐键赋值**（`const s: Record<string, Object> = {}; s['a'] = 1;`），见 `st_frontend_fallback.test.ets` 的 `makeRegexScript` |
 
 ## 3. 分层与架构
 
