@@ -28,6 +28,19 @@
             "actions": [
               "ohos.want.action.home"
             ]
+          },
+          {
+            // 接收系统分享:文件管理器"分享"PNG 角色卡(PNG 卡导入)
+            "actions": [
+              "ohos.want.action.sendData"
+            ],
+            "uris": [
+              {
+                "scheme": "file",
+                "utd": "general.png",
+                "maxFileSupported": 1
+              }
+            ]
           }
         ]
       }
