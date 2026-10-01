@@ -5,6 +5,11 @@
  *   在 ArkTavern 的 ArkWeb 前端容器里直接运行,数据接自 window.arktavern Bridge(契约 v3)。
  *
  * 注入位置:jQuery 之后、卡片 HTML 之前(见 bridge/StCompatShim.ets 与 CardFrontendWeb.ets)。
+ * 事件节奏(2026-10 流式降频):
+ *   - 流式生成中(generating=true)只轻量更新 lastAssistant/messageCount,不做 refresh() 全量拉取;
+ *     逐字增量 emit STREAM_TOKEN_RECEIVED;getChatMessages() 在流式期间返回开始生成时的缓存快照;
+ *   - 生成开始/结束帧与非流式变更帧做全量对齐;生成结束事件(GENERATION_ENDED/MESSAGE_RECEIVED/
+ *     CHARACTER_MESSAGE_RENDERED)payload 带 message_id(过滤后索引近似值,超 200 条楼层有漂移)。
  * 已知边界(制卡工具会在导入时把这些接缝标出来让 AI 修补):
  *   - getWorldbook/getLorebookEntries 返回空(App 不提供世界书数据,需要时请改为内嵌数据)
  *   - replaceLastMessage/setChatMessages 为只读空实现(App 楼层不可从页面改写)
@@ -182,17 +187,34 @@
           try { ev = typeof json === 'string' ? JSON.parse(json) : json; } catch (e) { return; }
           if (!ev || !ev.kind) { return; }
           if (ev.kind === 'message_update') {
+            // 流式降频:generating=true 期间只做轻量字段更新(事件 data 已带 lastAssistant/messageCount),
+            // 跳过 refresh() 全量拉取(每次 getMessages(200) 的同步开销会在流式期间淹没页面 JS,
+            // 表现为前端卡顿/滞后);全量对齐推迟到生成结束帧与非流式变更帧。
+            // 行为变化:流式期间 getChatMessages() 返回开始生成时的缓存快照(结束帧恢复全量对齐)。
             var d = ev.data || {};
             var was = generating;
+            var prevLast = lastAssistant;
             generating = !!d.generating;
             if (typeof d.lastAssistant === 'string') { lastAssistant = d.lastAssistant; }
             if (typeof d.messageCount === 'number') { messageCount = d.messageCount; }
-            refresh();
-            if (generating && !was) { emit(TAVERN_EVENTS.GENERATION_STARTED, {}); }
+            if (generating) {
+              // 逐字流式事件:diff 增量喂给 STREAM_TOKEN_RECEIVED(纯前缀追加时)
+              if (lastAssistant.length > prevLast.length && lastAssistant.indexOf(prevLast) === 0) {
+                emit(TAVERN_EVENTS.STREAM_TOKEN_RECEIVED, { text: lastAssistant.slice(prevLast.length) });
+              }
+            } else {
+              refresh();
+            }
+            var mid = Math.max(0, messageCount - 1);
+            if (generating && !was) {
+              refresh(); // 生成开始(通常伴随新楼层):一次全量对齐
+              emit(TAVERN_EVENTS.GENERATION_STARTED, {});
+            }
             if (!generating && was) {
-              emit(TAVERN_EVENTS.GENERATION_ENDED, {});
-              emit(TAVERN_EVENTS.MESSAGE_RECEIVED, {});
-              emit(TAVERN_EVENTS.CHARACTER_MESSAGE_RENDERED, {});
+              // 生成结束:酒馆助手事件带 message_id(此前为空对象,依赖 payload 的页面拿不到数据)
+              emit(TAVERN_EVENTS.GENERATION_ENDED, { message_id: mid });
+              emit(TAVERN_EVENTS.MESSAGE_RECEIVED, { message_id: mid });
+              emit(TAVERN_EVENTS.CHARACTER_MESSAGE_RENDERED, { message_id: mid });
             }
             emit(TAVERN_EVENTS.MESSAGE_UPDATED, {});
           } else if (ev.kind === 'status_update') {

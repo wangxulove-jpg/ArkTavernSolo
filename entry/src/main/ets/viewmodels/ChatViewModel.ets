@@ -1378,6 +1378,9 @@ export class ChatViewModel {
     if (this.onMessagesUpdate !== undefined) {
       this.onMessagesUpdate([...this.messages]);
     }
+    // 前端页面 Bridge 通知与原生回调同一节流出口(16ms);
+    // 放在 onMessagesUpdate 判定之外:FrontendCardPage 全屏页不设原生回调,但需要 Bridge 事件
+    this.notifyMessageListeners([...this.messages]);
   }
 
   private flushMessagesNow(): void {
@@ -1397,8 +1400,9 @@ export class ChatViewModel {
           return;
         }
         this.messages = messages;
+        // Bridge 通知并入 scheduleMessagesFlush 节流出口(flushMessages 统一触发),
+        // 避免流式期间每个 delta 同步直发前端页面事件
         this.scheduleMessagesFlush();
-        this.notifyMessageListeners(messages);
       },
       onStateChanged: (state: ChatState): void => {
         if (this.disposed) {
