@@ -41,6 +41,8 @@
 | P-27 | **用整体降透明度表达"非当前项"** | 原分支地图给非活跃分支整节点 `opacity(0.7)`,文字一起变淡 → 用户反馈"看不清"。规则:**只降线/点/边框的颜色**(改中性色),文字保持 `--text-primary`;状态用**颜色与形状**区分,不用透明度 |
 | P-28 | 同一行内既有"整行点击进 A"又有"行内按钮做 B"（模型列表行：点行进编辑页、点「切换」立即切换当前配置） | **不要用父子嵌套 `onClick`** —— 那样是否误触取决于事件冒泡语义，不可靠。做法：把两个点击区做成**兄弟节点**——左列（`layoutWeight(1)`）承载"整行"点击，右胶囊单独 `onClick`，两者互不包含；**行容器本身不带 `onClick`**（见 `ModelSettingsPage.configListItem`） |
 | P-29 | 把居中模态弹框改成 `bindSheet` 上滑面板后**没有上滑动画**（仍旧直接出现） | `bindSheet` 的开关若在**节点首次挂载时就为 true**，面板会直接出现、没有进场过渡。必须**两段式**：外层 `if (showXxx)` 挂载一个 0 高节点 → 该节点 `onAppear` 里把 `sheetShow` 置真 → 由 `false→true` 触发上滑。**关闭时只置 `sheetShow = false`**，再由 `bindSheet.onDisappear` 去置 `showXxx = false` 卸载，这样才有下滑动画。范式见 `components/ChatMoreMenuSheet.ets`、`ChatPage` 的 `memoryModeSheetContent` / `userNameSheetContent` / `personaSheetContent` / `chapterSheetContent` |
+| P-84 | 在解析管线里只"插入新 pass"就以为新增了一种片段类型（自定义符号片段）→ **后续 pass（对白/动作）仍把它当 `styleType='normal'` 拆开重建，打上的标记在重建时丢失，功能整体不生效**（2026-10-01 单测暴露：3 条用例 `symbolRuleId` 全为空，真机表现为"改了符号颜色没反应"） | 片段一旦"定型"就必须让**所有后续 pass 原样透传**：本仓用 `colorRole==='symbol'` 作标志（`isSymbolSegment`），在 `applyCustomSymbols`（防第二条规则覆盖第一条）、`applyDialogue`、`applyParenthetical` 三处提前 `continue`。新增任何"给片段打标"的 pass，都要沿管线排查后续重建点——`splitByPattern` 的**未命中分支也会 `createSegment(前缀)` 重建**，不只是命中分支 |
+| P-85 | 把"动态颜色"固化进片段数据（`seg.symbolColor`），改色后**消息内不刷新** | `ForEach`/`Span` 按 key 复用，**key 不变则不重建 item，参数化数据不会自行更新**（`ChatRichText` 的 Span key 只含"文本长度"；`ChatAppearancePanel` 早有同类注释）。做法：① 颜色等动态值**在渲染时读 `@State`/`@Prop`**（`getSegmentColor` 按 `symbolRuleId` 查 `symbolRules`），不读片段内固化值；② 规则的**新增/删除**会改变片段的规则绑定，属结构性变化 → 把绑定 id **加进 Span key** 触发重建；③ 只改色**不进 key**（颜色走状态刷新），避免整条消息重排 |
 
 ## 2b. 聊天消息列表滚动
 

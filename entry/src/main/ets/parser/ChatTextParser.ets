@@ -6,7 +6,7 @@
  * - 支持 Markdown 子集(加粗/斜体/删除线/行内代码/链接/引用/列表)
  * - 支持角色对白识别(中英文引号、日式引号、角色名前缀)
  * - 支持动作和旁白识别(括号包裹、——开头)
- * - 支持自定义符号配色规则(用户定义符号对,命中片段携带 symbolColor)
+ * - 支持自定义符号配色规则(用户定义符号对,命中片段携带 symbolRuleId)
  * - 流式未闭合语法安全降级为普通文本
  *
  * 不负责:
@@ -76,7 +76,7 @@ export type ChatTextStyleType =
  * - quote: 引用
  * - system: 系统提示
  * - character: 角色专用色(由调用方按 senderCharacterId 解析)
- * - symbol: 自定义符号(颜色取自片段的 symbolColor,不使用语义色表)
+ * - symbol: 自定义符号(片段携带 symbolRuleId,颜色由渲染层从规则列表实时解析)
  */
 export type ChatColorRole =
   | 'default'
@@ -119,11 +119,12 @@ export interface ChatTextSegment {
   /** 链接目标(link 类型有效) */
   readonly linkTarget: string;
   /**
-   * 自定义符号颜色(#RRGGBB)。
-   * 命中用户符号规则时由解析器写入,渲染时优先级最高;
+   * 命中的自定义符号规则 id(= 起始符 + 结束符)。
+   * 只存 id 不存颜色:渲染层据此从当前规则列表实时取色,
+   * 保证规则改色/删除后已渲染的片段即时更新;
    * 空字符串表示未命中,走常规语义色查询。
    */
-  readonly symbolColor: string;
+  readonly symbolRuleId: string;
   /** 是否为新行起始(用于引用线、列表缩进等布局) */
   readonly lineStart: boolean;
   /** 列表缩进层级(0=非列表) */
@@ -156,7 +157,7 @@ export function createSegment(
     dialogue,
     narrator,
     linkTarget: extras.linkTarget !== undefined ? extras.linkTarget : '',
-    symbolColor: extras.symbolColor !== undefined ? extras.symbolColor : '',
+    symbolRuleId: extras.symbolRuleId !== undefined ? extras.symbolRuleId : '',
     lineStart: extras.lineStart !== undefined ? extras.lineStart : false,
     listLevel: extras.listLevel !== undefined ? extras.listLevel : 0
   };
@@ -178,7 +179,7 @@ export interface ChatTextParserOptions {
   /**
    * 自定义符号配色规则(可选)。
    * 非空时在 Markdown/代码还原之后、对白/动作识别之前扫描:
-   * 命中片段携带 symbolColor 且优先级最高(覆盖对白/动作等语义色)。
+   * 命中片段携带 symbolRuleId 且优先级最高(覆盖对白/动作等语义色)。
    * 为空或未传时不改变任何解析行为。
    */
   readonly symbolRules?: ChatSymbolColorRule[];
@@ -316,7 +317,7 @@ function parseLine(
         dialogue: false,
         narrator: false,
         linkTarget: s.linkTarget,
-        symbolColor: s.symbolColor,
+        symbolRuleId: s.symbolRuleId,
         lineStart: i === 0,
         listLevel: level
       });
@@ -350,7 +351,7 @@ function parseLine(
         dialogue: s.dialogue,
         narrator: s.narrator,
         linkTarget: s.linkTarget,
-        symbolColor: s.symbolColor,
+        symbolRuleId: s.symbolRuleId,
         lineStart: i === 0,
         listLevel: 0
       });
@@ -381,7 +382,7 @@ function parseLine(
         dialogue: s.dialogue,
         narrator: s.narrator,
         linkTarget: s.linkTarget,
-        symbolColor: s.symbolColor,
+        symbolRuleId: s.symbolRuleId,
         lineStart: false,
         listLevel: level
       });
@@ -412,7 +413,7 @@ function parseLine(
         dialogue: s.dialogue,
         narrator: s.narrator,
         linkTarget: s.linkTarget,
-        symbolColor: s.symbolColor,
+        symbolRuleId: s.symbolRuleId,
         lineStart: false,
         listLevel: level
       });
@@ -621,9 +622,18 @@ function applyStrikethrough(segments: ChatTextSegment[]): ChatTextSegment[] {
 }
 
 /**
+ * 是否已命中自定义符号规则。
+ * 命中片段必须原样透传给后续 pass:它们仍是 styleType='normal',
+ * 若被后续 pass 再次拆分重建,规则绑定(symbolRuleId)会在重建时丢失。
+ */
+function isSymbolSegment(seg: ChatTextSegment): boolean {
+  return seg.colorRole === 'symbol';
+}
+
+/**
  * 识别角色对白。
  * 支持:"对白" “对白” 「对白」 『对白』
- * 不识别:代码片段内的引号、未闭合引号、英文缩写撇号
+ * 不识别:代码片段内的引号、未闭合引号、英文缩写撇号、已命中自定义符号的片段
  */
 function applyDialogue(segments: ChatTextSegment[]): ChatTextSegment[] {
   const result: ChatTextSegment[] = [];
@@ -635,6 +645,11 @@ function applyDialogue(segments: ChatTextSegment[]): ChatTextSegment[] {
     const seg: ChatTextSegment = segments[i];
     // 代码、链接、引用不识别对白
     if (seg.styleType === 'code' || seg.styleType === 'link' || seg.styleType === 'quote') {
+      result.push(seg);
+      continue;
+    }
+    // 已命中自定义符号规则:保持原样(自定义符号优先于对白)
+    if (isSymbolSegment(seg)) {
       result.push(seg);
       continue;
     }
@@ -691,7 +706,7 @@ function buildSymbolPattern(rule: ChatSymbolColorRule): RegExp {
  *
  * - 只处理 normal 片段(代码/链接/引用等已格式化片段跳过)
  * - 按规则顺序依次扫描,先命中的规则生效(不支持嵌套)
- * - 命中片段携带 symbolColor,渲染时优先级最高
+ * - 命中片段携带 symbolRuleId,渲染时优先级最高
  * - 未闭合符号保留为普通文本
  */
 function applyCustomSymbols(segments: ChatTextSegment[], rules: ChatSymbolColorRule[]): ChatTextSegment[] {
@@ -705,12 +720,13 @@ function applyCustomSymbols(segments: ChatTextSegment[], rules: ChatSymbolColorR
     const next: ChatTextSegment[] = [];
     for (let i = 0; i < current.length; i++) {
       const seg: ChatTextSegment = current[i];
-      if (seg.styleType !== 'normal') {
+      // 跳过非普通片段与已被前序规则命中的片段(同一样子不被第二条规则重建覆盖)
+      if (seg.styleType !== 'normal' || isSymbolSegment(seg)) {
         next.push(seg);
         continue;
       }
       const parts: ChatTextSegment[] = splitByPattern(seg.text, pattern, (match: RegExpExecArray): ChatTextSegment => {
-        return createSegment(match[0], 'normal', 'symbol', { symbolColor: rule.color });
+        return createSegment(match[0], 'normal', 'symbol', { symbolRuleId: rule.id });
       });
       for (let j = 0; j < parts.length; j++) {
         next.push(parts[j]);
@@ -733,7 +749,8 @@ function applyParenthetical(segments: ChatTextSegment[]): ChatTextSegment[] {
 
   for (let i = 0; i < segments.length; i++) {
     const seg: ChatTextSegment = segments[i];
-    if (seg.styleType !== 'normal') {
+    // 已命中自定义符号规则:保持原样(自定义符号优先于动作/旁白)
+    if (seg.styleType !== 'normal' || isSymbolSegment(seg)) {
       result.push(seg);
       continue;
     }
@@ -916,7 +933,7 @@ function mergeConsecutive(segments: ChatTextSegment[]): ChatTextSegment[] {
         dialogue: last.dialogue,
         narrator: last.narrator,
         linkTarget: last.linkTarget,
-        symbolColor: last.symbolColor,
+        symbolRuleId: last.symbolRuleId,
         lineStart: last.lineStart,
         listLevel: last.listLevel
       };
@@ -941,7 +958,7 @@ function canMerge(a: ChatTextSegment, b: ChatTextSegment): boolean {
     && a.dialogue === b.dialogue
     && a.narrator === b.narrator
     && a.linkTarget === b.linkTarget
-    && a.symbolColor === b.symbolColor
+    && a.symbolRuleId === b.symbolRuleId
     && a.listLevel === b.listLevel
     && !b.lineStart; // 行首标记不合并
 }

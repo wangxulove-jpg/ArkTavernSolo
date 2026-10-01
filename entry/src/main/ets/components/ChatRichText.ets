@@ -336,6 +336,8 @@ export struct ChatRichText {
 
   /**
    * 构建自定义符号规则指纹(参与缓存 key)。
+   * 只含规则 id(符号对 + 顺序):解析结果只取决于符号对,
+   * 颜色由渲染层实时解析,故改色不需要重解析(拖动色盘时不触发整条消息重排)。
    * 无规则时返回 'sym0',保持与旧缓存 key 一致。
    */
   private buildSymbolRulesFingerprint(): string {
@@ -344,8 +346,7 @@ export struct ChatRichText {
     }
     let out: string = 'sym';
     for (let i = 0; i < this.symbolRules.length; i++) {
-      const rule: ChatSymbolColorRule = this.symbolRules[i];
-      out += '|' + rule.open + rule.close + rule.color;
+      out += '|' + this.symbolRules[i].id;
     }
     return out;
   }
@@ -379,6 +380,21 @@ export struct ChatRichText {
   }
 
   /**
+   * 按规则 id 从当前自定义符号规则中解析颜色。
+   * 读 @Prop symbolRules 触发依赖收集,规则改色后已渲染的 Span 立即刷新。
+   * 未命中(规则已删除)返回 null,由调用方回退为常规语义色。
+   */
+  private resolveSymbolRuleColor(ruleId: string): string | null {
+    for (let i = 0; i < this.symbolRules.length; i++) {
+      const rule: ChatSymbolColorRule = this.symbolRules[i];
+      if (rule.id === ruleId) {
+        return rule.color;
+      }
+    }
+    return null;
+  }
+
+  /**
    * 获取片段对应的字体颜色。
    *
    * 主题优先级:
@@ -391,9 +407,15 @@ export struct ChatRichText {
    * 不改变解析行为、节点结构、字体粗细、链接行为或换行逻辑。
    */
   private getSegmentColor(seg: ChatTextSegment): ResourceColor {
-    // 自定义符号颜色:用户显式规则优先级最高(覆盖角色独立色与所有语义色)
-    if (seg.symbolColor.length > 0) {
-      return seg.symbolColor;
+    // 自定义符号颜色:用户显式规则优先级最高(覆盖角色独立色与所有语义色)。
+    // 颜色在渲染时从 @Prop symbolRules 实时解析(不读片段内的固化值):
+    // Span 由稳定 key 复用、不随数据重建,只有读状态变量才能让改色立即生效。
+    if (seg.symbolRuleId.length > 0) {
+      const symbolColor: string | null = this.resolveSymbolRuleColor(seg.symbolRuleId);
+      if (symbolColor !== null) {
+        return symbolColor;
+      }
+      // 规则已被删除:回退为常规语义色(继续走下方分支)
     }
 
     // 角色独立颜色优先(对白)
@@ -504,7 +526,7 @@ export struct ChatRichText {
                     type: seg.strike ? TextDecorationType.LineThrough : TextDecorationType.None,
                     color: this.getSegmentColor(seg)
                   })
-              }, (seg: ChatTextSegment, spanIndex: number) => spanIndex.toString() + '_' + seg.text.length.toString())
+              }, (seg: ChatTextSegment, spanIndex: number) => spanIndex.toString() + '_' + seg.text.length.toString() + '_' + seg.symbolRuleId)
             }
             .layoutWeight(1)
             .padding({ left: 8, right: 8, top: 4, bottom: 4 })
@@ -541,6 +563,8 @@ export struct ChatRichText {
       // 常用路径(纯文本,含流式打字机):单个 Text 直接读 @State this.chunks[0].segments。
       // 不套外层 @Builder(按值传参不刷新)、不套外层 ForEach(稳定 key 复用不刷新)。
       // Text 节点随 chunks 变化原地更新,Span key 随长度变化触发逐字重绘,流式平滑又刷新;
+      // key 还带 symbolRuleId:符号规则新增/删除会改变片段的规则绑定,必须靠 key 变化重建 Span;
+      // 而规则只改颜色时不进 key——颜色由 getSegmentColor 读 @Prop 实时解析,原地刷新即可;
       // 且不强制宽度,文本随气泡 maxWidth 自动换行(不溢出)。
       Text() {
         ForEach(this.chunks[0].segments, (seg: ChatTextSegment, index: number) => {
@@ -554,7 +578,7 @@ export struct ChatRichText {
               type: seg.strike ? TextDecorationType.LineThrough : TextDecorationType.None,
               color: this.getSegmentColor(seg)
             })
-        }, (seg: ChatTextSegment, index: number) => index.toString() + '_' + seg.text.length.toString())
+        }, (seg: ChatTextSegment, index: number) => index.toString() + '_' + seg.text.length.toString() + '_' + seg.symbolRuleId)
       }
       .lineHeight((this.settings !== null ? this.settings.fontSize : 16) * (this.settings !== null ? this.settings.lineHeight : 1.5))
       .fontFamily(this.currentFontFamily())
@@ -577,7 +601,7 @@ export struct ChatRichText {
                     type: seg.strike ? TextDecorationType.LineThrough : TextDecorationType.None,
                     color: this.getSegmentColor(seg)
                   })
-              }, (seg: ChatTextSegment, spanIndex: number) => spanIndex.toString() + '_' + seg.text.length.toString())
+              }, (seg: ChatTextSegment, spanIndex: number) => spanIndex.toString() + '_' + seg.text.length.toString() + '_' + seg.symbolRuleId)
             }
             .lineHeight((this.settings !== null ? this.settings.fontSize : 16) * (this.settings !== null ? this.settings.lineHeight : 1.5))
             .fontFamily(this.currentFontFamily())
