@@ -1,9 +1,10 @@
 /**
  * CharacterEditPage 全屏角色编辑页(UI-3B-2)
  *
- * 顶部:返回 + 分段切换(角色/对话) + 保存
+ * 顶部:返回 + 分段切换(角色/对话/代写) + 保存
  * 角色分段:图片 → 名称 → 描述 → 性格 → 标签 → 创作者 → 角色卡版本 → 创作者备注
  * 对话分段:场景 → 开场白 → 备用开场白 → 对话示例 → System Prompt → Post-History Instructions → 角色专属世界书
+ * 代写分段:代写方向(extensions.arktavern.impres.direction,聊天页「🎭代写」的背景与剧情方向)
  *
  * 字段策略:
  * - tags / creator / character_version / creator_notes 只作元数据,不进入 PromptBuilder
@@ -28,6 +29,9 @@ import { Lorebook } from '../models/Lorebook';
 
 const TAB_CHARACTER: number = 0;
 const TAB_CONVERSATION: number = 1;
+const TAB_IMPRES: number = 2;
+/** 代写方向建议上限(字符;与聊天页注入截断口径一致,超出仅提示) */
+const IMPRES_DIRECTION_WARN_CHARS: number = 4000;
 
 @Entry
 @Component
@@ -240,6 +244,14 @@ struct CharacterEditPage {
         .borderRadius($r('app.float.app_radius_sm'))
         .height(32).padding({ left: 16, right: 16 }).margin({ left: 4 }).textAlign(TextAlign.Center)
         .onClick(() => { this.activeTab = TAB_CONVERSATION; })
+      Text($r('app.string.character_edit_tab_impres'))
+        .fontSize($r('app.float.app_font_body'))
+        .fontWeight(this.activeTab === TAB_IMPRES ? FontWeight.Medium : FontWeight.Normal)
+        .fontColor(this.activeTab === TAB_IMPRES ? $r('app.color.app_on_accent') : ThemePalette.textSecondaryColor(this.effectiveTheme))
+        .backgroundColor(this.activeTab === TAB_IMPRES ? ThemePalette.accentColor(this.effectiveTheme) : Color.Transparent)
+        .borderRadius($r('app.float.app_radius_sm'))
+        .height(32).padding({ left: 16, right: 16 }).margin({ left: 4 }).textAlign(TextAlign.Center)
+        .onClick(() => { this.activeTab = TAB_IMPRES; })
     }
     .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
     .borderRadius($r('app.float.app_radius_md'))
@@ -252,8 +264,10 @@ struct CharacterEditPage {
   contentArea() {
     if (this.activeTab === TAB_CHARACTER) {
       this.characterTab()
-    } else {
+    } else if (this.activeTab === TAB_CONVERSATION) {
       this.conversationTab()
+    } else {
+      this.impresTab()
     }
   }
 
@@ -1017,6 +1031,101 @@ struct CharacterEditPage {
     .edgeEffect(EdgeEffect.Spring)
     .align(Alignment.Top)
     .width('100%')
+  }
+
+  // ===== "代写"分段 =====
+  // 代写方向(extensions.arktavern.impres.direction):聊天页「🎭代写」的背景与剧情方向
+  @Builder
+  impresTab() {
+    Scroll() {
+      Column() {
+        Row() {
+          Text($r('app.string.character_edit_field_impres_direction'))
+            .fontSize($r('app.float.app_font_subtitle'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+          Blank()
+          Text($r('app.string.character_edit_field_impres_clear'))
+            .fontSize($r('app.float.app_font_caption'))
+            .fontColor(this.formState.impresDirectionInput.length > 0
+              ? ThemePalette.accentColor(this.effectiveTheme)
+              : ThemePalette.textTertiaryColor(this.effectiveTheme))
+            .padding({ left: 8, right: 2, top: 4, bottom: 4 })
+            .onClick(() => {
+              const updated = copyFormState(this.formState);
+              updated.impresDirectionInput = '';
+              this.formState = updated;
+            })
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+        .margin({ bottom: 8 })
+
+        TextArea({
+          placeholder: $r('app.string.character_edit_field_impres_direction_placeholder'),
+          text: this.formState.impresDirectionInput
+        })
+          .fontSize($r('app.float.app_font_body'))
+          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+          .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+          .borderRadius($r('app.float.app_radius_md'))
+          .height(260)
+          .barState(BarState.Auto)
+          .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+          .onChange((value: string) => {
+            const updated = copyFormState(this.formState);
+            updated.impresDirectionInput = value;
+            this.formState = updated;
+          })
+
+        Text(this.impresDirectionCountText())
+          .fontSize($r('app.float.app_font_caption'))
+          .fontColor(this.impresDirectionOverLimit()
+            ? $r('app.color.app_danger')
+            : ThemePalette.textTertiaryColor(this.effectiveTheme))
+          .width('100%')
+          .margin({ top: 6 })
+          .textAlign(TextAlign.Start)
+
+        Text($r('app.string.character_edit_field_impres_direction_hint'))
+          .fontSize($r('app.float.app_font_caption'))
+          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+          .width('100%')
+          .margin({ top: 6 })
+          .textAlign(TextAlign.Start)
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      .padding({
+        left: $r('app.float.app_spacing_20'),
+        right: $r('app.float.app_spacing_20'),
+        top: $r('app.float.app_spacing_16'),
+        bottom: 100
+      })
+    }
+    .layoutWeight(1)
+    .scrollable(ScrollDirection.Vertical)
+    .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring)
+    .align(Alignment.Top)
+    .width('100%')
+  }
+
+  /** 代写方向字数文案(空/正常/超限三态) */
+  private impresDirectionCountText(): string {
+    const count: number = this.formState.impresDirectionInput.length;
+    if (count === 0) {
+      return '当前未设置(聊天页代写将只用最近对话)';
+    }
+    if (count > IMPRES_DIRECTION_WARN_CHARS) {
+      return count + ' 字符(超过 ' + IMPRES_DIRECTION_WARN_CHARS + ',注入时会被截断)';
+    }
+    return count + ' 字符';
+  }
+
+  /** 代写方向是否超出建议上限 */
+  private impresDirectionOverLimit(): boolean {
+    return this.formState.impresDirectionInput.length > IMPRES_DIRECTION_WARN_CHARS;
   }
 
   // ===== 字段组件 =====

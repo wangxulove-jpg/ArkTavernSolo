@@ -945,6 +945,10 @@
       "value": "对话"
     },
     {
+      "name": "character_edit_tab_impres",
+      "value": "代写"
+    },
+    {
       "name": "character_edit_save",
       "value": "保存"
     },
@@ -1163,6 +1167,22 @@
     {
       "name": "character_edit_character_book_unbind",
       "value": "解除绑定"
+    },
+    {
+      "name": "character_edit_field_impres_direction",
+      "value": "代写方向（背景与发展方向）"
+    },
+    {
+      "name": "character_edit_field_impres_direction_placeholder",
+      "value": "留空 = 关闭代写方向。可让 AI 在 PC 制卡工具「代写方向」Tab 自动生成，或在此手写：故事背景 / 角色与关系 / 剧情走向 / 代写注意"
+    },
+    {
+      "name": "character_edit_field_impres_direction_hint",
+      "value": "聊天页「🎭代写」会用它 + 开场白 + 最近对话 + 当前状态生成候选发言；建议 600~1200 字，超 4000 字符会被截断。随角色卡一起导入导出。"
+    },
+    {
+      "name": "character_edit_field_impres_clear",
+      "value": "清空"
     },
     {
       "name": "character_book_bound_badge",

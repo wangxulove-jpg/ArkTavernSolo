@@ -14,18 +14,19 @@
  * - CharacterService.list/getById/create/update
  * - 不修改 Character 数据模型
  * - 不修改数据库 Schema
- * - 不修改导入/导出逻辑
+ * - 不修改导入/导出逻辑(代写方向写回 extensions,随卡原样导出)
  *
  * 字段策略:
  * - tags / creator / character_version / creator_notes 只作元数据,不进入 PromptBuilder
  * - alternate_greetings 作为开场白的额外 Swipe 候选
  * - mes_example 作为对话示例进入 PromptBuilder
  * - system_prompt / post_history_instructions 按 PromptBuilder 配置启用
- * - extensions 原样保存,不暴露到 UI
+ * - extensions 除代写方向(impresDirectionInput → arktavern.impres.direction)外不暴露到 UI,其余键原样保留
  * - character_book 复用 Lorebook 编辑能力(只展示关联 ID)
  */
 
 import { Character } from '../models/Character';
+import { applyImpresDirection, extractImpresDirection } from '../models/CardImpres';
 import { Lorebook } from '../models/Lorebook';
 import { CharacterService } from '../services/CharacterService';
 import { LorebookService } from '../services/LorebookService';
@@ -76,6 +77,8 @@ export interface CharacterEditFormState {
   characterBookIdInput: string;
   /** 默认身份 ID(空表示未设置,关联 personas.id) */
   defaultPersonaIdInput: string;
+  /** 代写方向(写入 extensions.arktavern.impres.direction;空=关闭,App 聊天页「🎭代写」用) */
+  impresDirectionInput: string;
 }
 
 /** 空表单(新建模式) */
@@ -98,7 +101,8 @@ export function emptyFormState(): CharacterEditFormState {
     creatorInput: '',
     characterVersionInput: '',
     characterBookIdInput: '',
-    defaultPersonaIdInput: ''
+    defaultPersonaIdInput: '',
+    impresDirectionInput: ''
   };
 }
 
@@ -122,7 +126,8 @@ export function copyFormState(state: CharacterEditFormState): CharacterEditFormS
     creatorInput: state.creatorInput,
     characterVersionInput: state.characterVersionInput,
     characterBookIdInput: state.characterBookIdInput,
-    defaultPersonaIdInput: state.defaultPersonaIdInput
+    defaultPersonaIdInput: state.defaultPersonaIdInput,
+    impresDirectionInput: state.impresDirectionInput
   };
 }
 
@@ -146,7 +151,8 @@ function formStateFromCharacter(character: Character): CharacterEditFormState {
     creatorInput: character.creator,
     characterVersionInput: character.characterVersion,
     characterBookIdInput: character.characterBookId,
-    defaultPersonaIdInput: character.defaultPersonaId
+    defaultPersonaIdInput: character.defaultPersonaId,
+    impresDirectionInput: extractImpresDirection(character.extensions)
   };
 }
 
@@ -272,7 +278,8 @@ export class CharacterEditViewModel {
         || current.tagsInput.length > 0
         || current.creatorInput.length > 0
         || current.characterVersionInput.length > 0
-        || current.defaultPersonaIdInput.length > 0;
+        || current.defaultPersonaIdInput.length > 0
+        || current.impresDirectionInput.trim().length > 0;
     }
     // 编辑模式:与原始角色比较(不比较 avatarUriInput / characterBookIdInput)
     const orig: Character = this.originalCharacter;
@@ -291,7 +298,8 @@ export class CharacterEditViewModel {
       || !arraysEqual(current.tagsInput, orig.tags)
       || current.creatorInput !== orig.creator
       || current.characterVersionInput !== orig.characterVersion
-      || current.defaultPersonaIdInput !== orig.defaultPersonaId;
+      || current.defaultPersonaIdInput !== orig.defaultPersonaId
+      || current.impresDirectionInput.trim() !== extractImpresDirection(orig.extensions);
   }
 
   /**
@@ -416,7 +424,9 @@ export class CharacterEditViewModel {
     }
 
     if (this.isEditing) {
-      // 编辑模式:保留 extensions / characterBookId 不变
+      // 编辑模式:保留 characterBookId 不变;extensions 仅改写代写方向,其余键原样保留
+      const baseExtensions: Record<string, Object> =
+        this.originalCharacter !== null ? this.originalCharacter.extensions : {};
       const updated: Character = await this.characterService.update(this.editingCharacterId, {
         name: current.nameInput,
         nickname: current.nicknameInput,
@@ -433,7 +443,8 @@ export class CharacterEditViewModel {
         tags: current.tagsInput.slice(),
         creator: current.creatorInput,
         characterVersion: current.characterVersionInput,
-        defaultPersonaId: current.defaultPersonaIdInput
+        defaultPersonaId: current.defaultPersonaIdInput,
+        extensions: applyImpresDirection(baseExtensions, current.impresDirectionInput)
       });
       this.originalCharacter = updated;
       return updated;
@@ -461,7 +472,8 @@ export class CharacterEditViewModel {
         tags: current.tagsInput.slice(),
         creator: current.creatorInput,
         characterVersion: current.characterVersionInput,
-        defaultPersonaId: current.defaultPersonaIdInput
+        defaultPersonaId: current.defaultPersonaIdInput,
+        extensions: applyImpresDirection({}, current.impresDirectionInput)
       });
       this.isEditing = true;
       this.editingCharacterId = finalChar.id;

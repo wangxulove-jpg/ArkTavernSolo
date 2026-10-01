@@ -44,10 +44,35 @@ const LOG_TAG: string = 'ChatOneShotGenerator';
 
 /** 代写注入上限:代写方向(字符,超出截断) */
 const IMPRES_DIRECTION_MAX_CHARS: number = 4000;
-/** 代写注入上限:开场白(字符,超出截断) */
-const IMPRES_OPENING_MAX_CHARS: number = 2000;
+/** 代写注入上限:开场白(字符,超出截断;仅作"故事开端"语境,过大容易把模型拉回开头) */
+const IMPRES_OPENING_MAX_CHARS: number = 1000;
 /** 代写注入上限:角色状态条数 */
 const IMPRES_STATUS_MAX_ENTRIES: number = 30;
+
+/**
+ * 代写请求内的角色互换:user ↔ assistant,system 不变
+ * (与"最近消息互换"同一口径:角色行 → user,玩家行 → assistant)。
+ */
+function swapChatRole(role: ChatRole): ChatRole {
+  if (role === ChatRole.User) {
+    return ChatRole.Assistant;
+  }
+  if (role === ChatRole.Assistant) {
+    return ChatRole.User;
+  }
+  return role;
+}
+
+/** 代写请求结构摘要(日志用:角色/长度/前 24 字,便于排查"是否用的是最新消息") */
+function describeImpersonateRequest(messages: ChatMessage[]): string {
+  const parts: string[] = [];
+  for (let i = 0; i < messages.length; i++) {
+    const msg: ChatMessage = messages[i];
+    const flat: string = msg.content.replace(new RegExp('\\n', 'g'), ' ');
+    parts.push(msg.role + '(' + msg.content.length + ')' + flat.substring(0, 24));
+  }
+  return parts.join(' | ');
+}
 
 /** 续写单次请求解析结果:用户下一句发言 + 角色回应 */
 interface AutoContinueTurn {
@@ -336,8 +361,8 @@ export class ChatOneShotGenerator {
    * 流程:
    * 1. 构建代写 System 指令(要求生成 3 条):身份/任务/规则 + 故事背景与发展方向(卡扩展
    *    extensions.arktavern.impres.direction) + 开场白说明 + 用户性格总结 + 全局代写引导
-   * 2. 拼装请求消息(顺序):[System 指令] → [开场白消息(角色行,对话起点)] →
-   *    [最近 6 条对话(角色/用户互换,现状逻辑)] → [当前角色状态(System,放最后)]
+   * 2. 拼装请求消息(顺序):[System 指令] → [开场白消息(会话首条,角色行互换后)] →
+   *    [最近 6 条对话(角色/用户互换,现状逻辑)] → [System:当前状态(若有) + 收尾点题,最贴近"此刻"]
    * 3. 非流式调用 ModelService.sendChat
    * 4. 解析响应,拆分为最多 3 条候选
    *
@@ -363,15 +388,9 @@ export class ChatOneShotGenerator {
     const recentMessages: ChatMessage[] = this.messages.slice(this.messages.length - recentCount);
 
     const swapped: ChatMessage[] = recentMessages.map((msg: ChatMessage): ChatMessage => {
-      let newRole: ChatRole = msg.role;
-      if (msg.role === ChatRole.User) {
-        newRole = ChatRole.Assistant;
-      } else if (msg.role === ChatRole.Assistant) {
-        newRole = ChatRole.User;
-      }
       const swappedMsg: ChatMessage = {
         id: msg.id,
-        role: newRole,
+        role: swapChatRole(msg.role),
         content: msg.content,
         createdAt: msg.createdAt,
         status: msg.status,
@@ -389,6 +408,7 @@ export class ChatOneShotGenerator {
       '- 动作用星号括起来，例如：*微笑*、*转身走开*\n' +
       '- 每条占一行，是一条完整独立的回复\n' +
       '- 不要替' + charName + '发言\n' +
+      '- 只承接对话序列最后一条的当前进度,不要把开场白或更早的内容当成当前进度\n' +
       '- 不要把一个回复拆成多行';
 
     // ===== 故事背景与发展方向(卡扩展 extensions.arktavern.impres.direction,可选项) =====
@@ -402,24 +422,34 @@ export class ChatOneShotGenerator {
       impersonateContent += '\n\n【故事背景与发展方向】\n' + directionText;
     }
 
-    // ===== 开场白(截断后作为对话起点消息,紧贴最近消息之前) =====
-    let openingText: string = this.character !== null ? this.character.firstMessage.trim() : '';
-    if (openingText.length > IMPRES_OPENING_MAX_CHARS) {
-      openingText = openingText.substring(0, IMPRES_OPENING_MAX_CHARS);
+    // ===== 开场白(故事开端,仅作语境参考):取当前会话首条消息,缺失时回退角色卡开场白 =====
+    let openingFull: string = '';
+    let openingRole: ChatRole = ChatRole.User;
+    if (this.messages.length > 0) {
+      const firstMsg: ChatMessage = this.messages[0];
+      openingFull = firstMsg.content.trim();
+      openingRole = swapChatRole(firstMsg.role);
+    } else if (this.character !== null) {
+      openingFull = this.character.firstMessage.trim();
+      openingRole = ChatRole.User;
     }
-    // 最近消息里已含同一内容(刚开局的短会话)时不重复注入
+    // 最近消息里已含同一内容(刚开局的短会话)时不重复注入(用完整原文比较,截断不影响判定)
     let openingDuplicated: boolean = false;
-    if (openingText.length > 0) {
+    if (openingFull.length > 0) {
       for (let i = 0; i < recentMessages.length; i++) {
-        if (recentMessages[i].content.trim() === openingText) {
+        if (recentMessages[i].content.trim() === openingFull) {
           openingDuplicated = true;
           break;
         }
       }
     }
+    let openingText: string = openingFull;
+    if (openingText.length > IMPRES_OPENING_MAX_CHARS) {
+      openingText = openingText.substring(0, IMPRES_OPENING_MAX_CHARS);
+    }
     if (openingText.length > 0 && !openingDuplicated) {
       impersonateContent += '\n\n消息序列的第一条是' + charName
-        + '的故事开场白(故事开始处),仅供你理解语境,不要重复或改写它。';
+        + '的故事开场白(尚且很早,仅供你理解设定与人物关系),不要回应或重复它。';
     }
 
     // ===== 当前角色状态(会话 statusConfigJson,可选项;消息追加在请求最后) =====
@@ -463,11 +493,11 @@ export class ChatOneShotGenerator {
     };
 
     const requestMessages: ChatMessage[] = [impersonateSystem];
-    // [1] 开场白:作为对话起点,紧贴最近消息之前;角色行互换后为 User 角色
+    // [1] 开场白:作为故事开端(很早)紧贴最近消息之前;角色行互换后与最近消息口径一致
     if (openingText.length > 0 && !openingDuplicated) {
       const openingMsg: ChatMessage = {
         id: 'usr-impres-opening',
-        role: ChatRole.User,
+        role: openingRole,
         content: openingText,
         createdAt: Date.now(),
         status: ChatMessageStatus.Completed,
@@ -479,18 +509,22 @@ export class ChatOneShotGenerator {
     for (let i = 0; i < swapped.length; i++) {
       requestMessages.push(swapped[i]);
     }
-    // [最后] 当前角色状态:追加在会话之后,最贴近"此刻"
+    // [最后] 当前状态(若有) + 收尾点题:最贴近"此刻",并显式把模型锚到最新一条对话
+    const tailLines: string[] = [];
     if (statusText.length > 0) {
-      const statusMsg: ChatMessage = {
-        id: 'sys-impres-status',
-        role: ChatRole.System,
-        content: '【当前状态】\n' + statusText,
-        createdAt: Date.now(),
-        status: ChatMessageStatus.Completed,
-        source: ChatMessageSource.ExternalSystem
-      };
-      requestMessages.push(statusMsg);
+      tailLines.push('【当前状态】\n' + statusText);
     }
+    tailLines.push('请紧接着上面最后一条对话(而不是开场白或更早的内容),以' + userName
+      + '的身份写出 3 条下一条发言候选。');
+    const tailMsg: ChatMessage = {
+      id: 'sys-impres-status',
+      role: ChatRole.System,
+      content: tailLines.join('\n\n'),
+      createdAt: Date.now(),
+      status: ChatMessageStatus.Completed,
+      source: ChatMessageSource.ExternalSystem
+    };
+    requestMessages.push(tailMsg);
 
     const config: ProviderConfig | null = await this.modelService.getCurrentConfig();
     if (config === null) {
@@ -521,6 +555,8 @@ export class ChatOneShotGenerator {
       stream: false
     };
 
+    Logger.info(LOG_TAG, 'generateImpersonateCandidates request: '
+      + describeImpersonateRequest(requestMessages));
     const response: ChatResponse = await this.modelService.sendChat(request);
     Logger.info(LOG_TAG, 'generateImpersonateCandidates raw response: [' + response.content + ']');
     const result: ImpersonateCandidate[] = this.parseImpersonateCandidates(response.content);
