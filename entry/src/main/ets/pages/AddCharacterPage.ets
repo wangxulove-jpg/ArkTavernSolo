@@ -57,6 +57,8 @@ struct AddCharacterPage {
       this.viewModel = vm;
       // 不调 vm.load():本页不需要角色列表,只用 ViewModel 的导入能力
       this.isInitializing = false;
+      // 系统分享进入(Index 携带 shareImportUri):直接解析分享的 PNG 角色卡
+      await this.importSharedFileIfAny(vm);
     } catch (e) {
       this.isInitializing = false;
       const msg: string = e instanceof Error ? e.message : '初始化失败';
@@ -64,6 +66,39 @@ struct AddCharacterPage {
         message: msg,
         duration: 2000
       });
+    }
+  }
+
+  /**
+   * 系统分享导入:路由参数带 shareImportUri 时切到"文件导入"分段,
+   * 直接解析分享文件并弹出导入预览(复用现有 picker 导入同一条链路)。
+   */
+  private async importSharedFileIfAny(vm: CharacterListViewModel): Promise<void> {
+    const uri: string = this.readShareUri();
+    if (uri.length === 0) {
+      return;
+    }
+    this.activeTab = TAB_IMPORT;
+    await vm.startImportFile(uri);
+    if (vm.importError.length > 0) {
+      promptAction.showToast({
+        message: vm.importError,
+        duration: 2000
+      });
+    }
+  }
+
+  /** 读取路由参数 shareImportUri(无则返回空串) */
+  private readShareUri(): string {
+    try {
+      const params: Record<string, Object> = router.getParams() as Record<string, Object>;
+      const value: Object | undefined = params['shareImportUri'];
+      if (value === undefined) {
+        return '';
+      }
+      return String(value);
+    } catch (e) {
+      return '';
     }
   }
 

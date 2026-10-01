@@ -40,6 +40,10 @@ struct Index {
   @State selectedTab: number = 0;
   /** 当前有效主题(ARK-UI-THEME-1,响应式驱动 Root Shell) */
   @StorageProp('effectiveTheme') effectiveTheme: string = 'dark';
+  /** 分享到达序号(EntryAbility 每次收到系统分享 +1,驱动导入跳转) */
+  @StorageProp('pendingShareCardSeq') @Watch('onShareCardArrived') pendingShareSeq: number = 0;
+  /** 本页是否已完成首次显示(未显示时到达的分享由 onPageShow 兜底消费) */
+  private pageShown: boolean = false;
 
   async aboutToAppear(): Promise<void> {
     // 注册内置正文字体(霞鹭文楷,需 UI 上下文解析 $rawfile),供聊天"正文字体"设置使用
@@ -65,6 +69,36 @@ struct Index {
     AppStorage.setOrCreate<number>('characterListVersion', charVersion + 1);
     const chatVersion: number = AppStorage.get<number>('chatListVersion') ?? 0;
     AppStorage.setOrCreate<number>('chatListVersion', chatVersion + 1);
+    this.pageShown = true;
+    // 冷启动分享:分享数据可能早于本页显示到达,此处兜底消费
+    this.openSharedCardImport();
+  }
+
+  /** 系统分享到达(应用已运行时):立即进入导入预览 */
+  onShareCardArrived(): void {
+    if (!this.pageShown) {
+      // 页面尚未显示完成,交给 onPageShow 消费
+      return;
+    }
+    this.openSharedCardImport();
+  }
+
+  /**
+   * 消费待导入的分享文件 URI(消费后清空,避免重复触发)。
+   * 有值时切到角色卡 Tab,并进入"添加角色"页自动解析展示导入预览。
+   */
+  private openSharedCardImport(): void {
+    const uri: string = AppStorage.get<string>('pendingShareCardUri') ?? '';
+    if (uri.length === 0) {
+      return;
+    }
+    AppStorage.setOrCreate<string>('pendingShareCardUri', '');
+    Logger.info(LOG_TAG, 'shared card import, uri=' + uri);
+    this.tabsController.changeIndex(0);
+    router.pushUrl({ url: 'pages/AddCharacterPage', params: { shareImportUri: uri } })
+      .catch((e: Object): void => {
+        Logger.error(LOG_TAG, 'push AddCharacterPage for shared card failed: ' + String(e));
+      });
   }
 
   /** Tab 内容背景色:Tavern 使用酒馆棕,其余走资源限定符 */

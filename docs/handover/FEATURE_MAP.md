@@ -27,6 +27,7 @@ bridge/：仅承载「页面 ↔ 组件」的宿主契约（例：FrontendCardHo
 | 角色卡列表 / 新建 / 删除 | `pages/tabs/CharacterRootView.ets` | `CharacterListPage` → `viewmodels/CharacterListViewModel` → `services/CharacterService` | UI→VM→S |
 | 角色编辑 / 导入导出 | `pages/CharacterEditPage.ets`（三段：角色 / 对话 / **代写**——代写方向查看与手改，写回 `extensions.arktavern.impres.direction`） | `viewmodels/{CharacterEdit,CharacterExport}ViewModel` → `services/CharacterService` → `parser/CharacterCardJsonParser`；代写方向读写纯函数 `models/CardImpres` | UI→VM→S→parser |
 | 添加角色 / 导入卡（含 PNG 卡） | `pages/AddCharacterPage.ets` | `parser/{CharacterCardJsonParser,PngCharacterCardParser}` | UI→parser |
+| **系统分享导入 PNG 角色卡**（文件管理器"分享"→本应用；`module.json5` skills `ohos.want.action.sendData` + `utd:general.png`） | `entryability/EntryAbility.ets`（`systemShare.getSharedData` → 写 AppStorage） | `pages/Index.ets`（`@Watch` + `onPageShow` 兜底消费 → push 带 `shareImportUri`）→ `pages/AddCharacterPage.ets` → `viewmodels/CharacterListViewModel.startImportFile` | Ability→UI→VM→S |
 | **聊天主界面** | `pages/ChatPage.ets`（4,890 行，**改动风险最高**） | `viewmodels/ChatViewModel` → `services/ChatService`；子面板统一走上滑 `bindSheet`（记忆模式 / 对话称呼 / 用户身份 / 新建章节） | UI→VM→S |
 | **AI 对话 / 流式核心** | `services/ChatService.ets`（**不授权勿动**：`doStream` / `finalizeAssistantTurn` / delta 持久化 / 句柄定时器） | `services/ModelService` → `network/providers/OpenAIProvider` | S→network |
 | 消息发送入口 | `services/ChatMessageSender.ets` | `ChatService.doStream`（委托） | S |

@@ -217,13 +217,14 @@ export class CharacterListViewModel {
    * @param uri 文件 URI
    */
   async startImportFile(uri: string): Promise<void> {
-    // 检测文件类型
+    // 检测文件类型:仅 .json 走 JSON 分支,其余默认按 PNG 尝试
+    // (系统分享来的文件 URI 可能不含扩展名,而分享导入只支持 PNG 卡)
     const lowerUri: string = uri.toLowerCase();
-    if (lowerUri.endsWith('.png')) {
-      await this.startPngImport(uri);
+    if (lowerUri.endsWith('.json')) {
+      await this.startJsonImport(uri);
       return;
     }
-    await this.startJsonImport(uri);
+    await this.startPngImport(uri);
   }
 
   /**

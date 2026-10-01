@@ -50,6 +50,13 @@
 |---|---|---|
 | P-80 | 懒加载消息列表直接 `scrollEdge(Edge.Bottom)` → **进入会话先看到最早的消息，随后"唰"地跳到最新** | 原因：`Scroll` + `LazyForEach` 的内容高度是**逐帧**长出来的，首帧滚底只能落在"当时已量出的底部"≈顶部。修正范式（见 `ChatPage` 的 `chatListPositioned` / `bottomLockActive`）：① 定位完成前消息列表 `.opacity(0)`——**必须仍然挂载**，否则不参与布局、永远算不出真实高度，会死锁成永远不显示；② 定位期间用 `loadingView()`（"加载会话中…"）占位，并加 `hitTestBehavior(HitTestMode.Block)` 阻断触摸，避免误触到不可见列表；③ **追底锁**：每次 `onAreaChange` 都 `scrollEdge(Edge.Bottom)`，直到 `scroller.isAtEnd()` 才结束（另设 **40 次重试上限** + **800ms 兜底定时器**，定时器须在 `aboutToDisappear` 清理）；④ 只在"**整列表被替换**"时定位（首条消息 id 变化，或页面首次加载且尚未显示过），空会话发第一条消息不触发（否则会闪一下加载动画）。**设备侧观感未验证** |
 
+## 2c. 系统分享接收（Share Kit）
+
+| # | 坑 | 正确做法 / 证据 |
+|---|---|---|
+| P-86 | 以为在 `skills.uris` 里写了 `utd` 应用就会出现在分享面板 | `uris` 的 **`maxFileSupported` 默认为 0（= 不支持该类文件）**——不写就**静默不出现**，必须显式 ≥1。本仓 PNG 卡：`scheme:"file"` + `utd:"general.png"` + `maxFileSupported:1`（`module.json5`，commit `c014825`）；UTD 需穷举声明（如 `general.image` 覆盖全部图片） |
+| P-87 | 接收系统分享只处理 `onCreate` → **应用已在前台时分享进来无反应** | 必须 **`onCreate`（冷启动）+ `onNewWant`（热启动）都处理**；`systemShare.getSharedData(want)` **只在 `want.action === 'ohos.want.action.sendData'` 时调用**（普通启动调用会失败，官方示例 catch 里 `terminateSelf()` 不能照抄）。另：分享数据**异步**解析，冷启动时可能晚于根页面创建——只靠 `@StorageProp @Watch` 会漏（值在组件创建前已就位 → 无变化事件），需 `onPageShow` 兜底消费 + 消费后清空标志（范式：`Index.openSharedCardImport`） |
+
 ## 3. 分层与架构
 
 | # | 坑 | 正确做法 / 证据 |
