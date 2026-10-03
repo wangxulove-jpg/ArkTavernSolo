@@ -1,7 +1,7 @@
 /**
- * PromptPresetImportParser 提示词预设导入解析器
+ * PromptPresetImportParser 提示词预设导入/导出解析器
  *
- * 将提示词预设 JSON 文件解析为可入库的预设列表。
+ * 导入:将提示词预设 JSON 文件解析为可入库的预设列表。
  * 支持两种形态:
  * 1. 单个预设对象:{ name, description, systemPrompt, ... }
  * 2. 预设对象数组:[{...}, {...}]
@@ -9,10 +9,14 @@
  * 采用白名单方式读取已知字段,忽略未知字段(如 id/createdAt/updatedAt,
  * 导入时统一重新生成)。字段合法性由 createPromptPreset 校验。
  *
+ * 导出:buildPromptPresetExportJson 将预设列表序列化为与导入格式对称的
+ * JSON 数组,可被本文件解析器直接读回(round-trip)。
+ *
  * 纯逻辑、不依赖 ArkUI。
  */
 
 import { Logger } from '../utils/Logger';
+import { PromptPreset } from '../models/PromptPreset';
 
 const LOG_TAG: string = 'PromptPresetImportParser';
 
@@ -138,4 +142,28 @@ function readOptionalNumber(raw: Record<string, Object>, key: string): number | 
     }
   }
   return undefined;
+}
+
+/**
+ * 将预设列表序列化为可导入的 JSON 数组文本。
+ * 只导出白名单字段(name/description/systemPrompt/温度等),
+ * 不含 id/createdAt/updatedAt(导入时重新生成);
+ * undefined 的可选数字字段不写入(JSON.stringify 自动省略)。
+ */
+export function buildPromptPresetExportJson(presets: PromptPreset[]): string {
+  const items: ParsedPromptPresetImport[] = [];
+  for (let i = 0; i < presets.length; i++) {
+    const preset: PromptPreset = presets[i];
+    const item: ParsedPromptPresetImport = {
+      name: preset.name,
+      description: preset.description,
+      systemPrompt: preset.systemPrompt,
+      temperature: preset.temperature,
+      topP: preset.topP,
+      maxOutputTokens: preset.maxOutputTokens,
+      contextWindow: preset.contextWindow
+    };
+    items.push(item);
+  }
+  return JSON.stringify(items, null, 2);
 }

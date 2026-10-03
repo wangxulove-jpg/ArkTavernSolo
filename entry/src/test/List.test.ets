@@ -16,6 +16,7 @@ import frontendInteractionTest from './frontend_interaction.test';
 import cardImpresTest from './card_impres.test';
 import chatSymbolColorTest from './chat_symbol_color.test';
 import stFrontendFallbackTest from './st_frontend_fallback.test';
+import presetExportTest from './preset_export.test';
 
 export default function testsuite() {
   promptSegmentOrderTest();
@@ -31,4 +32,5 @@ export default function testsuite() {
   cardImpresTest();
   chatSymbolColorTest();
   stFrontendFallbackTest();
+  presetExportTest();
 }

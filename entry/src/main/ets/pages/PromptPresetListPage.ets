@@ -31,6 +31,7 @@ struct PromptPresetListPage {
   @State viewModel: PromptPresetListViewModel = AppServices.createPromptPresetListViewModel();
   @State refreshKey: number = 0;
   @State importing: boolean = false;
+  @State exporting: boolean = false;
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   @StorageProp('effectiveTheme') effectiveTheme: string = 'dark';
   private hasInitialized: boolean = false;
@@ -83,6 +84,37 @@ struct PromptPresetListPage {
     }
   }
 
+  /** 选择保存位置并导出全部预设。成功后提示导出数量。 */
+  private async pickPresetExportFile(): Promise<void> {
+    if (this.exporting || this.viewModel.presets.length === 0) {
+      return;
+    }
+    let uris: string[] = [];
+    try {
+      const documentPicker = new picker.DocumentViewPicker();
+      const options = new picker.DocumentSaveOptions();
+      options.newFileNames = [presetExportFileName()];
+      uris = await documentPicker.save(options);
+    } catch (e) {
+      promptAction.showToast({ message: '打开保存位置选择器失败', duration: 2000 });
+      return;
+    }
+    if (uris.length === 0) {
+      return;
+    }
+    this.exporting = true;
+    try {
+      const exported: number = await this.viewModel.exportPresetsToFile(uris[0]);
+      if (exported > 0) {
+        promptAction.showToast({ message: '已导出 ' + exported.toString() + ' 个预设', duration: 2000 });
+      }
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'pickPresetExportFile failed: ' + String(e));
+    } finally {
+      this.exporting = false;
+    }
+  }
+
   build() {
     Stack() {
       Column() {
@@ -113,6 +145,17 @@ struct PromptPresetListPage {
             .enabled(!this.importing)
             .onClick(() => {
               void this.pickPresetFile();
+            })
+
+          Button('导出')
+            .fontSize(13)
+            .backgroundColor(Color.Transparent)
+            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+            .height(32)
+            .padding({ left: 10, right: 10 })
+            .enabled(!this.exporting && this.viewModel.presets.length > 0)
+            .onClick(() => {
+              void this.pickPresetExportFile();
             })
         }
         .width('100%')
@@ -298,4 +341,18 @@ struct PromptPresetListPage {
     .border({ width: 1, color: ThemePalette.dividerColor(this.effectiveTheme) })
     .margin({ bottom: 8 })
   }
+}
+
+/** 生成默认导出文件名:presets_YYYYMMDD_HHmm.json */
+function presetExportFileName(): string {
+  const d: Date = new Date();
+  const p2 = (n: number): string => n.toString().padStart(2, '0');
+  return 'presets_'
+    + d.getFullYear().toString()
+    + p2(d.getMonth() + 1)
+    + p2(d.getDate())
+    + '_'
+    + p2(d.getHours())
+    + p2(d.getMinutes())
+    + '.json';
 }

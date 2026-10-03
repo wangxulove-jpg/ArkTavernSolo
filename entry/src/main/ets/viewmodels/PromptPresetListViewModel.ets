@@ -7,7 +7,7 @@
 
 import { PromptPreset } from '../models/PromptPreset';
 import { PromptPresetService } from '../services/PromptPresetService';
-import { parsePromptPresetImport } from '../parser/PromptPresetImportParser';
+import { parsePromptPresetImport, buildPromptPresetExportJson } from '../parser/PromptPresetImportParser';
 import { AppServices } from '../services/AppServices';
 import { Logger } from '../utils/Logger';
 
@@ -167,6 +167,34 @@ export class PromptPresetListViewModel {
     } catch (e) {
       this.errorMessage = '导入失败: ' + ((e as Error).message ?? String(e));
       Logger.error(LOG_TAG, 'importPresetsFromFile failed: ' + String(e));
+      return 0;
+    } finally {
+      this.isOperating = false;
+    }
+  }
+
+  /**
+   * 将全部预设导出为 JSON 文件。
+   * 列表 → 序列化(与导入格式对称) → 写入文件 URI。
+   * @returns 成功导出的数量
+   */
+  async exportPresetsToFile(uri: string): Promise<number> {
+    if (this.disposed || this.isOperating) {
+      return 0;
+    }
+    this.isOperating = true;
+    this.errorMessage = '';
+    try {
+      const presets: PromptPreset[] = await this.presetService.list();
+      if (presets.length === 0) {
+        return 0;
+      }
+      const json: string = buildPromptPresetExportJson(presets);
+      await AppServices.getCharacterService().writeFileContent(uri, json);
+      return presets.length;
+    } catch (e) {
+      this.errorMessage = '导出失败: ' + ((e as Error).message ?? String(e));
+      Logger.error(LOG_TAG, 'exportPresetsToFile failed: ' + String(e));
       return 0;
     } finally {
       this.isOperating = false;
