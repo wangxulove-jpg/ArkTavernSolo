@@ -19,6 +19,8 @@
   1. 全项目只读审计（286 文件 / 112,801 行；结论：分层主干成立，痛点集中于巨型文件与重复实现）→ [审计报告](./2026-09-27-audit-and-roadmap.md)
   2. 交接文档体系重建（根 `AGENTS.md` + `docs/handover/`）
   3. 清理：删除 `tools/`（card-studio）、`启动制卡软件.bat`、根 `screenshots/`、`.tools/uitree`；旧文档归档至 `docs/handover/archive/`
+  4. （2026-10-03）**角色卡兼容性重构前期调研**（只读，未改代码）：完整解剖本地 ST 1.18.0 + 酒馆助手 4.9.5 源码与用户 5 张真实卡，产出机制还原 + 鸿蒙可行性清单 + 待决策问题 → [调研报告](./2026-10-03-st-tavernhelper-card-research.md)。**启动角色卡重构前必读**；结论摘要：兼容性根因是缺 4 件运行时（正则双管线引擎 / 世界书激活算法 / TavernHelper API / 代码块 Web 渲染器），约 80% 中文卡生态可在鸿蒙原生实现
+  5. （2026-10-03 晚）**立项继任项目 ArkTavernNext（三代）**：调研终审后确认 Solo 的原生渲染路线对 ST 生态存在结构性天花板，用户决策新起项目（A+ 混合架构：ArkTS 哑壳 + Vue3 Web 聊天前端 + TS Core 引擎）。**Solo 自此转维护模式（bug 修复），不再新增 ST 兼容功能**。继任项目暂驻 `D:\ArkProject\ArkTavernSolo\ArkTavernNext`（独立 git 仓库），基础工作完成后由用户移至 `D:\ArkProject\ArkTavernNext`。其入口文档：`ArkTavernNext/AGENTS.md`；历史决策链（含 ArkSilly 一代考古）：`ArkTavernNext/docs/handover/DECISIONS.md`。**接手 Solo 的 agent 如被要求做 ST 兼容类需求，先读上述继任项目文档，避免在旧路线上返工**
 - **本次未修改任何 .ets 代码**（审计为只读）
 
 ## 2. 下一步（P2 批次：ChatService 瘦身）
