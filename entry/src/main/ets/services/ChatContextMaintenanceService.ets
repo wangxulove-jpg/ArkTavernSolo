@@ -32,6 +32,13 @@ import { Logger } from '../utils/Logger';
 
 const LOG_TAG: string = 'ChatContextMaintenanceService';
 
+/**
+ * v51: 自动归档模式的后备激活阈值。
+ * 未激活章节累积到该数量时整体激活一次(推进激活边界 + 更新核心记忆 + 刷新钉选/粘滞),
+ * 接受一次缓存冷重建,避免上下文无界增长;未达阈值时仅生成章节(对 prompt 隐形,保缓存)。
+ */
+const AUTO_ACTIVATE_PENDING_CHAPTERS: number = 4;
+
 /** 上下文维护依赖(全部为只读引用,null 表示未装配) */
 export interface ChatContextDeps {
   /** 记忆服务(章节生成 / 软失效 / 多层回退) */
@@ -123,46 +130,126 @@ export class ChatContextMaintenanceService {
   // ===== 搬运方法(原 ChatService 成员,逐字搬出) =====
 
   /**
-   * Prompt Cache:手动触发记忆总结。
-   * 无论 memoryAutoSummaryEnabled 是否开启,都强制生成一个详细章节并同步更新核心记忆。
-   * 总结完成后 Memory 段内容更新,但后续请求中 Memory 段将保持稳定直到下次手动触发。
+   * v51: 手动"生成章节摘要"(仅生成,不改动当前对话与缓存)。
+   *
+   * 只生成未归档章节并写库:不注入、不移动激活边界、不更新核心记忆、不刷新钉选/粘滞
+   * → 聊天请求前缀完全不变,缓存保持命中。章节的实际生效请用"立即归档"(activateMemoryNow)。
    */
   triggerManualMemorySummary(): void {
-    if (this.memoryService === null) {
+    const memoryService: MemoryService | null = this.memoryService;
+    const chatId: string | undefined = this.currentChatId;
+    if (memoryService === null) {
       return;
     }
-    if (this.currentChatId === undefined || this.currentChatId.length === 0) {
+    if (chatId === undefined || chatId.length === 0) {
       return;
     }
     if (this.activeBranchId.length === 0) {
       return;
     }
-    const chatId: string = this.currentChatId;
     const branchId: string = this.activeBranchId;
     const branchMessages: ChatMessage[] = this.messages.slice();
-    const memoryService: MemoryService = this.memoryService;
     // v51: 先构建聊天请求基座(缓存友好:总结请求前缀与聊天请求逐字节一致)
+    this.host.buildSummaryBaseMessages()
+      .then((base: ChatMessage[] | undefined): Promise<MemorySummaryResult> => {
+        return memoryService.generateChapterMemory(chatId, branchId, branchMessages, base);
+      })
+      .then((result: MemorySummaryResult): void => {
+        if (!result.success) {
+          Logger.warn(LOG_TAG, 'ManualMemorySummary | generate chapter failed'
+            + (result.error !== undefined ? ' err=' + result.error : ''));
+        } else {
+          this.notifyMemoryChanged();
+        }
+      })
+      .catch((e: Object): void => {
+        Logger.warn(LOG_TAG, 'ManualMemorySummary | generate exception: '
+          + (e instanceof Error ? e.message : String(e)));
+      });
+  }
+
+  /**
+   * v51: 激活记忆归档(手动"立即归档" / 自动归档后备阈值触发)。
+   *
+   * 唯一会改变 prompt 前缀的操作,按顺序:
+   * 1. 补生成未归档章节(后缀扩展,缓存热)
+   * 2. 推进激活边界到当前实际章节边界(未激活章节开始注入、窗口锚点前移)
+   * 3. 更新核心记忆(全部待激活章节一次合并)
+   * 4. 刷新 OnDemandPinned / Sticky 会话钉选
+   * 完成后接受一次"冷重建",之后前缀重新冻结稳定。
+   */
+  activateMemoryNow(): void {
+    const memoryService: MemoryService | null = this.memoryService;
+    const modeService: ChatMemoryModeService | null = this.chatMemoryModeService;
+    const chatId: string | undefined = this.currentChatId;
+    if (memoryService === null || modeService === null) {
+      return;
+    }
+    if (chatId === undefined || chatId.length === 0) {
+      return;
+    }
+    if (this.activeBranchId.length === 0) {
+      return;
+    }
+    const branchId: string = this.activeBranchId;
+    const branchMessages: ChatMessage[] = this.messages.slice();
     this.host.buildSummaryBaseMessages()
       .then((base: ChatMessage[] | undefined): Promise<MemorySummaryResult> => {
         return memoryService.forceGenerateChapterMemory(chatId, branchId, branchMessages, base);
       })
-      .then((result: MemorySummaryResult): void => {
-        if (!result.success) {
-          Logger.warn(LOG_TAG, 'ManualMemorySummary | forced chapter failed'
-            + (result.error !== undefined ? ' err=' + result.error : ''));
-        } else {
-          this.notifyMemoryChanged();
-          // v8.4: 窗口锚点由章节边界与保留条数动态派生,总结成功后无需额外持久化
-          // v45: 手动总结成功后刷新 OnDemandPinned 会话钉选(记忆段与世界书段一起变化)
-          this.refreshLorebookPinAsync(chatId, branchMessages);
-          // v46: 手动总结成功后刷新 StickyOnDemand 会话粘滞命中(重算全量对话匹配)
-          this.refreshLorebookStickyAsync(chatId, branchMessages);
-        }
+      .then((result: MemorySummaryResult): Promise<void> => {
+        return this.applyActivationResult(
+          memoryService, modeService, chatId, branchId, branchMessages, result
+        );
       })
       .catch((e: Object): void => {
-        Logger.warn(LOG_TAG, 'ManualMemorySummary | forced chapter exception: '
+        Logger.warn(LOG_TAG, 'activateMemoryNow | exception: '
           + (e instanceof Error ? e.message : String(e)));
       });
+  }
+
+  /** 激活收尾:推进激活边界 + 通知记忆变更 + 刷新钉选/粘滞。 */
+  private async applyActivationResult(
+    memoryService: MemoryService,
+    modeService: ChatMemoryModeService,
+    chatId: string,
+    branchId: string,
+    branchMessages: ChatMessage[],
+    result: MemorySummaryResult
+  ): Promise<void> {
+    if (!result.success) {
+      // 章节生成失败:不推进边界(保持现状),避免把未生成范围误标为已激活
+      Logger.warn(LOG_TAG, 'activateMemoryNow | chapter failed'
+        + (result.error !== undefined ? ' err=' + result.error : ''));
+      return;
+    }
+    const boundary: number = await memoryService.getChapterBoundaryPosition(branchId, chatId);
+    await modeService.setActiveBoundary(chatId, boundary >= 0 ? boundary : -1);
+    this.notifyMemoryChanged();
+    this.refreshLorebookPinAsync(chatId, branchMessages);
+    this.refreshLorebookStickyAsync(chatId, branchMessages);
+  }
+
+  /**
+   * v51: 统计当前会话"待激活章节数"(已生成未激活)。
+   * 供 ChatPage 显示与自动归档阈值判定。
+   */
+  async getPendingChapterCount(): Promise<number> {
+    const memoryService: MemoryService | null = this.memoryService;
+    const modeService: ChatMemoryModeService | null = this.chatMemoryModeService;
+    const chatId: string | undefined = this.currentChatId;
+    if (memoryService === null || modeService === null) {
+      return 0;
+    }
+    if (chatId === undefined || chatId.length === 0) {
+      return 0;
+    }
+    if (this.activeBranchId.length === 0) {
+      return 0;
+    }
+    const stored: number | undefined = await modeService.getActiveBoundary(chatId);
+    const boundary: number = stored === undefined ? -1 : stored;
+    return await memoryService.countPendingChapters(this.activeBranchId, boundary);
   }
 
   /**
@@ -334,19 +421,32 @@ export class ChatContextMaintenanceService {
     const memoryService: MemoryService = this.memoryService;
     if (this.chatMemoryModeService !== null) {
       // v50: 会话级记忆模式——'auto' 自动章节归档(不回退 rolling 覆盖,保缓存)
+      // v51: 延迟激活——未激活章节累积达阈值时整体激活一次(冷重建),
+      //      否则仅生成章节(写库但不进 prompt,前缀不变,缓存保持命中)
       const modeService: ChatMemoryModeService = this.chatMemoryModeService;
       modeService.getMemoryMode(chatId)
         .then((mode: ChatMemoryMode): Promise<void> => {
           if (mode !== 'auto') {
             return Promise.resolve();
           }
-          // v51: 先构建聊天请求基座(缓存友好:总结请求前缀与聊天请求逐字节一致)
-          return this.host.buildSummaryBaseMessages()
-            .then((base: ChatMessage[] | undefined): Promise<MemorySummaryResult> => {
-              return memoryService.tryAutoChapterMemory(chatId, branchId, branchMessages, base);
+          return modeService.getActiveBoundary(chatId)
+            .then((stored: number | undefined): Promise<number> => {
+              const boundary: number = stored === undefined ? -1 : stored;
+              return memoryService.countPendingChapters(branchId, boundary);
             })
-            .then((result: MemorySummaryResult): void => {
-              this.handleBackgroundMemoryResult(result);
+            .then((pending: number): Promise<void> => {
+              if (pending >= AUTO_ACTIVATE_PENDING_CHAPTERS) {
+                this.activateMemoryNow();
+                return Promise.resolve();
+              }
+              // 仅生成:先构建聊天请求基座(缓存友好,总结请求前缀与聊天请求一致)
+              return this.host.buildSummaryBaseMessages()
+                .then((base: ChatMessage[] | undefined): Promise<MemorySummaryResult> => {
+                  return memoryService.tryAutoChapterMemory(chatId, branchId, branchMessages, base);
+                })
+                .then((result: MemorySummaryResult): void => {
+                  this.handleBackgroundMemoryResult(result);
+                });
             });
         })
         .catch((e: Object): void => {

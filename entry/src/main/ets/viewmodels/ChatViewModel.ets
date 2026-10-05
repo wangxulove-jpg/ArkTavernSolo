@@ -1322,8 +1322,19 @@ export class ChatViewModel {
     }
   }
 
+  /** v51: 手动"生成章节摘要"(仅生成,不影响当前对话与缓存)。 */
   triggerManualMemorySummary(): void {
     this.chatService.triggerManualMemorySummary();
+  }
+
+  /** v51: 激活记忆归档(生成未归档章节 + 推进激活边界 + 核心记忆 + 钉选刷新)。 */
+  activateMemoryNow(): void {
+    this.chatService.activateMemoryNow();
+  }
+
+  /** v51: 当前会话待激活章节数。 */
+  async getPendingChapterCount(): Promise<number> {
+    return await this.chatService.getPendingChapterCount();
   }
 
   setMemoryAutoSummaryEnabled(enabled: boolean): void {

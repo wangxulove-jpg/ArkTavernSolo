@@ -214,13 +214,16 @@ export class MemoryService {
    *        其他会话细节通过"会话记忆 + 按需加载"串联。默认 '' 不启用(章节为空)。
    * @param chapterInjectCount v50: 会话级"注入最近章节数"覆盖(1-20)。
    *        未传(0)时使用 chapterConfig.recentChapterInjectCount 默认值。
+   * @param activeBoundary v51: 记忆"激活边界"。>=0 时只注入 endPosition <= activeBoundary 的章节
+   *        (延迟激活:未激活章节仍写库但不进 prompt,保持前缀稳定以命中缓存);-1 不过滤(现状)。
    * @returns 多层记忆注入上下文(全空时 enabled=false)
    */
   async getMultiLayerInjectionContext(
     branchId: string,
     worldId: string = '',
     currentChatId: string = '',
-    chapterInjectCount: number = 0
+    chapterInjectCount: number = 0,
+    activeBoundary: number = -1
   ): Promise<MultiLayerMemoryInjection> {
     const injectCount: number = chapterInjectCount > 0
       ? chapterInjectCount : this.chapterConfig.recentChapterInjectCount;
@@ -242,6 +245,10 @@ export class MemoryService {
 
       for (let i = 0; i < allValid.length; i++) {
         const m: ChatMemory = allValid[i];
+        // v51: 延迟激活——未激活章节(endPosition > activeBoundary)不进 prompt,也不参与锚点范围统计
+        if (m.memoryType === 'chapter' && activeBoundary >= 0 && m.endPosition > activeBoundary) {
+          continue;
+        }
         switch (m.memoryType) {
           case 'core':
             core.push(m);
@@ -297,8 +304,10 @@ export class MemoryService {
         finalSession = await this.resolveWorldSessionMemories(worldId);
 
         // v46: 章节只注入本会话的最近 N 章(会话隔离,不再回退"全世界章节")
+        // v51: 延迟激活——只取已激活章节(endPosition <= activeBoundary)
         const ownChapters: ChatMemory[] = worldChapters.filter(
           (m: ChatMemory): boolean => m.chatId === currentChatId
+            && (activeBoundary < 0 || m.endPosition <= activeBoundary)
         );
         finalChapter = ownChapters.slice(0, injectCount);
       }
@@ -390,6 +399,31 @@ export class MemoryService {
     } catch (e) {
       Logger.warn(LOG_TAG, 'getChapterBoundaryPosition failed: ' + String(e));
       return -1;
+    }
+  }
+
+  /**
+   * v51: 统计"已生成但未激活"的章节数(endPosition > activeBoundary)。
+   * 供自动归档模式的后备激活阈值判定:未激活章节累积到阈值即整体激活一次(缓存冷重建)。
+   */
+  async countPendingChapters(branchId: string, activeBoundary: number): Promise<number> {
+    if (branchId.length === 0) {
+      return 0;
+    }
+    try {
+      const chapters: ChatMemory[] = await this.memoryPersistence.listValidByBranchAndType(
+        branchId, 'chapter'
+      );
+      let count: number = 0;
+      for (let i = 0; i < chapters.length; i++) {
+        if (chapters[i].endPosition > activeBoundary) {
+          count++;
+        }
+      }
+      return count;
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'countPendingChapters failed: ' + String(e));
+      return 0;
     }
   }
 
@@ -628,9 +662,9 @@ export class MemoryService {
     const chapterResult: MemorySummaryResult = await this.generateChapterMemory(
       chatId, branchId, branchMessages, basePromptMessages
     );
-    if (chapterResult.success) {
-      this.triggerCoreMemoryUpdateAsync(chatId, branchId, branchMessages);
-    }
+    // v51: 延迟激活——章节生成后不再立即更新核心记忆(核心记忆位于 head 最高位,
+    // 每次更新都会打碎其后全部前缀缓存)。核心记忆更新统一推迟到"激活"时刻,
+    // 与章节注入、锚点前移同批发生,一次冷重建。
     return chapterResult;
   }
 

@@ -431,6 +431,10 @@ export class ChatRequestBuilder {
     // v8.3 Phase 2: 同时取得 memoryEndPosition 用于 RecentMessageSelector 去重
     let memoryLayers: MemoryLayersInjection | undefined = undefined;
     let memoryEndPosition: number = -1;
+    // v51: 记忆"激活边界"(延迟激活)。>=0 时只注入 endPosition <= activeBoundary 的章节,
+    // 窗口锚点也停在激活边界 → 新生成的章节不改变 prompt 前缀,聊天缓存保持命中。
+    // -1 表示未启用(无会话模式服务)或未初始化,回退现状(用实际章节边界)。
+    let activeBoundary: number = -1;
     if (this.memoryService !== null && this.activeBranchId.length > 0) {
       try {
         // v42: 传入当前 chat 的 worldId,世界分组内 core/chapter 跨会话共享
@@ -443,12 +447,27 @@ export class ChatRequestBuilder {
         if (this.chatMemoryModeService !== null && currentChatId.length > 0) {
           chapterInjectCount =
             await this.chatMemoryModeService.getChapterInjectCount(currentChatId);
+          // v51: 读取激活边界;未初始化时按当前实际章节边界初始化
+          // (存量会话保持现状;新会话无章节则为 -1,后续章节生成即"待激活")
+          const stored: number | undefined =
+            await this.chatMemoryModeService.getActiveBoundary(currentChatId);
+          if (stored === undefined) {
+            const initBoundary: number = await this.memoryService.getChapterBoundaryPosition(
+              this.activeBranchId, currentChatId
+            );
+            activeBoundary = initBoundary >= 0 ? initBoundary : -1;
+            this.chatMemoryModeService.setActiveBoundary(currentChatId, activeBoundary)
+              .then((): void => {}).catch((_e: Object): void => {});
+          } else {
+            activeBoundary = stored;
+          }
         }
         const multi = await this.memoryService.getMultiLayerInjectionContext(
           this.activeBranchId,
           this.currentChat !== null ? this.currentChat.worldId : '',
           currentChatId,
-          chapterInjectCount
+          chapterInjectCount,
+          activeBoundary
         );
         if (multi.enabled) {
           // v12: 使用分层注入
@@ -467,12 +486,14 @@ export class ChatRequestBuilder {
       }
     }
 
-    // v8.4: 窗口锚点改为"动态派生",由手动总结章节边界与保留条数实时计算。
-    // - anchor = 章节边界(chapterBoundary) - recentWindowTarget
-    //   => 窗口起点 = anchor + 1 = 章节边界往前 recentWindowTarget 条原文
-    // - 章节只由手动记忆总结追加,不被自动/滚动记忆扩展 => 边界稳定,窗口不滑动
-    // - 修改「记忆总结后保留条数」立即生效(无需重新手动总结)
-    // - 未手动总结过(无章节)或消息不足时 anchor<0 => 全部原文
+    // v8.4: 窗口锚点改为"动态派生",由记忆归档边界与保留条数实时计算。
+    // - anchor = 边界(boundary) - recentWindowTarget
+    //   => 窗口起点 = anchor + 1 = 边界往前 recentWindowTarget 条原文
+    // - v51: 边界取"激活边界"(延迟激活):未激活章节不注入,其原文仍留在窗口内,信息不丢失;
+    //   未启用延迟激活时回退"实际章节边界"(现状)
+    // - 实际章节边界更小时 clamp(章节被删除/重新生成时自愈,防止锚点越过实际内容)
+    // - 修改「记忆总结后保留条数」立即生效(无需重新总结)
+    // - 无章节或消息不足时 anchor<0 => 全部原文
     // - 仅当记忆实际可用(memoryLayers 已加载)时才应用;防止记忆被清除/禁用后截断前缀
     let recentWindowTarget: number = DEFAULT_RECENT_WINDOW_TARGET;
     if (this.contextBudgetService !== null && this.currentChatId !== undefined
@@ -490,15 +511,23 @@ export class ChatRequestBuilder {
     if (memoryLayers !== undefined && this.memoryService !== null
       && this.activeBranchId.length > 0) {
       try {
-        const chapterBoundary: number =
+        const actualBoundary: number =
           await this.memoryService.getChapterBoundaryPosition(
             this.activeBranchId,
             this.currentChatId !== undefined ? this.currentChatId : ''
           );
-        const derivedAnchor: number = chapterBoundary - recentWindowTarget;
+        let effectiveBoundary: number = activeBoundary;
+        if (effectiveBoundary < 0) {
+          // 未启用延迟激活:回退实际章节边界(现状行为)
+          effectiveBoundary = actualBoundary;
+        } else if (actualBoundary >= 0 && effectiveBoundary > actualBoundary) {
+          effectiveBoundary = actualBoundary;
+        }
+        const derivedAnchor: number = effectiveBoundary - recentWindowTarget;
         memoryEndPosition = derivedAnchor >= 0 ? derivedAnchor : -1;
         Logger.info(LOG_TAG, 'buildRequestMessages | window anchor derived'
-          + ' chapterBoundary=' + chapterBoundary
+          + ' activeBoundary=' + activeBoundary
+          + ' actualBoundary=' + actualBoundary
           + ' recentWindowTarget=' + recentWindowTarget
           + ' anchor=' + memoryEndPosition);
       } catch (e) {

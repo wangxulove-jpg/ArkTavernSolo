@@ -131,6 +131,52 @@ export class ChatMemoryModeService {
   }
 
   /**
+   * v51: 读取会话记忆"激活边界"(已归档并被激活注入的最大消息 position)。
+   *
+   * 语义(延迟激活核心):
+   * - 返回 undefined 表示"未初始化"(首次运行新逻辑):调用方按当前实际章节边界初始化
+   * - 返回 -1 表示"已初始化且尚无已激活章节"（全文窗口,等价于未总结）
+   * - 返回 N>=0 表示 endPosition <= N 的章节已激活注入,窗口锚点也以此为界
+   *
+   * 未激活章节仍写库但不进 prompt、不移动锚点 → 聊天请求前缀保持稳定,缓存命中。
+   */
+  async getActiveBoundary(chatId: string): Promise<number | undefined> {
+    if (chatId.length === 0) {
+      return -1;
+    }
+    try {
+      const val: string = await this.preferences.getString(
+        this.buildKey(chatId, 'aboundary'), ''
+      );
+      if (val.length === 0) {
+        return undefined;
+      }
+      const parsed: number = parseInt(val, 10);
+      if (isNaN(parsed)) {
+        return undefined;
+      }
+      return parsed;
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'getActiveBoundary failed: ' + String(e));
+      return undefined;
+    }
+  }
+
+  /**
+   * v51: 设置会话记忆"激活边界"并持久化(激活流程调用)。
+   */
+  async setActiveBoundary(chatId: string, value: number): Promise<void> {
+    if (chatId.length === 0) {
+      return;
+    }
+    try {
+      await this.preferences.putString(this.buildKey(chatId, 'aboundary'), value.toString());
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'setActiveBoundary failed: ' + String(e));
+    }
+  }
+
+  /**
    * 删除指定 Chat 的全部记忆模式配置(删除聊天时调用)。
    */
   async deleteMemoryMode(chatId: string): Promise<void> {
@@ -140,6 +186,7 @@ export class ChatMemoryModeService {
     try {
       await this.preferences.delete(this.buildKey(chatId, 'mode'));
       await this.preferences.delete(this.buildKey(chatId, 'chapters'));
+      await this.preferences.delete(this.buildKey(chatId, 'aboundary'));
     } catch (e) {
       Logger.warn(LOG_TAG, 'deleteMemoryMode failed: ' + String(e));
     }

@@ -1183,9 +1183,24 @@ export class ChatService {
 
   // ===== 上下文维护(记忆总结 / 记忆失效 / 世界书激活刷新,实现已抽至 services/ChatContextMaintenanceService,P2-7) =====
 
-  /** Prompt Cache:手动触发记忆总结(强制生成章节并刷新世界书激活;委托 ChatContextMaintenanceService)。 */
+  /**
+   * v51: 手动"生成章节摘要"(仅生成,不改动当前对话与缓存;委托 ChatContextMaintenanceService)。
+   */
   triggerManualMemorySummary(): void {
     this.contextMaintenance.triggerManualMemorySummary();
+  }
+
+  /**
+   * v51: 激活记忆归档(生成未归档章节 + 推进激活边界 + 更新核心记忆 + 刷新钉选/粘滞;
+   * 委托 ChatContextMaintenanceService)。完成后 prompt 前缀一次性重建。
+   */
+  activateMemoryNow(): void {
+    this.contextMaintenance.activateMemoryNow();
+  }
+
+  /** v51: 当前会话待激活章节数(委托 ChatContextMaintenanceService)。 */
+  async getPendingChapterCount(): Promise<number> {
+    return await this.contextMaintenance.getPendingChapterCount();
   }
 
   /** 手动刷新世界书激活内容(按模式分派 Pin/Sticky;委托 ChatContextMaintenanceService)。 */
