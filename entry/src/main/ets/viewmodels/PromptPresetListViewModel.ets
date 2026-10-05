@@ -17,6 +17,8 @@ const LOG_TAG: string = 'PromptPresetListViewModel';
 export class PromptPresetListViewModel {
   presets: PromptPreset[] = [];
   selectedPresetIds: string[] = [];
+  /** v51: 预设 → 注入位置映射(本地偏好;用于列表"末尾"标签) */
+  presetPositions: Record<string, string> = {};
   isLoading: boolean = false;
   isOperating: boolean = false;
   errorMessage: string = '';
@@ -48,6 +50,8 @@ export class PromptPresetListViewModel {
     try {
       this.presets = await this.presetService.list();
       this.selectedPresetIds = await this.presetService.getSelectedPresetIds();
+      // v51: 注入位置(本地偏好)
+      this.presetPositions = await this.presetService.getPresetPositions();
     } catch (e) {
       this.errorMessage = '加载预设列表失败';
       Logger.error(LOG_TAG, 'refresh failed: ' + String(e));
@@ -203,6 +207,11 @@ export class PromptPresetListViewModel {
 
   isSelected(id: string): boolean {
     return this.selectedPresetIds.indexOf(id) >= 0;
+  }
+
+  /** v51: 该预设是否注入到末尾(对话之后)。 */
+  isTail(id: string): boolean {
+    return this.presetPositions[id] === 'tail';
   }
 
   getSelectedCount(): number {

@@ -82,6 +82,26 @@ export interface PromptPresetUpdates {
   readonly clearContextWindow?: boolean;
 }
 
+// ===== 注入位置(本地偏好,不属于 PromptPreset 实体) =====
+
+/**
+ * 预设注入位置。
+ * - 'head': 注入到请求最前(现状默认)
+ * - 'tail': 注入到聊天历史之后(PostHistory 位置),用于约束输出格式/风格/语气
+ *
+ * 说明:位置存本地 Preferences(见 storage/PromptPresetSelectionStore),
+ * 不是 PromptPreset 的持久化字段,故本接口不增 position。
+ */
+export type PromptPresetPosition = 'head' | 'tail';
+
+/** 默认注入位置(与历史行为一致:最前)。 */
+export const DEFAULT_PRESET_POSITION: PromptPresetPosition = 'head';
+
+/** 判断字符串是否为合法注入位置。 */
+export function isPromptPresetPosition(value: string): boolean {
+  return value === 'head' || value === 'tail';
+}
+
 // ===== 工厂函数 =====
 
 /**

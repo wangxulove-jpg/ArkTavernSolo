@@ -21,6 +21,7 @@
  */
 
 import { PromptPresetEditViewModel, PromptPresetEditFormState, emptyFormState, copyFormState, parsePresetEditRouteParam } from '../viewmodels/PromptPresetEditViewModel';
+import { PromptPresetPosition } from '../models/PromptPreset';
 import { AppServices } from '../services/AppServices';
 import { router } from '@kit.ArkUI';
 import { Logger } from '../utils/Logger';
@@ -212,6 +213,16 @@ struct PromptPresetEditPage {
         .width('100%')
         .height(120)
         .maxLength(10000)
+
+      // 4. 注入位置(v51):开头(默认) / 末尾
+      this.fieldLabel('注入位置')
+      Column() {
+        this.positionOption('开头', '注入到请求最前(默认)', 'head', false)
+        this.positionOption('末尾', '注入到对话之后,适合约束输出格式/风格/语气', 'tail', true)
+      }
+      .width('100%')
+      .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+      .borderRadius(8)
     }
     .width('100%')
     .padding(16)
@@ -413,6 +424,61 @@ struct PromptPresetEditPage {
     }
 
     this.isSaving = false;
+  }
+
+  /**
+   * v51: 注入位置选项行。
+   * 选中态在 Builder 体内直接读 `this.formState.position`(不通过参数传状态,避免不刷新)。
+   * @param value 本行对应的位置值
+   * @param showDivider 是否在行顶画分隔线(第二行传 true)
+   */
+  @Builder
+  positionOption(label: string, desc: string, value: PromptPresetPosition, showDivider: boolean) {
+    Column() {
+      if (showDivider) {
+        Divider()
+          .color(ThemePalette.dividerColor(this.effectiveTheme))
+          .margin({ left: 12, right: 12 })
+      }
+      Row() {
+        Column() {
+          Text(label)
+            .fontSize(14)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .width('100%')
+          Text(desc)
+            .fontSize(11)
+            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+            .width('100%')
+            .margin({ top: 2 })
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        if (this.formState.position === value) {
+          Text('✓')
+            .fontSize(16)
+            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+            .margin({ left: 8 })
+        }
+      }
+      .width('100%')
+      .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+      .alignItems(VerticalAlign.Center)
+    }
+    .width('100%')
+    .onClick(() => {
+      this.selectPresetPosition(value);
+    })
+  }
+
+  /** v51: 选择注入位置(不可变替换 formState 触发刷新)。 */
+  private selectPresetPosition(value: PromptPresetPosition): void {
+    const updated: PromptPresetEditFormState = copyFormState(this.formState);
+    updated.position = value;
+    this.formState = updated;
   }
 
   @Builder

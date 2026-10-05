@@ -6,6 +6,7 @@
  * - 已选 Preset 集合管理(多选)
  * - 删除 Preset 时自动从已选集合移除
  * - 不存在的已选 Preset 自动剔除
+ * - v51: 预设注入位置读写(本地偏好 head/tail,不进数据库)
  *
  * 不负责:
  * - ChatService / PromptBuilder / Provider 请求参数接入(T-6.1B)
@@ -25,9 +26,12 @@ import {
   PromptPreset,
   CreatePromptPresetOptions,
   PromptPresetUpdates,
+  PromptPresetPosition,
+  DEFAULT_PRESET_POSITION,
   createPromptPreset,
   updatePromptPreset,
-  validatePromptPreset
+  validatePromptPreset,
+  isPromptPresetPosition
 } from '../models/PromptPreset';
 import { ParsedPromptPresetImport } from '../parser/PromptPresetImportParser';
 import { DatabaseError } from '../models/DatabaseError';
@@ -85,6 +89,48 @@ export class PromptPresetService {
 
     // 从已选集合中移除被删除的 Preset
     await this.removeSelectedPresetId(id);
+    // v51: 同步清理该预设的注入位置记录(本地偏好)
+    await this.selectionStore.removePosition(id);
+  }
+
+  // ===== v51: 预设注入位置(本地偏好,不进数据库) =====
+
+  /** 读取单个预设的注入位置(未设置 / 异常 → 默认 head)。 */
+  async getPresetPosition(id: string): Promise<PromptPresetPosition> {
+    if (id.length === 0) {
+      return DEFAULT_PRESET_POSITION;
+    }
+    try {
+      const positions: Record<string, string> = await this.selectionStore.getPositions();
+      const value: string = positions[id];
+      return value === 'tail' ? 'tail' : DEFAULT_PRESET_POSITION;
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'getPresetPosition failed: ' + String(e));
+      return DEFAULT_PRESET_POSITION;
+    }
+  }
+
+  /** 设置单个预设的注入位置(非法值忽略)。 */
+  async setPresetPosition(id: string, position: PromptPresetPosition): Promise<void> {
+    if (!isPromptPresetPosition(position)) {
+      return;
+    }
+    await this.selectionStore.setPosition(id, position);
+  }
+
+  /** 读取全部预设的位置映射(presetId → head/tail;供请求构建 / 列表页)。 */
+  async getPresetPositions(): Promise<Record<string, PromptPresetPosition>> {
+    const result: Record<string, PromptPresetPosition> = {};
+    try {
+      const raw: Record<string, string> = await this.selectionStore.getPositions();
+      const keys: string[] = Object.keys(raw);
+      for (let i = 0; i < keys.length; i++) {
+        result[keys[i]] = raw[keys[i]] === 'tail' ? 'tail' : 'head';
+      }
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'getPresetPositions failed: ' + String(e));
+    }
+    return result;
   }
 
   async getSelectedPresetIds(): Promise<string[]> {

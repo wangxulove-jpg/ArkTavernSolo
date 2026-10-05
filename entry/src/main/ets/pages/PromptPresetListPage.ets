@@ -263,6 +263,16 @@ struct PromptPresetListPage {
             .padding({ left: 6, right: 6, top: 2, bottom: 2 })
             .margin({ left: 8 })
         }
+
+        if (this.viewModel.isTail(preset.id)) {
+          Text('末尾')
+            .fontSize(11)
+            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+            .borderRadius(4)
+            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+            .margin({ left: 8 })
+        }
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)

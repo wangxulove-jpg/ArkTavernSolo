@@ -86,6 +86,11 @@ export interface PromptBuildContext {
   /** Preset 附加 System Prompt(可选,已宏替换后的内容) */
   presetSystemPrompt?: string;
   /**
+   * v51: 位置为 tail 的 Preset 附加 System Prompt(可选)。
+   * 注入到聊天历史之后(PostHistory 位置),用于约束输出格式/风格/语气。
+   */
+  presetTailSystemPrompt?: string;
+  /**
    * 长期记忆摘要(可选,非空时作为 System 消息插入到 DialogueExamples 与 Conversation 之间)。
    * 调用方负责取得当前 Branch 的有效摘要文本。
    * v12: 若 memoryLayers 提供,此字段被忽略(优先使用分层注入)。
@@ -484,6 +489,23 @@ export class PromptBuilder {
           segments.push(postSeg);
         }
       }
+    }
+
+    // 6.1 v51: 末尾预设(注入位置 = tail)——放在聊天历史之后,用于约束输出格式/风格/语气。
+    // 与角色卡 postHistoryInstructions 同位置;priority -1 使其排在其后(更靠近请求末尾)。
+    // 体量小、内容稳定,按产品要求不做额外缓存处理。
+    if (context.presetTailSystemPrompt !== undefined
+      && context.presetTailSystemPrompt.trim().length > 0) {
+      const presetTailSeg: PromptSegment = createPromptSegment(
+        'preset-system-tail',
+        PromptSegmentPosition.PostHistory,
+        ChatRole.System,
+        context.presetTailSystemPrompt,
+        -1,
+        ChatMessageSource.PromptPresetSystem,
+        '提示词预设(末尾)'
+      );
+      segments.push(presetTailSeg);
     }
 
     // 排序:position → priority

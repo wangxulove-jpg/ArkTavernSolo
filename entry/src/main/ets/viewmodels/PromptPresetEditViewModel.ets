@@ -8,7 +8,7 @@
  * 每次初始化根据 presetId 重新加载,支持切换 Preset 编辑。
  */
 
-import { PromptPreset } from '../models/PromptPreset';
+import { PromptPreset, PromptPresetPosition, DEFAULT_PRESET_POSITION } from '../models/PromptPreset';
 import { PromptPresetService } from '../services/PromptPresetService';
 import { Logger } from '../utils/Logger';
 
@@ -20,6 +20,8 @@ export interface PromptPresetEditFormState {
   nameInput: string;
   descriptionInput: string;
   systemPromptInput: string;
+  /** v51: 注入位置(head=请求最前 / tail=对话之后,约束输出) */
+  position: PromptPresetPosition;
   overrideTemperature: boolean;
   temperatureInput: string;
   overrideTopP: boolean;
@@ -35,6 +37,7 @@ export function emptyFormState(): PromptPresetEditFormState {
     nameInput: '',
     descriptionInput: '',
     systemPromptInput: '',
+    position: DEFAULT_PRESET_POSITION,
     overrideTemperature: false,
     temperatureInput: '',
     overrideTopP: false,
@@ -51,6 +54,7 @@ export function copyFormState(state: PromptPresetEditFormState): PromptPresetEdi
     nameInput: state.nameInput,
     descriptionInput: state.descriptionInput,
     systemPromptInput: state.systemPromptInput,
+    position: state.position,
     overrideTemperature: state.overrideTemperature,
     temperatureInput: state.temperatureInput,
     overrideTopP: state.overrideTopP,
@@ -62,11 +66,15 @@ export function copyFormState(state: PromptPresetEditFormState): PromptPresetEdi
   };
 }
 
-function formStateFromPreset(preset: PromptPreset): PromptPresetEditFormState {
+function formStateFromPreset(
+  preset: PromptPreset,
+  position: PromptPresetPosition
+): PromptPresetEditFormState {
   return {
     nameInput: preset.name,
     descriptionInput: preset.description,
     systemPromptInput: preset.systemPrompt,
+    position: position,
     overrideTemperature: preset.temperature !== undefined,
     temperatureInput: preset.temperature !== undefined ? preset.temperature.toString() : '',
     overrideTopP: preset.topP !== undefined,
@@ -166,7 +174,10 @@ export class PromptPresetEditViewModel {
       try {
         const preset: PromptPreset | null = await this.presetService.getById(presetId);
         if (preset !== null) {
-          return formStateFromPreset(preset);
+          // v51: 注入位置存本地偏好,与实体分开读取
+          const position: PromptPresetPosition =
+            await this.presetService.getPresetPosition(presetId);
+          return formStateFromPreset(preset, position);
         }
       } catch (e) {
         Logger.error(LOG_TAG, 'form population failed');
@@ -285,6 +296,8 @@ export class PromptPresetEditViewModel {
           clearMaxOutputTokens: clearMaxOutputTokens,
           clearContextWindow: clearContextWindow
         });
+        // v51: 注入位置(本地偏好)
+        await this.presetService.setPresetPosition(this.editingPresetId, formState.position);
       } else {
         const created: PromptPreset = await this.presetService.create({
           name: name,
@@ -296,6 +309,8 @@ export class PromptPresetEditViewModel {
           contextWindow: contextWindow
         });
         await this.presetService.addSelectedPresetId(created.id);
+        // v51: 注入位置(本地偏好)
+        await this.presetService.setPresetPosition(created.id, formState.position);
       }
       return true;
     } catch (e) {

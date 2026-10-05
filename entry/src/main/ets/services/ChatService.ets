@@ -395,8 +395,8 @@ export class ChatService {
       resolveUserName: (): Promise<string> => this.resolveUserName(),
       createPresetRequestSnapshot: (): Promise<PromptPresetRequestSnapshot> =>
         this.createPresetRequestSnapshot(),
-      buildRequestMessages: (presetSystemPrompt?: string): Promise<ChatMessage[]> =>
-        this.buildRequestMessages(presetSystemPrompt),
+      buildRequestMessages: (presetSystemPrompt?: string, presetTailSystemPrompt?: string): Promise<ChatMessage[]> =>
+        this.buildRequestMessages(presetSystemPrompt, presetTailSystemPrompt),
       setState: (state: ChatState, callbacks: ChatServiceCallbacks | null): void => {
         this.setState(state, callbacks);
       },
@@ -1266,7 +1266,8 @@ export class ChatService {
     }
     try {
       const snapshot: PromptPresetRequestSnapshot = await this.createPresetRequestSnapshot();
-      this.lastBuiltRequestMessages = await this.buildRequestMessages(snapshot.presetSystemPrompt);
+      this.lastBuiltRequestMessages = await this.buildRequestMessages(
+        snapshot.presetSystemPrompt, snapshot.presetTailSystemPrompt);
       await this.updateRequestPlan(this.lastBuiltRequestMessages, snapshot.generationSettings);
     } catch (e) {
       Logger.warn(LOG_TAG, 'buildEstimateMessages failed: ' + String(e));
@@ -1534,7 +1535,8 @@ export class ChatService {
         ? assistantId : undefined;
     let requestMessages: ChatMessage[];
     try {
-      requestMessages = await this.buildRequestMessages(snapshot.presetSystemPrompt, excludeId);
+      requestMessages = await this.buildRequestMessages(
+        snapshot.presetSystemPrompt, snapshot.presetTailSystemPrompt, excludeId);
     } catch (e) {
       this.clearStartTimer();
       handleStartFailure(String(e));
@@ -1710,13 +1712,15 @@ export class ChatService {
    * 构建请求消息列表(通过 PromptBuilder 统一构建;实现已抽至 services/ChatRequestBuilder)。
    *
    * @param presetSystemPrompt Preset 附加 System Prompt(可选,已宏替换)
+   * @param presetTailSystemPrompt v51: 位置为 tail 的 Preset 附加 System Prompt(注入对话之后)
    * @param excludeMessageId 排除的消息 id(候选生成时使用;可选)
    */
   private async buildRequestMessages(
     presetSystemPrompt?: string,
+    presetTailSystemPrompt?: string,
     excludeMessageId?: string
   ): Promise<ChatMessage[]> {
-    return this.requestBuilder.build(presetSystemPrompt, excludeMessageId);
+    return this.requestBuilder.build(presetSystemPrompt, presetTailSystemPrompt, excludeMessageId);
   }
 
 

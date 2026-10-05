@@ -46,7 +46,7 @@ import { buildStickyReminderText, pickHotStickyNames, STICKY_REMINDER_MAX_ITEMS 
 import { ModelService } from './ModelService';
 import { PromptPresetService } from './PromptPresetService';
 import { ProviderConfig } from '../models/ProviderConfig';
-import { PromptPreset } from '../models/PromptPreset';
+import { PromptPreset, PromptPresetPosition } from '../models/PromptPreset';
 import {
   PromptPresetRequestSnapshot,
   EffectiveGenerationSettings,
@@ -146,8 +146,9 @@ export class ChatRequestBuilder {
   }
 
   /** 构建请求消息列表(入口;等价原 ChatService.buildRequestMessages) */
-  async build(presetSystemPrompt?: string, excludeMessageId?: string): Promise<ChatMessage[]> {
-    return this.buildRequestMessages(presetSystemPrompt, excludeMessageId);
+  async build(presetSystemPrompt?: string, presetTailSystemPrompt?: string,
+    excludeMessageId?: string): Promise<ChatMessage[]> {
+    return this.buildRequestMessages(presetSystemPrompt, presetTailSystemPrompt, excludeMessageId);
   }
 
   // ===== 请求级 Preset 快照(P2-12:自 ChatService 抽离,逐字搬出) =====
@@ -227,7 +228,16 @@ export class ChatRequestBuilder {
       throw new Error('无法读取当前提示词预设，请重试');
     }
 
-    return createSnapshotWithPresets(presets, settings);
+    // v51: 读取预设注入位置(本地偏好;失败不阻塞请求,全部按 head 处理)
+    let positions: Record<string, PromptPresetPosition> = {};
+    try {
+      positions = await this.promptPresetService.getPresetPositions();
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'createPresetRequestSnapshot getPresetPositions failed: '
+        + (e instanceof Error ? e.message : String(e)));
+    }
+
+    return createSnapshotWithPresets(presets, settings, positions);
   }
 
 
@@ -302,9 +312,11 @@ export class ChatRequestBuilder {
    * - character.characterBookId:加载关联 Lorebook 作为 characterBook 参与匹配
    *
    * @param presetSystemPrompt Preset 附加 System Prompt(可选,已宏替换)
+   * @param presetTailSystemPrompt v51: 位置为 tail 的 Preset 附加 System Prompt(注入对话之后)
    */
   private async buildRequestMessages(
     presetSystemPrompt?: string,
+    presetTailSystemPrompt?: string,
     excludeMessageId?: string
   ): Promise<ChatMessage[]> {
     // Phase 4D-9: 诊断日志,确认 presetSystemPrompt 是否传入 PromptBuilder
@@ -614,6 +626,8 @@ export class ChatRequestBuilder {
       messages: conversationMessages,
       macroContext: macroContext,
       presetSystemPrompt: presetSystemPrompt,
+      // v51: 末尾预设(位置=tail),注入到聊天历史之后,用于约束输出
+      presetTailSystemPrompt: presetTailSystemPrompt,
       // v12: 优先使用分层注入;memoryLayers 为 undefined 时 PromptBuilder 回退到 memorySummary(此处不传)
       memoryLayers: memoryLayers,
       // 角色绑定书的激活方式兜底(书级 FollowGlobal 遗留数据时用全局默认) + 深度注入位置

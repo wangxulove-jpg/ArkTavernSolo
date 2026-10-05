@@ -129,8 +129,8 @@ export interface ChatOneShotHost {
   resolveUserName: () => Promise<string>;
   /** 创建预设请求快照(与主线发送一致,保持缓存前缀稳定) */
   createPresetRequestSnapshot: () => Promise<PromptPresetRequestSnapshot>;
-  /** 构建请求消息列表(实现已抽至 ChatRequestBuilder) */
-  buildRequestMessages: (presetSystemPrompt?: string) => Promise<ChatMessage[]>;
+  /** 构建请求消息列表(实现已抽至 ChatRequestBuilder;v51: 第二参为末尾预设) */
+  buildRequestMessages: (presetSystemPrompt?: string, presetTailSystemPrompt?: string) => Promise<ChatMessage[]>;
   /** 设置聊天状态(宿主内做 disposed 判定与去重) */
   setState: (state: ChatState, callbacks: ChatServiceCallbacks | null) => void;
   /** 通知消息列表变更 */
@@ -224,8 +224,9 @@ export class ChatOneShotGenerator {
     return this.host.createPresetRequestSnapshot();
   }
 
-  private buildRequestMessages(presetSystemPrompt?: string): Promise<ChatMessage[]> {
-    return this.host.buildRequestMessages(presetSystemPrompt);
+  private buildRequestMessages(presetSystemPrompt?: string,
+    presetTailSystemPrompt?: string): Promise<ChatMessage[]> {
+    return this.host.buildRequestMessages(presetSystemPrompt, presetTailSystemPrompt);
   }
 
   private setState(state: ChatState, callbacks: ChatServiceCallbacks | null): void {
@@ -667,7 +668,8 @@ export class ChatOneShotGenerator {
       // 1. 构建完整上下文(稳定前缀,命中主线缓存)
       const snapshot: PromptPresetRequestSnapshot = await this.createPresetRequestSnapshot();
       const baseMessages: ChatMessage[] =
-        await this.buildRequestMessages(snapshot.presetSystemPrompt);
+        await this.buildRequestMessages(
+          snapshot.presetSystemPrompt, snapshot.presetTailSystemPrompt);
 
       const config: ProviderConfig | null = await this.modelService.getCurrentConfig();
       if (config === null) {

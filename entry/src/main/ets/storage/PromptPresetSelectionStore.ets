@@ -14,10 +14,13 @@
 
 import { AppPreferences } from './AppPreferences';
 import { Logger } from '../utils/Logger';
+import { isPromptPresetPosition } from '../models/PromptPreset';
 
 const LOG_TAG: string = 'PromptPresetSelectionStore';
 const KEY_SELECTED_PRESET_IDS: string = 'selected_prompt_preset_ids_v1';
 const KEY_LEGACY_CURRENT_PRESET_ID: string = 'current_prompt_preset_id_v1';
+/** v51: 预设 → 注入位置映射(presetId → 'head'|'tail') */
+const KEY_PRESET_POSITIONS: string = 'prompt_preset_positions_v1';
 
 export class PromptPresetSelectionStore {
   private readonly prefs: AppPreferences;
@@ -75,6 +78,96 @@ export class PromptPresetSelectionStore {
     this.requireInit();
     await this.prefs.putString(KEY_SELECTED_PRESET_IDS, '');
     await this.prefs.putString(KEY_LEGACY_CURRENT_PRESET_ID, '');
+  }
+
+  // ===== v51: 预设注入位置(本地偏好,与"是否选中"无关) =====
+
+  /**
+   * 读取"预设 → 注入位置"映射(presetId → 'head'|'tail')。
+   * 解析失败或值非法时丢弃该项(调用方按默认 head 处理)。
+   */
+  async getPositions(): Promise<Record<string, string>> {
+    this.requireInit();
+    let raw: string;
+    try {
+      raw = await this.prefs.getString(KEY_PRESET_POSITIONS, '');
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'getPositions failed: ' + String(e));
+      return {};
+    }
+    return this.parsePositions(raw);
+  }
+
+  /**
+   * 设置单个预设的注入位置(位置值非法或 id 为空则忽略)。
+   */
+  async setPosition(presetId: string, position: string): Promise<void> {
+    this.requireInit();
+    if (presetId.length === 0 || !isPromptPresetPosition(position)) {
+      return;
+    }
+    try {
+      const current: Record<string, string> = await this.getPositions();
+      current[presetId] = position;
+      await this.prefs.putString(KEY_PRESET_POSITIONS, JSON.stringify(current));
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'setPosition failed: ' + String(e));
+    }
+  }
+
+  /**
+   * 移除单个预设的注入位置记录(删除预设时调用)。
+   */
+  async removePosition(presetId: string): Promise<void> {
+    this.requireInit();
+    if (presetId.length === 0) {
+      return;
+    }
+    try {
+      const current: Record<string, string> = await this.getPositions();
+      const keys: string[] = Object.keys(current);
+      const next: Record<string, string> = {};
+      let changed: boolean = false;
+      for (let i = 0; i < keys.length; i++) {
+        if (keys[i] === presetId) {
+          changed = true;
+          continue;
+        }
+        next[keys[i]] = current[keys[i]];
+      }
+      if (changed) {
+        await this.prefs.putString(KEY_PRESET_POSITIONS, JSON.stringify(next));
+      }
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'removePosition failed: ' + String(e));
+    }
+  }
+
+  /** 解析位置映射 JSON;非法项丢弃。 */
+  private parsePositions(raw: string): Record<string, string> {
+    const result: Record<string, string> = {};
+    if (raw.length === 0) {
+      return result;
+    }
+    let parsed: Object;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (e) {
+      return result;
+    }
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return result;
+    }
+    const record: Record<string, Object> = parsed as Record<string, Object>;
+    const keys: string[] = Object.keys(record);
+    for (let i = 0; i < keys.length; i++) {
+      const key: string = keys[i];
+      const value: Object = record[key];
+      if (key.length > 0 && typeof value === 'string' && isPromptPresetPosition(value as string)) {
+        result[key] = value as string;
+      }
+    }
+    return result;
   }
 
   private parseIdList(raw: string): string[] {

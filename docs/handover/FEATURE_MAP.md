@@ -49,7 +49,7 @@ bridge/：仅承载「页面 ↔ 组件」的宿主契约（例：FrontendCardHo
 | 世界书面板（聊天页状态/世界书浮层） | `viewmodels/LorebookPanelVM.ets` + `components/ChatStatusWorldPanel.ets` | 类型 `models/LorebookPanel.ets` | VM |
 | 世界书按需锁定 / 粘滞命中 | `services/LorebookPinService.ets` / `LorebookStickyService.ets` | `repositories/ChatLorebook{Pin,Sticky}Repository` | S→Repo |
 | AI 世界书（修改/提取） | `services/ai/AiLorebookService.ets` | `models/LorebookAiTypes` | S |
-| 提示词预设 | `pages/PromptPreset{List,Edit}Page.ets` | `viewmodels/PromptPreset{List,Edit}ViewModel` → `services/PromptPresetService` → `repositories/PromptPresetRepository` | UI→VM→S→Repo |
+| 提示词预设（注入位置：开头/末尾；位置存本地偏好，不进数据库） | `pages/PromptPreset{List,Edit}Page.ets` | `viewmodels/PromptPreset{List,Edit}ViewModel` → `services/PromptPresetService` → `repositories/PromptPresetRepository` / `storage/PromptPresetSelectionStore`（已选集合 + 注入位置） | UI→VM→S→Repo |
 | **多层记忆 / 记忆管理** | `services/MemoryService.ets`（触发/生成/CRUD） | `MemoryPromptBuilder`（提示词）/ `WorldMemoryStore`（世界手工记忆+召回）/ `MemoryTriggerPolicy`（阈值+归档边界）/ `MemoryLoadRefService`（按需加载）/ `ChapterMemoryIndexer`（实体索引） | S |
 | 记忆管理页 / 世界记忆页 | `pages/MemoryManagementPage.ets` / `pages/WorldMemory{Page,DetailPage}.ets` / `WorldChapterListPage.ets` | `viewmodels/{MemoryManagement,WorldMemory}ViewModel` | UI→VM |
 | 上下文预算 | `pages/ContextBudgetPage.ets` | `viewmodels/ContextBudgetViewModel` → `services/ContextBudgetService` / `Estimator` / `SnapshotStore` | UI→VM→S |

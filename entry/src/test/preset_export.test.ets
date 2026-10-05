@@ -1,16 +1,32 @@
 /**
- * 提示词预设导出格式测试
+ * 提示词预设导出格式 + 注入位置(v51)测试
  *
  * 验证 buildPromptPresetExportJson:
  * - 导出 JSON 可被 parsePromptPresetImport 读回,字段一致(round-trip)
  * - undefined 可选数字字段不写入 JSON
  * - 不导出 id/createdAt/updatedAt(导入时重新生成)
  * - 空列表导出为空数组
+ *
+ * 验证注入位置(v51,纯函数,无 Preferences 依赖):
+ * - isPromptPresetPosition 仅接受 head/tail
+ * - createSnapshotWithPresets 按位置拆分 head/tail(缺省 positions 时全 head = 旧行为)
+ * - createSnapshotWithoutPreset 的 presetTailSystemPrompt 为 undefined
  */
 
 import { describe, it, expect } from '@ohos/hypium';
 import { buildPromptPresetExportJson, parsePromptPresetImport } from '../main/ets/parser/PromptPresetImportParser';
-import { PromptPreset } from '../main/ets/models/PromptPreset';
+import {
+  PromptPreset,
+  PromptPresetPosition,
+  DEFAULT_PRESET_POSITION,
+  isPromptPresetPosition
+} from '../main/ets/models/PromptPreset';
+import {
+  PromptPresetRequestSnapshot,
+  EffectiveGenerationSettings,
+  createSnapshotWithPresets,
+  createSnapshotWithoutPreset
+} from '../main/ets/services/PromptPresetRuntimeResolver';
 
 /** 全字段预设(name/description/systemPrompt + 4 个数字参数)。直接构造字面量,不走 createPromptPreset(host 侧无 crypto API)。 */
 function makeFullPreset(): PromptPreset {
@@ -86,4 +102,60 @@ export default function presetExportTest() {
       expect(json).assertEqual('[]');
     });
   });
+
+  describe('PresetPosition', () => {
+    it('position_values_validated', 0, () => {
+      expect(DEFAULT_PRESET_POSITION).assertEqual('head');
+      expect(isPromptPresetPosition('head')).assertTrue();
+      expect(isPromptPresetPosition('tail')).assertTrue();
+      expect(isPromptPresetPosition('middle')).assertFalse();
+      expect(isPromptPresetPosition('')).assertFalse();
+    });
+
+    it('snapshot_without_positions_keeps_legacy_behavior', 0, () => {
+      // positions 缺省 → 全部按 head(与改动前逐字一致)
+      const presets: PromptPreset[] = [
+        makePresetWithPrompt('p1', 'AAA'),
+        makePresetWithPrompt('p2', 'BBB')
+      ];
+      const settings: EffectiveGenerationSettings = {};
+      const snap: PromptPresetRequestSnapshot = createSnapshotWithPresets(presets, settings);
+      expect(snap.presetSystemPrompt).assertEqual('AAA\n\nBBB');
+      expect(snap.presetTailSystemPrompt).assertUndefined();
+    });
+
+    it('snapshot_splits_head_and_tail', 0, () => {
+      const presets: PromptPreset[] = [
+        makePresetWithPrompt('p1', 'AAA'),
+        makePresetWithPrompt('p2', 'BBB'),
+        makePresetWithPrompt('p3', 'CCC')
+      ];
+      const positions: Record<string, PromptPresetPosition> = {};
+      positions['p2'] = 'tail';
+      const settings: EffectiveGenerationSettings = {};
+      const snap: PromptPresetRequestSnapshot = createSnapshotWithPresets(presets, settings, positions);
+      // 顺序保持选择顺序;tail 段只进 presetTailSystemPrompt
+      expect(snap.presetSystemPrompt).assertEqual('AAA\n\nCCC');
+      expect(snap.presetTailSystemPrompt).assertEqual('BBB');
+    });
+
+    it('snapshot_without_preset_has_no_tail', 0, () => {
+      const settings: EffectiveGenerationSettings = {};
+      const snap: PromptPresetRequestSnapshot = createSnapshotWithoutPreset(settings);
+      expect(snap.presetSystemPrompt).assertUndefined();
+      expect(snap.presetTailSystemPrompt).assertUndefined();
+    });
+  });
+}
+
+/** 仅需 id + systemPrompt 的最小预设(注入位置测试用) */
+function makePresetWithPrompt(id: string, systemPrompt: string): PromptPreset {
+  return {
+    id: id,
+    name: id,
+    description: '',
+    systemPrompt: systemPrompt,
+    createdAt: 100,
+    updatedAt: 100
+  };
 }

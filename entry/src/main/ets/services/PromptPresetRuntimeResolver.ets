@@ -18,7 +18,7 @@
  * - 返回新对象
  */
 
-import { PromptPreset } from '../models/PromptPreset';
+import { PromptPreset, PromptPresetPosition } from '../models/PromptPreset';
 
 /**
  * 单次请求的显式运行时覆盖参数。
@@ -49,7 +49,13 @@ export interface EffectiveGenerationSettings {
  */
 export interface PromptPresetRequestSnapshot {
   readonly presetId?: string;
+  /** 位置为 head 的已选预设合并后的附加 System Prompt(注入请求最前) */
   readonly presetSystemPrompt?: string;
+  /**
+   * v51: 位置为 tail 的已选预设合并后的附加 System Prompt。
+   * 注入到聊天历史之后(PostHistory 位置),用于约束输出格式/风格/语气。
+   */
+  readonly presetTailSystemPrompt?: string;
   readonly generationSettings: EffectiveGenerationSettings;
 }
 
@@ -183,32 +189,50 @@ export function createSnapshotWithoutPreset(
   return {
     presetId: undefined,
     presetSystemPrompt: undefined,
+    presetTailSystemPrompt: undefined,
     generationSettings: settings
   };
 }
 
 /**
  * 从多个已选 Preset 和合并后的参数创建请求快照。
- * 多个 Preset 的 systemPrompt 按选择顺序以空行拼接。
+ *
+ * v51: 按注入位置拆分——
+ * - 位置为 head(默认)的预设 systemPrompt 按选择顺序以空行拼接 → presetSystemPrompt
+ * - 位置为 tail 的预设 systemPrompt 按选择顺序以空行拼接 → presetTailSystemPrompt
+ * positions 缺省(undefined)时全部按 head 处理(与历史行为一致)。
+ *
  * @param presets 已选 Preset 列表
  * @param settings 合并后的生成参数
+ * @param positions 预设 → 注入位置映射(可选)
  * @returns 快照
  */
 export function createSnapshotWithPresets(
   presets: PromptPreset[],
-  settings: EffectiveGenerationSettings
+  settings: EffectiveGenerationSettings,
+  positions?: Record<string, PromptPresetPosition>
 ): PromptPresetRequestSnapshot {
-  const parts: string[] = [];
+  const headParts: string[] = [];
+  const tailParts: string[] = [];
   for (let i = 0; i < presets.length; i++) {
-    const sp: string = presets[i].systemPrompt.trim();
-    if (sp.length > 0) {
-      parts.push(sp);
+    const preset: PromptPreset = presets[i];
+    const sp: string = preset.systemPrompt.trim();
+    if (sp.length === 0) {
+      continue;
+    }
+    const isTail: boolean = positions !== undefined && positions[preset.id] === 'tail';
+    if (isTail) {
+      tailParts.push(sp);
+    } else {
+      headParts.push(sp);
     }
   }
-  const combined: string = parts.join('\n\n');
+  const headCombined: string = headParts.join('\n\n');
+  const tailCombined: string = tailParts.join('\n\n');
   return {
     presetId: undefined,
-    presetSystemPrompt: combined.length > 0 ? combined : undefined,
+    presetSystemPrompt: headCombined.length > 0 ? headCombined : undefined,
+    presetTailSystemPrompt: tailCombined.length > 0 ? tailCombined : undefined,
     generationSettings: settings
   };
 }
