@@ -43,6 +43,7 @@
 | P-29 | 把居中模态弹框改成 `bindSheet` 上滑面板后**没有上滑动画**（仍旧直接出现） | `bindSheet` 的开关若在**节点首次挂载时就为 true**，面板会直接出现、没有进场过渡。必须**两段式**：外层 `if (showXxx)` 挂载一个 0 高节点 → 该节点 `onAppear` 里把 `sheetShow` 置真 → 由 `false→true` 触发上滑。**关闭时只置 `sheetShow = false`**，再由 `bindSheet.onDisappear` 去置 `showXxx = false` 卸载，这样才有下滑动画。范式见 `components/ChatMoreMenuSheet.ets`、`ChatPage` 的 `memoryModeSheetContent` / `userNameSheetContent` / `personaSheetContent` / `chapterSheetContent` |
 | P-84 | 在解析管线里只"插入新 pass"就以为新增了一种片段类型（自定义符号片段）→ **后续 pass（对白/动作）仍把它当 `styleType='normal'` 拆开重建，打上的标记在重建时丢失，功能整体不生效**（2026-10-01 单测暴露：3 条用例 `symbolRuleId` 全为空，真机表现为"改了符号颜色没反应"） | 片段一旦"定型"就必须让**所有后续 pass 原样透传**：本仓用 `colorRole==='symbol'` 作标志（`isSymbolSegment`），在 `applyCustomSymbols`（防第二条规则覆盖第一条）、`applyDialogue`、`applyParenthetical` 三处提前 `continue`。新增任何"给片段打标"的 pass，都要沿管线排查后续重建点——`splitByPattern` 的**未命中分支也会 `createSegment(前缀)` 重建**，不只是命中分支 |
 | P-85 | 把"动态颜色"固化进片段数据（`seg.symbolColor`），改色后**消息内不刷新** | `ForEach`/`Span` 按 key 复用，**key 不变则不重建 item，参数化数据不会自行更新**（`ChatRichText` 的 Span key 只含"文本长度"；`ChatAppearancePanel` 早有同类注释）。做法：① 颜色等动态值**在渲染时读 `@State`/`@Prop`**（`getSegmentColor` 按 `symbolRuleId` 查 `symbolRules`），不读片段内固化值；② 规则的**新增/删除**会改变片段的规则绑定，属结构性变化 → 把绑定 id **加进 Span key** 触发重建；③ 只改色**不进 key**（颜色走状态刷新），避免整条消息重排 |
+| P-89 | `@Builder` **按值传参的状态**不驱动刷新：记忆模式面板把 `this.memoryModeIsAuto` 当 `selected` 参数传给通用 `sheetChoiceRow`，点"自动归档"后 `@State` 已变、保存也能存进去，但 ✓ 标记不动 → 用户以为"切换无效"（2026-10-05 v51 实测） | 状态**不要经 @Builder 参数传递**：让 Builder **体内直接读 `@State`/`@Prop`**，参数只留静态文案/语义标志。修复见 `ChatPage.memoryModeRow`（判断 `isManual === !this.memoryModeIsAuto` 在 Builder 体内求值） |
 
 ## 2b. 聊天消息列表滚动
 
@@ -111,6 +112,7 @@
 | P-63 | 自定义存储键 | 统一 `arktavern_solo` 前缀 |
 | P-64 | 把 `$r()` 颜色缓存进变量 | **不缓存**；颜色一律 `$r('app.color.*')`（并做 dark 覆盖） |
 | P-65 | `LazyForEach` 用 index 当 key | keyGenerator **必须用业务唯一 id**；复用组件在 `aboutToReuse` 重置视觉状态 |
+| P-90 | 记忆总结请求**独立拼装 prompt** → 与聊天请求前缀不同 → LLM prompt cache **全量 miss**（60k 输入全额计费）；且每章落库后**立即**注入 head + 立即更新核心记忆（位于 head 最高位，其后全部作废）+ 立即前移窗口锚点 → 每个归档周期一次全量冷重建（自动归档下每 50 条/2 万字符一次） | ① 总结请求 = **聊天请求基座逐字节复用 + 末尾追加总结指令**（"后缀扩展"）：`ChatContextMaintenanceService` 经 `buildSummaryBaseMessages` 取 `ChatService` 重建后的 `lastBuiltRequestMessages`，`MemoryPromptBuilder.buildChapterSuffixInstruction` 生成尾部指令；无基座时回退独立 prompt。② **延迟激活**：会话级"激活边界"`activeBoundary`（`ChatMemoryModeService`，Preferences，key `chat_memory_<id>_aboundary`）——章节生成只写库，注入只取 `endPosition <= activeBoundary`、锚点也停在激活边界（实际边界更小时 clamp 自愈）；仅在手动"立即归档"或自动归档待激活达 4 章时推进边界（一次冷重建）。参考 commit `99f2469` / `d4f91a0` / `11eb2b0` |
 
 ## 7. 文档与协作
 
