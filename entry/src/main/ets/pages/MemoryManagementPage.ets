@@ -672,13 +672,16 @@ struct MemoryManagementPage {
 
       Row() {
         Column() {
-          Text('自动总结')
+          Text('自动总结(全局默认)')
             .fontSize(13)
             .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-          Text(this.memoryAutoSummary ? '每次回复后自动生成' : '手动触发,有利于缓存')
+          Text(this.memoryAutoSummary
+            ? '仅作用于未在对话内单独设置记忆模式的会话'
+            : '仅作用于未在对话内单独设置记忆模式的会话(当前默认手动,有利于缓存)')
             .fontSize(11)
             .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
             .margin({ top: 2 })
+            .maxLines(2)
         }
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)

@@ -145,6 +145,12 @@ struct ChatPage {
   @State memoryModeChapterCount: number = 4;
   /** v50: 当前会话记忆模式显示文本(供 ChatMoreMenuSheet 展示) */
   @State memoryModeText: string = '手动总结';
+  /** v51: 当前会话待激活章节数(已生成未激活,供记忆模式面板展示) */
+  @State memoryPendingChapters: number = 0;
+  /** v51: 记忆总结/激活进行中(由 ChatContextMaintenanceService 写入 AppStorage) */
+  @StorageProp('memorySummaryRunning') memorySummaryRunning: boolean = false;
+  /** v51: 记忆总结最近结果(''|'success'|'failed');@Watch 弹 Toast 后复位以便连续触发 */
+  @StorageProp('memorySummaryLastResult') @Watch('onMemorySummaryResultChanged') memorySummaryLastResult: string = '';
   /** v9: 对话称呼输入草稿(对话框中使用) */
   @State userNameOverrideDraft: string = '';
   /** v9: 当前生效的用户称呼(供 ChatMoreMenuSheet 展示) */
@@ -3259,6 +3265,51 @@ struct ChatPage {
   // ===== v50: 记忆模式选择对话框 =====
 
   /**
+   * v51: 记忆总结结果 Toast(由 AppStorage 驱动;弹完复位以便连续触发)。
+   */
+  onMemorySummaryResultChanged(): void {
+    const result: string = this.memorySummaryLastResult;
+    if (result === 'success') {
+      promptAction.showToast({ message: '记忆总结完成', duration: 1500 });
+    } else if (result === 'failed') {
+      promptAction.showToast({ message: '记忆总结失败,请重试', duration: 2000 });
+    } else {
+      return;
+    }
+    // 复位,保证下一次相同结果仍能触发 @Watch
+    AppStorage.setOrCreate<string>('memorySummaryLastResult', '');
+  }
+
+  /** v51: 刷新待激活章节数(面板打开 / 记忆变更后调用)。 */
+  private async refreshPendingChapterCount(): Promise<void> {
+    if (this.viewModel === null) {
+      this.memoryPendingChapters = 0;
+      return;
+    }
+    try {
+      this.memoryPendingChapters = await this.viewModel!.getPendingChapterCount();
+    } catch (_e) {
+      this.memoryPendingChapters = 0;
+    }
+  }
+
+  /** v51: 生成章节摘要(仅生成,不改动当前对话与缓存)。 */
+  private generateMemorySummary(): void {
+    if (this.viewModel === null) {
+      return;
+    }
+    this.viewModel!.triggerManualMemorySummary();
+  }
+
+  /** v51: 立即归档(生成未归档章节 + 推进激活边界 + 更新核心记忆,一次前缀冷重建)。 */
+  private activateMemoryNow(): void {
+    if (this.viewModel === null) {
+      return;
+    }
+    this.viewModel!.activateMemoryNow();
+  }
+
+  /**
    * 打开记忆模式选择对话框:读取当前会话的记忆模式与章节注入数到草稿。
    */
   private async openMemoryModeDialog(): Promise<void> {
@@ -3269,10 +3320,12 @@ struct ChatPage {
       const mode: ChatMemoryMode = await this.viewModel!.getMemoryMode();
       this.memoryModeIsAuto = mode === 'auto';
       this.memoryModeChapterCount = await this.viewModel!.getChapterInjectCount();
+      this.memoryPendingChapters = await this.viewModel!.getPendingChapterCount();
     } catch (_e) {
       // 读取失败用默认值打开
       this.memoryModeIsAuto = false;
       this.memoryModeChapterCount = 4;
+      this.memoryPendingChapters = 0;
     }
     this.memoryModeSheetShow = false;
     this.showMemoryModeDialog = true;
@@ -3290,8 +3343,11 @@ struct ChatPage {
       await this.viewModel!.setMemoryMode(this.memoryModeIsAuto ? 'auto' : 'manual');
       await this.viewModel!.setChapterInjectCount(this.memoryModeChapterCount);
       await this.refreshMemoryModeDisplay();
+      promptAction.showToast({
+        message: this.memoryModeIsAuto ? '已切换为自动归档' : '已切换为手动总结', duration: 1500
+      });
     } catch (_e) {
-      // 失败时只关闭面板,不阻塞后续操作
+      promptAction.showToast({ message: '保存失败,请重试', duration: 2000 });
     }
     this.memoryModeSheetShow = false;
   }
@@ -3323,14 +3379,10 @@ struct ChatPage {
 
       this.sheetSectionCaption('模式')
       Column() {
-        this.sheetChoiceRow('手动总结', '在记忆管理页手动生成章节摘要,完全可控',
-          !this.memoryModeIsAuto, false, (): void => {
-            this.memoryModeIsAuto = false;
-          })
-        this.sheetChoiceRow('自动归档', '未归档满 50 条或 2 万字符时,回复完成后自动生成',
-          this.memoryModeIsAuto, true, (): void => {
-            this.memoryModeIsAuto = true;
-          })
+        this.memoryModeRow('手动总结', '完全手动:用下方"生成章节摘要"生成,自行决定何时归档',
+          true, false)
+        this.memoryModeRow('自动归档', '未归档满 50 条或 2 万字符时自动生成;待归档累积 4 章后整体归档',
+          false, true)
       }
       .width('100%')
       .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
@@ -3368,6 +3420,22 @@ struct ChatPage {
       .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
       .borderRadius($r('app.float.app_radius_md'))
 
+      this.sheetSectionCaption('记忆操作')
+      Column() {
+        this.memoryActionRow('生成章节摘要', '只生成并保存,不改动当前对话与缓存',
+          this.memoryPendingChapters > 0 ? ('待归档 ' + this.memoryPendingChapters) : '生成',
+          false, false, (): void => {
+            this.generateMemorySummary();
+          })
+        this.memoryActionRow('立即归档', '补生成未归档章节并使其生效(本章结束后仅此一次缓存重建)',
+          '立即归档', this.memoryPendingChapters <= 0, true, (): void => {
+            this.activateMemoryNow();
+          })
+      }
+      .width('100%')
+      .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+      .borderRadius($r('app.float.app_radius_md'))
+
       Button('保存')
         .fontSize($r('app.float.app_font_body'))
         .fontWeight(FontWeight.Medium)
@@ -3383,6 +3451,115 @@ struct ChatPage {
     }
     .width('100%')
     .padding({ left: 12, right: 12, bottom: 8 })
+  }
+
+  /**
+   * v51: 记忆模式选择行(勾选标记在 Builder 体内直接读 @State,修复 @Builder 按值传参不刷新)。
+   * @param isManual true=本行为"手动总结",false=本行为"自动归档"
+   */
+  @Builder
+  memoryModeRow(label: string, desc: string, isManual: boolean, showDivider: boolean) {
+    Column() {
+      if (showDivider) {
+        Divider()
+          .color(ThemePalette.dividerColor(this.effectiveTheme))
+          .margin({ left: 12, right: 12 })
+      }
+      Row() {
+        Column() {
+          Text(label)
+            .fontSize($r('app.float.app_font_body'))
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .width('100%')
+          if (desc.length > 0) {
+            Text(desc)
+              .fontSize($r('app.float.app_font_caption'))
+              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+              .width('100%')
+              .margin({ top: 2 })
+              .maxLines(2)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        if (isManual === !this.memoryModeIsAuto) {
+          Text('✓')
+            .fontSize(16)
+            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+            .margin({ left: 8 })
+        }
+      }
+      .width('100%')
+      .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+      .alignItems(VerticalAlign.Center)
+    }
+    .width('100%')
+    .onClick(() => {
+      this.memoryModeIsAuto = !isManual;
+    })
+  }
+
+  /**
+   * v51: 记忆操作行(生成章节摘要 / 立即归档)。
+   * 进行中显示进度环;disabled 时动作胶囊置灰且不响应点击。
+   */
+  @Builder
+  memoryActionRow(label: string, desc: string, actionText: string, disabled: boolean, showDivider: boolean,
+    onClick: () => void) {
+    Column() {
+      if (showDivider) {
+        Divider()
+          .color(ThemePalette.dividerColor(this.effectiveTheme))
+          .margin({ left: 12, right: 12 })
+      }
+      Row() {
+        Column() {
+          Text(label)
+            .fontSize($r('app.float.app_font_body'))
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .width('100%')
+          if (desc.length > 0) {
+            Text(desc)
+              .fontSize($r('app.float.app_font_caption'))
+              .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+              .width('100%')
+              .margin({ top: 2 })
+              .maxLines(2)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        if (this.memorySummaryRunning) {
+          LoadingProgress()
+            .width(18)
+            .height(18)
+            .color(ThemePalette.accentColor(this.effectiveTheme))
+        } else {
+          Text(actionText)
+            .fontSize($r('app.float.app_font_caption'))
+            .fontColor(disabled
+              ? ThemePalette.textTertiaryColor(this.effectiveTheme)
+              : ThemePalette.accentColor(this.effectiveTheme))
+            .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
+            .borderRadius($r('app.float.app_radius_sm'))
+            .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+        }
+      }
+      .width('100%')
+      .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+      .alignItems(VerticalAlign.Center)
+    }
+    .width('100%')
+    .onClick(() => {
+      if (disabled || this.memorySummaryRunning) {
+        return;
+      }
+      onClick();
+    })
   }
 
   /**
@@ -4494,6 +4671,8 @@ struct ChatPage {
    * 需失效估算缓存并重算。
    */
   onMemoryVersionChanged(): void {
+    // v51: 记忆变更(生成/激活)后刷新待激活章节数
+    void this.refreshPendingChapterCount();
     if (this.budgetViewModel === null || this.viewModel === null) {
       return;
     }

@@ -149,6 +149,7 @@ export class ChatContextMaintenanceService {
     }
     const branchId: string = this.activeBranchId;
     const branchMessages: ChatMessage[] = this.messages.slice();
+    this.markSummaryRunning();
     // v51: 先构建聊天请求基座(缓存友好:总结请求前缀与聊天请求逐字节一致)
     this.host.buildSummaryBaseMessages()
       .then((base: ChatMessage[] | undefined): Promise<MemorySummaryResult> => {
@@ -158,11 +159,14 @@ export class ChatContextMaintenanceService {
         if (!result.success) {
           Logger.warn(LOG_TAG, 'ManualMemorySummary | generate chapter failed'
             + (result.error !== undefined ? ' err=' + result.error : ''));
+          this.markSummaryResult('failed');
         } else {
+          this.markSummaryResult('success');
           this.notifyMemoryChanged();
         }
       })
       .catch((e: Object): void => {
+        this.markSummaryResult('failed');
         Logger.warn(LOG_TAG, 'ManualMemorySummary | generate exception: '
           + (e instanceof Error ? e.message : String(e)));
       });
@@ -193,6 +197,7 @@ export class ChatContextMaintenanceService {
     }
     const branchId: string = this.activeBranchId;
     const branchMessages: ChatMessage[] = this.messages.slice();
+    this.markSummaryRunning();
     this.host.buildSummaryBaseMessages()
       .then((base: ChatMessage[] | undefined): Promise<MemorySummaryResult> => {
         return memoryService.forceGenerateChapterMemory(chatId, branchId, branchMessages, base);
@@ -203,6 +208,7 @@ export class ChatContextMaintenanceService {
         );
       })
       .catch((e: Object): void => {
+        this.markSummaryResult('failed');
         Logger.warn(LOG_TAG, 'activateMemoryNow | exception: '
           + (e instanceof Error ? e.message : String(e)));
       });
@@ -221,10 +227,12 @@ export class ChatContextMaintenanceService {
       // 章节生成失败:不推进边界(保持现状),避免把未生成范围误标为已激活
       Logger.warn(LOG_TAG, 'activateMemoryNow | chapter failed'
         + (result.error !== undefined ? ' err=' + result.error : ''));
+      this.markSummaryResult('failed');
       return;
     }
     const boundary: number = await memoryService.getChapterBoundaryPosition(branchId, chatId);
     await modeService.setActiveBoundary(chatId, boundary >= 0 ? boundary : -1);
+    this.markSummaryResult('success');
     this.notifyMemoryChanged();
     this.refreshLorebookPinAsync(chatId, branchMessages);
     this.refreshLorebookStickyAsync(chatId, branchMessages);
@@ -387,6 +395,17 @@ export class ChatContextMaintenanceService {
   private notifyMemoryChanged(): void {
     const v: number = AppStorage.get<number>('chatMemoryVersion') ?? 0;
     AppStorage.setOrCreate<number>('chatMemoryVersion', v + 1);
+  }
+
+  /** v51: 标记记忆总结/激活进入运行态(供 ChatPage 显示进度环)。 */
+  private markSummaryRunning(): void {
+    AppStorage.setOrCreate<boolean>('memorySummaryRunning', true);
+  }
+
+  /** v51: 写入记忆总结/激活结果并结束运行态(供 ChatPage 弹 Toast)。 */
+  private markSummaryResult(result: string): void {
+    AppStorage.setOrCreate<boolean>('memorySummaryRunning', false);
+    AppStorage.setOrCreate<string>('memorySummaryLastResult', result);
   }
 
   /**
