@@ -63,6 +63,12 @@ export interface ChatContextHost {
   getCharacter: () => Character | null;
   /** 世界书全局默认激活方式 */
   getLorebookActivationDefault: () => LorebookActivationMode;
+  /**
+   * v51: 构建"聊天请求基座"消息(与聊天请求逐字节一致),用于记忆总结的"后缀扩展"。
+   * 返回 undefined 表示基座不可用(失败/无会话),调用方回退独立 prompt。
+   * 实现方需保证:重建后的消息与下一次聊天请求前缀一致,且不修改共享状态。
+   */
+  buildSummaryBaseMessages: () => Promise<ChatMessage[] | undefined>;
 }
 
 export class ChatContextMaintenanceService {
@@ -134,8 +140,12 @@ export class ChatContextMaintenanceService {
     const chatId: string = this.currentChatId;
     const branchId: string = this.activeBranchId;
     const branchMessages: ChatMessage[] = this.messages.slice();
-    // 不 await:后台执行,失败仅记录日志
-    this.memoryService.forceGenerateChapterMemory(chatId, branchId, branchMessages)
+    const memoryService: MemoryService = this.memoryService;
+    // v51: 先构建聊天请求基座(缓存友好:总结请求前缀与聊天请求逐字节一致)
+    this.host.buildSummaryBaseMessages()
+      .then((base: ChatMessage[] | undefined): Promise<MemorySummaryResult> => {
+        return memoryService.forceGenerateChapterMemory(chatId, branchId, branchMessages, base);
+      })
       .then((result: MemorySummaryResult): void => {
         if (!result.success) {
           Logger.warn(LOG_TAG, 'ManualMemorySummary | forced chapter failed'
@@ -330,8 +340,12 @@ export class ChatContextMaintenanceService {
           if (mode !== 'auto') {
             return Promise.resolve();
           }
-          return memoryService.tryAutoChapterMemory(chatId, branchId, branchMessages)
-            .then((result): void => {
+          // v51: 先构建聊天请求基座(缓存友好:总结请求前缀与聊天请求逐字节一致)
+          return this.host.buildSummaryBaseMessages()
+            .then((base: ChatMessage[] | undefined): Promise<MemorySummaryResult> => {
+              return memoryService.tryAutoChapterMemory(chatId, branchId, branchMessages, base);
+            })
+            .then((result: MemorySummaryResult): void => {
               this.handleBackgroundMemoryResult(result);
             });
         })

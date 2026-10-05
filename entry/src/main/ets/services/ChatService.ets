@@ -603,7 +603,8 @@ export class ChatService {
       getActiveBranchId: (): string => this.activeBranchId,
       getMessages: (): ChatMessage[] => this.messages,
       getCharacter: (): Character | null => this.character,
-      getLorebookActivationDefault: (): LorebookActivationMode => this.lorebookActivationDefault
+      getLorebookActivationDefault: (): LorebookActivationMode => this.lorebookActivationDefault,
+      buildSummaryBaseMessages: (): Promise<ChatMessage[] | undefined> => this.buildSummaryBaseForMemory()
     };
     this.contextMaintenance = new ChatContextMaintenanceService(contextDeps, contextHost);
     const sessionDeps: ChatSessionDeps = {
@@ -1263,6 +1264,31 @@ export class ChatService {
    */
   invalidateEstimateCache(): void {
     this.lastBuiltRequestMessages = undefined;
+  }
+
+  /**
+   * v51: 构建记忆总结用的"聊天请求基座"消息(与聊天请求逐字节一致,缓存友好)。
+   *
+   * 强制重建(先清估算缓存)以保证:
+   * - 包含刚完成的最后一条回复、无 swipe/重生成后的陈旧内容
+   * - 消息结构与下一次聊天请求完全一致 → 总结请求前缀完全命中 prompt cache
+   *
+   * 失败或无消息返回 undefined,调用方回退独立 prompt(不影响记忆功能可用性)。
+   */
+  private async buildSummaryBaseForMemory(): Promise<ChatMessage[] | undefined> {
+    try {
+      this.invalidateEstimateCache();
+      await this.buildEstimateMessages();
+      if (this.lastBuiltRequestMessages === undefined
+        || this.lastBuiltRequestMessages.length === 0) {
+        return undefined;
+      }
+      return this.lastBuiltRequestMessages;
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'buildSummaryBaseForMemory failed: '
+        + (e instanceof Error ? e.message : String(e)));
+      return undefined;
+    }
   }
 
   /**

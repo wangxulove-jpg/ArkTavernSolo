@@ -125,40 +125,43 @@ export class MemoryPromptBuilder {
   }
 
   /**
-   * v12: 构建章节生成提示词。
-   * 目标:生成 800-1500 字的结构化章节摘要。
-   * v46: 开头增加机器可解析的元数据行(参与者:/地点:/时间:),
-   * 供 ChapterMemoryIndexer 程序化构建实体索引,无需大模型重排。
+   * v51: 章节摘要的输出规范(三行元数据 + 四段重点结构 + 要求)。
+   * 供 buildChapterPrompt(独立 prompt)与 buildChapterSuffixInstruction(后缀扩展)共用,
+   * 保证两条路径产出格式完全一致。
+   * 元数据行(参与者:/地点:/时间:)为机器可解析契约,ChapterMemoryIndexer 依赖,不可改动格式。
+   */
+  buildChapterOutputSpec(): string {
+    return '输出的最前面必须是以下三行元数据(格式严格,一行一项,冒号后直接写内容,不要加 Markdown 符号):\n'
+      + '参与者: 人名1(身份), 人名2(身份)\n'
+      + '地点: 主要地点名称\n'
+      + '时间: 故事内时间(如:第三夜/次日清晨)\n\n'
+      + '元数据行之后,章节摘要必须包含以下四个小节(用 Markdown 标题分隔):\n'
+      + '## 关键事实与剧情\n'
+      + '按因果关系组织,只写对后续剧情有影响的事件、决策及其结果;可合并同类,不必按时间逐条流水账。'
+      + '保留可检索的具名信息(人名、地名、物品、组织)。\n\n'
+      + '## 角色状态与关系变化\n'
+      + '角色当前的情绪与处境状态;关系变化及其节点(如信任、亲近、戒备、疏远、称呼变化)。\n\n'
+      + '## 承诺、约定与新增设定\n'
+      + '新增的承诺、约定、秘密,以及新出现的设定事实。\n\n'
+      + '## 未解决事项与伏笔\n'
+      + '遗留的悬念、未解决问题、埋下的伏笔。\n\n'
+      + '要求:\n'
+      + '- 目标长度 ' + this.chapterConfig.chapterTargetLength + ' 字,不超过 ' + this.chapterConfig.chapterMaxLength + ' 字\n'
+      + '- 按重要性取舍,信息密度优先;只写"之后对话需要记住的"\n'
+      + '- 不复述原文对白,不写模型推理过程\n'
+      + '- 与已记录的章节摘要去重,不要重复已有内容\n'
+      + '- 只输出章节摘要本身,不要额外解释';
+  }
+
+  /**
+   * v12: 构建章节生成提示词(独立 prompt 路径:记忆管理页等无聊天上下文的场景)。
+   * v51: 输出结构改由 buildChapterOutputSpec 提供(四段重点结构替代原八段流水账分栏)。
+   * 开头保留机器可解析的元数据行,供 ChapterMemoryIndexer 程序化构建实体索引。
    */
   buildChapterPrompt(prevSummary: string, newMessages: ChatMessage[], customPrompt: string = ''): ChatMessage[] {
     const systemPrompt: string =
       '你是对话记忆助手。任务:为当前章节生成详细的结构化摘要。\n\n' +
-      '输出的最前面必须是以下三行元数据(格式严格,一行一项,冒号后直接写内容,不要加 Markdown 符号):\n' +
-      '参与者: 人名1(身份), 人名2(身份)\n' +
-      '地点: 主要地点名称\n' +
-      '时间: 故事内时间(如:第三夜/次日清晨)\n\n' +
-      '元数据行之后,章节摘要必须包含以下结构(用 Markdown 标题分隔):\n' +
-      '## 时间与地点\n' +
-      '简要描述本章节的时间范围和地点。\n\n' +
-      '## 参与者\n' +
-      '列出本章节参与的人物及其身份。\n\n' +
-      '## 关键事件\n' +
-      '按时间顺序列出本章节发生的关键事件,保留因果逻辑。\n\n' +
-      '## 重要对话含义\n' +
-      '记录关键对话的含义和潜台词(不复述原文)。\n\n' +
-      '## 决策与结果\n' +
-      '记录本章节中的重要决策及其直接结果。\n\n' +
-      '## 情绪与关系变化\n' +
-      '记录人物情绪变化和关系变化(如信任度、亲密度等)。\n\n' +
-      '## 新增秘密与约定\n' +
-      '记录本章节中新增的秘密、承诺、约定。\n\n' +
-      '## 未解决事项\n' +
-      '记录本章节遗留的悬念和未解决问题。\n\n' +
-      '要求:\n' +
-      '- 目标长度 ' + this.chapterConfig.chapterTargetLength + ' 字,不超过 ' + this.chapterConfig.chapterMaxLength + ' 字\n' +
-      '- 不复制大量原文\n' +
-      '- 保留关键因果和关系变化\n' +
-      '- 只输出章节摘要本身,不要额外解释' +
+      this.buildChapterOutputSpec() +
       (customPrompt.length > 0 ? '\n\n【用户指定的总结方向(优先遵循)】\n' + customPrompt : '') +
       this.buildJailbreakInstruction();
 
@@ -181,6 +184,61 @@ export class MemoryPromptBuilder {
         createdAt: 0
       }
     ];
+  }
+
+  /**
+   * v51: 构建章节总结的"后缀扩展"指令(单条 System 消息,追加在聊天请求消息末尾)。
+   *
+   * 缓存友好设计:调用方把本指令拼在"与聊天请求逐字节一致的 base 消息"之后,
+   * 使总结请求的前缀完全命中 LLM prompt cache,仅本指令与输出为新增计费部分。
+   *
+   * @param chunk 本章节(或本章节的某一段)待总结的消息,用于生成范围说明
+   * @param prevSummary 同段落的前序摘要(多段续写时保持连贯;无则空串)
+   * @param customPrompt 用户自定义总结方向(无则空串)
+   */
+  buildChapterSuffixInstruction(chunk: ChatMessage[], prevSummary: string = '',
+    customPrompt: string = ''): ChatMessage {
+    const systemPrompt: string =
+      '【记忆总结任务】\n' +
+      '请阅读以上完整对话,为"本章节"生成结构化章节摘要。\n' +
+      this.formatChunkRange(chunk) +
+      (prevSummary.length > 0
+        ? '【同段落前序摘要(用于保持连贯,严禁重复其内容)】\n' + prevSummary + '\n'
+        : '') +
+      '\n' + this.buildChapterOutputSpec() +
+      (customPrompt.length > 0 ? '\n\n【用户指定的总结方向(优先遵循)】\n' + customPrompt : '') +
+      this.buildJailbreakInstruction();
+
+    return {
+      id: 'memory-chapter-suffix',
+      role: ChatRole.System,
+      content: systemPrompt,
+      createdAt: 0
+    };
+  }
+
+  /**
+   * v51: 生成章节范围说明文本(首末消息的 role + 内容前若干字摘录)。
+   * 让模型明确本段总结范围,避免跨段遗漏或重复。
+   */
+  formatChunkRange(chunk: ChatMessage[]): string {
+    if (chunk.length === 0) {
+      return '本章节范围:以上全部对话。\n';
+    }
+    const first: string = this.snippet(chunk[0]);
+    const last: string = this.snippet(chunk[chunk.length - 1]);
+    return '本章节范围:从「' + first + '」到「' + last + '」。'
+      + '(此范围内的对话为本章节待总结内容;范围之前的对话已被已有章节摘要覆盖,'
+      + '仅作背景,严禁重复总结。)\n';
+  }
+
+  /** 单条消息的单行摘录(复用 formatMessages 的 role 标签,截断长内容)。 */
+  private snippet(msg: ChatMessage): string {
+    const line: string = this.formatMessages([msg]);
+    if (line.length === 0) {
+      return '(空)';
+    }
+    return line.length > 24 ? line.slice(0, 24) + '…' : line;
   }
 
   /**

@@ -615,7 +615,8 @@ export class MemoryService {
   async tryAutoChapterMemory(
     chatId: string,
     branchId: string,
-    branchMessages: ChatMessage[]
+    branchMessages: ChatMessage[],
+    basePromptMessages?: ChatMessage[]
   ): Promise<MemorySummaryResult> {
     if (branchMessages.length === 0) {
       return { success: true, memory: null };
@@ -625,7 +626,7 @@ export class MemoryService {
       return { success: true, memory: null };
     }
     const chapterResult: MemorySummaryResult = await this.generateChapterMemory(
-      chatId, branchId, branchMessages
+      chatId, branchId, branchMessages, basePromptMessages
     );
     if (chapterResult.success) {
       this.triggerCoreMemoryUpdateAsync(chatId, branchId, branchMessages);
@@ -650,12 +651,13 @@ export class MemoryService {
   async generateChapterMemory(
     chatId: string,
     branchId: string,
-    branchMessages: ChatMessage[]
+    branchMessages: ChatMessage[],
+    basePromptMessages?: ChatMessage[]
   ): Promise<MemorySummaryResult> {
     if (branchMessages.length === 0) {
       return { success: true, memory: null };
     }
-    return await this.doGenerateChapter(chatId, branchId, branchMessages);
+    return await this.doGenerateChapter(chatId, branchId, branchMessages, basePromptMessages);
   }
 
   /**
@@ -675,13 +677,14 @@ export class MemoryService {
   async forceGenerateChapterMemory(
     chatId: string,
     branchId: string,
-    branchMessages: ChatMessage[]
+    branchMessages: ChatMessage[],
+    basePromptMessages?: ChatMessage[]
   ): Promise<MemorySummaryResult> {
     if (branchMessages.length === 0) {
       return { success: true, memory: null };
     }
     const chapterResult: MemorySummaryResult =
-      await this.doGenerateChapter(chatId, branchId, branchMessages);
+      await this.doGenerateChapter(chatId, branchId, branchMessages, basePromptMessages);
     if (!chapterResult.success || chapterResult.memory === null) {
       // 章节失败或无新消息:不更新核心记忆
       return chapterResult;
@@ -716,7 +719,8 @@ export class MemoryService {
   private async doGenerateChapter(
     chatId: string,
     branchId: string,
-    branchMessages: ChatMessage[]
+    branchMessages: ChatMessage[],
+    basePromptMessages?: ChatMessage[]
   ): Promise<MemorySummaryResult> {
     try {
       // 找到最新 chapter/rolling 的 endPosition 作为章节起点(世界感知)
@@ -765,7 +769,14 @@ export class MemoryService {
         chunkOffset += chunk.length;
 
         // 构建章节生成提示词(前一段摘要作为 prevSummary,保持剧情连贯;v48: 支持自定义总结方向)
-        const chapterPrompt: ChatMessage[] = this.promptBuilder.buildChapterPrompt(prevSummary, chunk, customChapterPrompt);
+        // v51: 有聊天请求基座时走"后缀扩展"——前缀与聊天请求逐字节一致,缓存全命中,
+        //      仅末尾追加的总结指令未命中缓存;无基座(记忆管理页等)回退独立 prompt。
+        const chapterPrompt: ChatMessage[] =
+          (basePromptMessages !== undefined && basePromptMessages.length > 0)
+            ? basePromptMessages.concat([
+                this.promptBuilder.buildChapterSuffixInstruction(chunk, prevSummary, customChapterPrompt)
+              ])
+            : this.promptBuilder.buildChapterPrompt(prevSummary, chunk, customChapterPrompt);
 
         // 调用模型生成章节(v45: maxTokens 留足分段后的输出空间)
         const request: ChatRequest = {
