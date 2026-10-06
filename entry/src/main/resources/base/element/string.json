@@ -4335,6 +4335,82 @@
     {
       "name": "sync_nav_desc",
       "value": "通过坚果云 WebDAV 同步数据"
+    },
+    {
+      "name": "tab_settings_image_library",
+      "value": "本地图片库"
+    },
+    {
+      "name": "tab_settings_image_library_desc",
+      "value": "管理供 AI 回复引用的本地图片"
+    },
+    {
+      "name": "local_image_library_title",
+      "value": "本地图片库"
+    },
+    {
+      "name": "local_image_library_subtitle",
+      "value": "供 AI 回复引用的本地图片"
+    },
+    {
+      "name": "local_image_import",
+      "value": "导入图片"
+    },
+    {
+      "name": "local_image_loading",
+      "value": "加载中…"
+    },
+    {
+      "name": "local_image_empty_title",
+      "value": "还没有本地图片"
+    },
+    {
+      "name": "local_image_empty_desc",
+      "value": "导入图片后，AI 可用图片名字在回复中引用它们"
+    },
+    {
+      "name": "local_image_action_rename",
+      "value": "改名"
+    },
+    {
+      "name": "local_image_action_scope",
+      "value": "作用域"
+    },
+    {
+      "name": "local_image_action_delete",
+      "value": "删除"
+    },
+    {
+      "name": "local_image_scope_sheet_title",
+      "value": "选择作用域"
+    },
+    {
+      "name": "local_image_rename_sheet_title",
+      "value": "重命名图片"
+    },
+    {
+      "name": "local_image_rename_placeholder",
+      "value": "图片名(不含空格与括号等符号)"
+    },
+    {
+      "name": "local_image_confirm",
+      "value": "确定"
+    },
+    {
+      "name": "local_image_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "local_image_delete_title",
+      "value": "删除图片"
+    },
+    {
+      "name": "local_image_delete_message",
+      "value": "删除后无法恢复，确定继续吗？"
+    },
+    {
+      "name": "local_image_picker_failed",
+      "value": "打开图片选择器失败"
     }
   ]
 }

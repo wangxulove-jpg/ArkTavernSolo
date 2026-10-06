@@ -29,6 +29,7 @@
     "pages/SyncSettingsPage",
     "pages/TtsSettingsPage",
     "pages/EdgeTtsTestPage",
-    "pages/ContinueGuideSettingsPage"
+    "pages/ContinueGuideSettingsPage",
+    "pages/LocalImageLibraryPage"
   ]
 }

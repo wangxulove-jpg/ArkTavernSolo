@@ -27,6 +27,10 @@ import { ProviderKeyStore } from '../storage/ProviderKeyStore';
 import { CharacterStore } from '../storage/CharacterStore';
 import { CharacterSelectionStore } from '../storage/CharacterSelectionStore';
 import { CharacterAssetStore } from '../storage/CharacterAssetStore';
+import { Character } from '../models/Character';
+import { LocalImageAssetStore } from '../storage/LocalImageAssetStore';
+import { LocalImageRepository } from '../repositories/LocalImageRepository';
+import { LocalImageService } from './LocalImageService';
 import { LorebookStore } from '../storage/LorebookStore';
 import { LorebookSelectionStore } from '../storage/LorebookSelectionStore';
 import { CharacterService } from './CharacterService';
@@ -78,6 +82,7 @@ import { MarketImportService } from './market/MarketImportService';
 import { MarketTranslationService } from './market/MarketTranslationService';
 import { PromptPresetListViewModel } from '../viewmodels/PromptPresetListViewModel';
 import { PromptPresetEditViewModel } from '../viewmodels/PromptPresetEditViewModel';
+import { LocalImageLibraryViewModel } from '../viewmodels/LocalImageLibraryViewModel';
 import { ChatSessionListViewModel } from '../viewmodels/ChatSessionListViewModel';
 import { ChatTextStyleSettings } from '../utils/ChatTextStyleSettings';
 import { ChatArchiveService } from './ChatArchiveService';
@@ -164,6 +169,12 @@ export class AppServices {
   private readonly promptPresetSelectionStore: PromptPresetSelectionStore;
   /** PromptPresetService(不对页面公开,T-6.1B 接入 Chat 后暴露) */
   private readonly promptPresetService: PromptPresetService;
+  /** LocalImageRepository 本地图片库仓储(不对页面公开) */
+  private readonly localImageRepository: LocalImageRepository;
+  /** LocalImageAssetStore 本地图片文件存储(不对页面公开) */
+  private readonly localImageAssetStore: LocalImageAssetStore;
+  /** LocalImageService 本地图片库业务服务 */
+  private readonly localImageService: LocalImageService;
   /** ConversationBranchRepository 对话分支仓储(不对页面公开,T-6.4A) */
   private readonly conversationBranchRepository: ConversationBranchRepository;
   /** ConversationBranchPersistenceService 对话分支持久化服务(不对页面公开,T-6.4A) */
@@ -291,6 +302,22 @@ export class AppServices {
       this.promptPresetRepository,
       this.promptPresetSelectionStore
     );
+
+    // 本地图片库组装(需要 promptPresetService 维护受管"本地图片清单"预设)
+    this.localImageRepository = new LocalImageRepository(this.dbHelper);
+    this.localImageAssetStore = new LocalImageAssetStore();
+    this.localImageService = new LocalImageService(
+      this.localImageRepository,
+      this.localImageAssetStore,
+      this.promptPresetService,
+      (characterId: string): Promise<string> => {
+        // 角色名解析(角色已删除时返回空串,由服务回退为「角色已删除」标识)
+        return this.characterRepository.getById(characterId)
+          .then((character: Character | null): string => {
+            return character !== null ? character.name : '';
+          });
+      }
+    );
     const macroReplacer: MacroReplacer = new MacroReplacer();
     this.promptBuilder = new PromptBuilder(this.lorebookService, macroReplacer);
     this.tokenCounter = new TokenCounter();
@@ -407,6 +434,7 @@ export class AppServices {
       .then((): Promise<void> => services.lorebookService.initialize())
       .then((): Promise<void> => services.promptPresetService.initialize())
       .then((): Promise<void> => services.personaService.initialize())
+      .then((): Promise<void> => services.localImageService.initialize(context))
       .then((): void => {
         // 创建 ChatBackgroundService(需要已初始化的 appPreferences + appContext)
         if (services.appContext !== null) {
@@ -567,6 +595,13 @@ export class AppServices {
    */
   static getPromptPresetService(): PromptPresetService {
     return AppServices.getInstance().promptPresetService;
+  }
+
+  /**
+   * 获取 LocalImageService 实例(本地图片库 + 受管预设对账)。
+   */
+  static getLocalImageService(): LocalImageService {
+    return AppServices.getInstance().localImageService;
   }
 
   /**
@@ -741,6 +776,15 @@ export class AppServices {
   static createPromptPresetListViewModel(): PromptPresetListViewModel {
     const services: AppServices = AppServices.getInstance();
     return new PromptPresetListViewModel(services.promptPresetService);
+  }
+
+  /**
+   * 创建 LocalImageLibraryViewModel 实例(本地图片库页面)。
+   * 注入 LocalImageService(图片库业务)与 CharacterService(角色名解析)。
+   */
+  static createLocalImageLibraryViewModel(): LocalImageLibraryViewModel {
+    const services: AppServices = AppServices.getInstance();
+    return new LocalImageLibraryViewModel(services.localImageService, services.characterService);
   }
 
   /**

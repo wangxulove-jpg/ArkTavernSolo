@@ -54,6 +54,10 @@ export struct SettingsRootView {
                   $r('app.string.tab_settings_preset_desc'), true, (): void => {
                     router.pushUrl({ url: 'pages/PromptPresetListPage' });
                   })
+                this.entryRow($r('sys.symbol.square_grid_2x2'), $r('app.string.tab_settings_image_library'),
+                  $r('app.string.tab_settings_image_library_desc'), true, (): void => {
+                    router.pushUrl({ url: 'pages/LocalImageLibraryPage' });
+                  })
               }
               .width('100%')
               .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
