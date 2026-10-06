@@ -1011,12 +1011,17 @@ export interface TableChatRenderChunk {
   readonly rows: TableChunkRow[];
 }
 
-/** 图片分块(markdown ![](url) 或 <img src>;仅 https) */
+/** 图片分块(markdown ![](url) / <img src> / 本地图 ![alt](arkimg:名字)) */
 export interface ImageChatRenderChunk {
   readonly type: 'image';
   readonly id: string;
+  /** 远程图片 URL(kind==='remote' 时非空) */
   readonly url: string;
   readonly alt: string;
+  /** remote = 网络图片(https);local = 本地图片库(按 name 在渲染层解析) */
+  readonly kind: 'remote' | 'local';
+  /** 本地图片名(kind==='local' 时非空) */
+  readonly name: string;
 }
 
 /** 渲染分块联合 */
@@ -1193,10 +1198,18 @@ interface ImageHit {
   readonly end: number;
   readonly url: string;
   readonly alt: string;
+  readonly kind: 'remote' | 'local';
+  readonly name: string;
 }
 
 /** markdown 图片语法:![alt](https://...) */
 const MD_IMAGE_RE: RegExp = /!\[([^\]]*)\]\((https:\/\/[^)\s]+)\)/g;
+/**
+ * 本地图片语法:![alt](arkimg:名字)。
+ * 「名字」由用户在本地图片库自定义,渲染层按名字解析成沙箱文件 URI。
+ * 与 https 图片互不干扰(两者 URL 段形状不同),仍需在 sanitizeHtmlTags 之前抽取。
+ */
+const LOCAL_IMAGE_RE: RegExp = /!\[([^\]]*)\]\(arkimg:([^)\s]+)\)/g;
 /** HTML img 标签(属性顺序任意;src 是否 https 由抽取逻辑判断) */
 const IMG_TAG_RE: RegExp = /<img\b[^>]*>/gi;
 /** img 标签内 src 属性(双引号/单引号) */
@@ -1235,15 +1248,22 @@ function extractImageLinks(text: string): ImageExtraction {
   MD_IMAGE_RE.lastIndex = 0;
   let m: RegExpExecArray | null = MD_IMAGE_RE.exec(text);
   while (m !== null) {
-    hits.push({ start: m.index, end: m.index + m[0].length, url: m[2], alt: m[1] });
+    hits.push({ start: m.index, end: m.index + m[0].length, url: m[2], alt: m[1], kind: 'remote', name: '' });
     m = MD_IMAGE_RE.exec(text);
+  }
+  // 本地图片库语法 ![alt](arkimg:名字):只登记 name,URL 由渲染层按当前角色解析
+  LOCAL_IMAGE_RE.lastIndex = 0;
+  m = LOCAL_IMAGE_RE.exec(text);
+  while (m !== null) {
+    hits.push({ start: m.index, end: m.index + m[0].length, url: '', alt: m[1], kind: 'local', name: m[2] });
+    m = LOCAL_IMAGE_RE.exec(text);
   }
   IMG_TAG_RE.lastIndex = 0;
   m = IMG_TAG_RE.exec(text);
   while (m !== null) {
     const src: string = extractImgTagSrc(m[0]);
     if (src.startsWith('https://')) {
-      hits.push({ start: m.index, end: m.index + m[0].length, url: src, alt: extractImgTagAlt(m[0]) });
+      hits.push({ start: m.index, end: m.index + m[0].length, url: src, alt: extractImgTagAlt(m[0]), kind: 'remote', name: '' });
     }
     m = IMG_TAG_RE.exec(text);
   }
@@ -1260,7 +1280,14 @@ function extractImageLinks(text: string): ImageExtraction {
     }
     out.push(text.substring(cursor, h.start));
     out.push('\n' + IMG_PLACEHOLDER + blocks.length.toString() + IMG_PLACEHOLDER_END + '\n');
-    blocks.push({ type: 'image', id: 'img' + blocks.length.toString(), url: h.url, alt: h.alt });
+    blocks.push({
+      type: 'image',
+      id: 'img' + blocks.length.toString(),
+      url: h.url,
+      alt: h.alt,
+      kind: h.kind,
+      name: h.name
+    });
     cursor = h.end;
   }
   out.push(text.substring(cursor));

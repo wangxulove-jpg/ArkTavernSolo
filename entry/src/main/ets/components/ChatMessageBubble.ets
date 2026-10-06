@@ -79,6 +79,8 @@ export struct ChatMessageBubble {
    * 自定义符号配色规则(透传给 ChatRichText,@Prop 保证规则增删改后同步刷新)。
    */
   @Prop symbolRules: ChatSymbolColorRule[] = [];
+  /** 本地图片库解析映射(名字 → 沙箱 URI),透传给 ChatRichText */
+  @Prop localImages: Record<string, string> = {};
   /** 气泡背景不透明度(0.40~0.90,仅控制背景 Alpha,不影响文字/头像/按钮) */
   @Prop bubbleOpacity: number = 1.0;
   /** 当前是否为深色模式(用于动态计算气泡背景 RGB) */
@@ -160,6 +162,7 @@ export struct ChatMessageBubble {
           settings: this.settings,
           colorTheme: this.colorTheme,
           symbolRules: this.symbolRules,
+          localImages: this.localImages,
           selectable: true,
           onInteractiveAction: this.onInteractiveAction
         })
@@ -186,6 +189,7 @@ export struct ChatMessageBubble {
           settings: this.settings,
           colorTheme: this.colorTheme,
           symbolRules: this.symbolRules,
+          localImages: this.localImages,
           selectable: true,
           onInteractiveAction: this.onInteractiveAction
         })
@@ -255,6 +259,7 @@ export struct ChatMessageBubble {
             settings: this.settings,
             colorTheme: this.colorTheme,
             symbolRules: this.symbolRules,
+            localImages: this.localImages,
             selectable: true,
             onInteractiveAction: this.onInteractiveAction
           })
@@ -420,6 +425,7 @@ export struct ChatMessageBubble {
           settings: this.settings,
           colorTheme: this.colorTheme,
           symbolRules: this.symbolRules,
+          localImages: this.localImages,
           selectable: true,
           onInteractiveAction: this.onInteractiveAction
         })

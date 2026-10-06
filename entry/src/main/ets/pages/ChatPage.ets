@@ -262,6 +262,12 @@ struct ChatPage {
    * 与配色模式无关,所有模式下都生效;持久化到 Preferences。
    */
   @State chatSymbolRules: ChatSymbolColorRule[] = [];
+  /**
+   * 本地图片库解析映射(归一化名字 → 沙箱 file:// URI)。
+   * AI 回复正文里的 ![描述](arkimg:名字) 由此解析成实际文件;由页面加载后透传给消息组件
+   * (组件不得直接访问服务/数据库)。
+   */
+  @State localImages: Record<string, string> = {};
 
   /** 显示设置面板可见性(轻量卡片,非 Dialog) */
   @State chatAppearancePanelVisible: boolean = false;
@@ -502,6 +508,7 @@ struct ChatPage {
             this.refreshUserNameDisplay();
             this.refreshPersonaDisplay();
             this.refreshHasFrontend();
+            this.refreshLocalImages();
           })
           .catch((): void => {});
       } else {
@@ -510,6 +517,7 @@ struct ChatPage {
             this.refreshUserNameDisplay();
             this.refreshPersonaDisplay();
             this.refreshHasFrontend();
+            this.refreshLocalImages();
           })
           .catch((): void => {});
       }
@@ -522,12 +530,14 @@ struct ChatPage {
           this.refreshUserNameDisplay();
           this.refreshPersonaDisplay();
           this.refreshHasFrontend();
+          this.refreshLocalImages();
         })
         .catch((): void => {});
     } else {
       // 打开最近会话:等待会话加载完成后刷新前端页面入口状态
       vm.initialize().then((): void => {
         this.refreshHasFrontend();
+        this.refreshLocalImages();
       }).catch((): void => {});
       // 从当前角色加载头像
       this.loadCurrentCharacterAvatar();
@@ -1027,6 +1037,30 @@ struct ChatPage {
     }
     this.refreshBudgetSnapshot();
     this.loadTtsSettings();
+    // 从图片库页返回后同步最新映射
+    this.refreshLocalImages();
+  }
+
+  /**
+   * 加载本地图片库解析映射(归一化名字 → 沙箱 file:// URI)。
+   *
+   * 架构口径:组件(components/)不得访问服务/数据库,故解析在页面层完成,
+   * 结果经 @Prop 逐层透传到 ChatRichText。
+   * 失败不阻塞聊天(仅记日志),未命中名字的图片按「未找到图片」降级展示。
+   */
+  private refreshLocalImages(): void {
+    const rawId: string = this.character !== null ? this.character!.id : '';
+    const characterId: string | null = rawId.length > 0 ? rawId : null;
+    AppServices.whenReady()
+      .then((): Promise<Record<string, string>> => {
+        return AppServices.getLocalImageService().buildResolutionMap(characterId);
+      })
+      .then((map: Record<string, string>): void => {
+        this.localImages = map;
+      })
+      .catch((e: Error): void => {
+        Logger.warn(LOG_TAG, 'refreshLocalImages failed: ' + e.message);
+      });
   }
 
   onBackPress(): boolean {
@@ -1093,6 +1127,7 @@ struct ChatPage {
                 bubbleOpacity: this.chatBubbleOpacity,
                 colorTheme: this.getCurrentColorTheme(),
                 symbolRules: this.chatSymbolRules,
+                localImages: this.localImages,
                 chatTextStyle: this.chatTextStyle,
                 characterAvatarUri: this.character !== null ? this.character!.avatarUri : '',
                 characterName: this.viewModel !== null ? this.viewModel!.characterName : '',

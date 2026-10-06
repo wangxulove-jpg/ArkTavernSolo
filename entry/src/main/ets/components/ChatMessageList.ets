@@ -29,6 +29,8 @@ export struct ChatMessageList {
   @Prop colorTheme: ChatMarkdownColorTheme | null = null;
   /** 自定义符号配色规则(透传给气泡内富文本) */
   @Prop symbolRules: ChatSymbolColorRule[] = [];
+  /** 本地图片库解析映射(名字 → 沙箱 URI),透传给 ChatMessageBubble → ChatRichText */
+  @Prop localImages: Record<string, string> = {};
   /** 聊天文字样式设置 */
   @Prop chatTextStyle: ChatTextStyle | null = null;
   /** 角色头像 URI */
@@ -101,6 +103,7 @@ export struct ChatMessageList {
                 senderCharacterId: this.characterId,
                 colorTheme: this.colorTheme,
                 symbolRules: this.symbolRules,
+                localImages: this.localImages,
                 bubbleOpacity: this.bubbleOpacity,
                 isDarkMode: this.isDarkMode,
                 onInteractiveAction: (text: string): void => {

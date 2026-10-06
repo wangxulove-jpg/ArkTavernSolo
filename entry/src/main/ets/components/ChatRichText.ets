@@ -25,7 +25,7 @@
  *   })
  */
 
-import { ChatTextSegment, parseChatChunks, ChatRenderChunk, ChatTextParserOptions, TableChatRenderChunk, TableChunkRow } from '../parser/ChatTextParser';
+import { ChatTextSegment, parseChatChunks, ChatRenderChunk, ChatTextParserOptions, TableChatRenderChunk, TableChunkRow, ImageChatRenderChunk } from '../parser/ChatTextParser';
 import { getCharacterColor } from '../utils/ChatPalette';
 import { ChatTextStyle } from '../utils/ChatTextStyleSettings';
 import { CHAT_FONT_SYSTEM } from '../utils/ChatFontRegistry';
@@ -33,6 +33,7 @@ import { ChatMarkdownColorTheme, ChatSymbolColorRule } from '../utils/ChatTextCo
 import { ChatCollapsibleBlock } from './ChatCollapsibleBlock';
 import { ChatBranchBlock } from './ChatBranchBlock';
 import { ChatMessageImage } from './ChatMessageImage';
+import { normalizeImageName } from '../models/LocalImage';
 
 /** 发送者类型 */
 export type ChatSenderType = 'user' | 'assistant' | 'character' | 'narrator' | 'system';
@@ -78,6 +79,15 @@ export struct ChatRichText {
    * @Watch 触发重新解析,确保缓存 key 包含规则指纹。
    */
   @Prop @Watch('onSymbolRulesChange') symbolRules: ChatSymbolColorRule[] = [];
+  /**
+   * 本地图片库解析映射(归一化名字 → 沙箱 file:// URI)。
+   * 由 ChatPage 按当前角色加载后逐层透传;组件不碰服务/数据库(架构红线)。
+   *
+   * @Watch 只重跑「名字 → URI」解析映射,不重新解析文本(解析产物不含库信息)。
+   * 性能提示:@Prop 对对象做深拷贝(消息数 × 表项数)。图库规模小时无感;
+   * 若单库超过约 300 张或出现卡顿,应改成「@Prop version + 宿主回调解析」。
+   */
+  @Prop @Watch('onLocalImagesChange') localImages: Record<string, string> = {};
   /** 是否可选择(长按复制) */
   @Prop selectable: boolean = true;
   /**
@@ -90,6 +100,12 @@ export struct ChatRichText {
 
   /** 当前解析的渲染分块(状态) */
   @State private chunks: ChatRenderChunk[] = [];
+  /**
+   * 未经本地图片解析的原始分块(文本解析产物)。
+   * 解析产物与图片库无关(只含 kind + name),故图片库变化时只需重跑解析映射,
+   * 不必重新解析文本 —— 见 onLocalImagesChange。
+   */
+  private rawChunks: ChatRenderChunk[] = [];
 
   // ===== 流式打字机状态 =====
   /** 是否处于打字机揭示中(流式或排空期间为 true,完整显示为 false) */
@@ -289,7 +305,8 @@ export struct ChatRichText {
 
     // 打字机揭示中(流式或排空):跳过缓存,直接解析当前已揭示文本
     if (this.typing) {
-      this.chunks = parseChatChunks(text, options);
+      this.rawChunks = parseChatChunks(text, options);
+      this.chunks = this.resolveLocalImages(this.rawChunks);
       return;
     }
 
@@ -301,7 +318,8 @@ export struct ChatRichText {
       // LRU:命中时移到末尾(Map 保持插入顺序)
       ChatRichText.cache.delete(cacheKey);
       ChatRichText.cache.set(cacheKey, cached);
-      this.chunks = cached.chunks;
+      this.rawChunks = cached.chunks;
+      this.chunks = this.resolveLocalImages(this.rawChunks);
       return;
     }
 
@@ -313,7 +331,59 @@ export struct ChatRichText {
       contentHash: contentHash
     });
 
-    this.chunks = parsed;
+    this.rawChunks = parsed;
+    this.chunks = this.resolveLocalImages(parsed);
+  }
+
+  /**
+   * @Watch 回调:本地图片库映射变化。
+   * 只重跑解析映射(从缓存的原始分块),不重新解析文本。
+   */
+  private onLocalImagesChange(): void {
+    this.chunks = this.resolveLocalImages(this.rawChunks);
+  }
+
+  /**
+   * 把 image 分块里的本地图片名解析成沙箱文件 URI。
+   * - 命中:url 换成 file:// URI
+   * - 未命中:url 置空 + alt 记为「未找到图片」,复用 ChatMessageImage 的失败占位
+   * - 无本地分块:原样返回(避免无谓分配)
+   */
+  private resolveLocalImages(chunks: ChatRenderChunk[]): ChatRenderChunk[] {
+    let hasLocal: boolean = false;
+    for (let i = 0; i < chunks.length; i++) {
+      const c: ChatRenderChunk = chunks[i];
+      if (c.type === 'image' && c.kind === 'local') {
+        hasLocal = true;
+        break;
+      }
+    }
+    if (!hasLocal) {
+      return chunks;
+    }
+    const result: ChatRenderChunk[] = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const c: ChatRenderChunk = chunks[i];
+      if (c.type !== 'image' || c.kind !== 'local') {
+        result.push(c);
+        continue;
+      }
+      const uri: string | undefined = this.localImages[normalizeImageName(c.name)];
+      const url: string = uri !== undefined ? uri : '';
+      const alt: string = url.length > 0
+        ? (c.alt.length > 0 ? c.alt : c.name)
+        : ('未找到图片「' + c.name + '」');
+      const resolved: ImageChatRenderChunk = {
+        type: 'image',
+        id: c.id,
+        url: url,
+        alt: alt,
+        kind: 'local',
+        name: c.name
+      };
+      result.push(resolved);
+    }
+    return result;
   }
 
   /**
@@ -620,6 +690,7 @@ export struct ChatRichText {
                 settings: this.settings,
                 colorTheme: this.colorTheme,
                 symbolRules: this.symbolRules,
+                localImages: this.localImages,
                 selectable: true,
                 foldFrontendHtml: false,
                 onInteractiveAction: this.onInteractiveAction
@@ -642,6 +713,10 @@ export struct ChatRichText {
         }, (chunk: ChatRenderChunk, index: number) => {
           if (chunk.type === 'text') {
             return 't' + index.toString() + '_' + chunk.segments.length.toString();
+          }
+          if (chunk.type === 'image') {
+            // 本地图与网络图共用 id;把解析后的 url 并入 key,否则图片库变化时子节点被复用而不刷新
+            return chunk.id + '_' + chunk.url;
           }
           return chunk.id;
         })
