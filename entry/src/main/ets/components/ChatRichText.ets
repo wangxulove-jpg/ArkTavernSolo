@@ -380,7 +380,8 @@ export struct ChatRichText {
         url: url,
         alt: alt,
         kind: 'local',
-        name: c.name
+        name: c.name,
+        source: c.source
       };
       result.push(resolved);
     }
@@ -706,6 +707,7 @@ export struct ChatRichText {
             ChatMessageImage({
               url: chunk.url,
               alt: chunk.alt,
+              source: chunk.source,
               // v52: 图片大小跟随聊天外观设置(Aa 面板「图片大小」)
               widthRatio: this.settings !== null
                 ? this.settings.imageWidthRatio

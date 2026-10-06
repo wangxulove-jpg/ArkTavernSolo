@@ -40,7 +40,7 @@
 | `ChatMessageDataSource` | 消息列表懒加载数据源 | **>20 条列表的标准做法** |
 | `ChatMessageBubble` | 单条消息气泡 | — |
 | `ChatRichText` | 富文本渲染（含 `ChatSenderType` 渲染类型） | 改渲染类型前先读 AGENTS §7 消息三层体系 |
-| `ChatMessageImage` | 消息内图片（网络 https URL **或**沙箱 `file://` URI） | 宽度 100% 自适应 + `onError` 占位；本地图未命中时上层传空 url + `alt='未找到图片「名」'` 即可复用其占位 |
+| `ChatMessageImage` | 消息内图片（网络 https URL **或**沙箱 `file://` URI） | 宽度随气泡比例自适应；**未加载显示源码占位 + 加载动画，加载完成只显示图片**；点击图片走 **`geometryTransition` 一镜到底**放大（从图片位置展开、收回，见 P-96），再点图片/背景收起；预览支持**双指缩放（1~5 倍，以手指捏合点为锚点）+ 放大后单指拖动（1:1 跟手）**——缩放走布局尺寸、平移走 `.offset()`，锚点用 `fingerList[].globalX/globalY` 窗口坐标（见 P-97）；本地图未命中时上层传空 url + `alt='未找到图片「名」'` 即可复用其占位；占位源码取自解析层 `ImageChatRenderChunk.source` |
 | `ChatInputArea` | 聊天输入区（含发送/停止按钮、代写候选区） | 键盘避让由页面负责；停止键为低对比描边圆钮（刻意不用高饱和红）；发送/停止切换带形变过渡 |
 | `MessageSwipeControls` | Swipe 候选切换控件 | — |
 | `ChatAppearancePanel` | 聊天显示设置面板（滑块/配色/色盘/恢复默认） | 语义色经 `@Prop`，色盘请求经 `ColorPickerRequest` 上抛 |

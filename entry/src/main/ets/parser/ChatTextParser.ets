@@ -1022,6 +1022,8 @@ export interface ImageChatRenderChunk {
   readonly kind: 'remote' | 'local';
   /** 本地图片名(kind==='local' 时非空) */
   readonly name: string;
+  /** 原始语法源码(markdown 或 HTML 标签原文;图片未加载时渲染层占位展示) */
+  readonly source: string;
 }
 
 /** 渲染分块联合 */
@@ -1286,7 +1288,8 @@ function extractImageLinks(text: string): ImageExtraction {
       url: h.url,
       alt: h.alt,
       kind: h.kind,
-      name: h.name
+      name: h.name,
+      source: text.substring(h.start, h.end)
     });
     cursor = h.end;
   }

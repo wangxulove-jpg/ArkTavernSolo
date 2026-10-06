@@ -8,6 +8,7 @@
  * - http:// 不抽取:markdown 保持文本、img 走消毒
  * - 无图片文本分块输出与现状一致(回归)
  * - 未闭合 <img src= 流式片段按文本显示
+ * - 命中分块保留原始语法源码(source,供未加载占位展示)
  */
 
 import { describe, it, expect } from '@ohos/hypium';
@@ -244,6 +245,35 @@ export default function chatImageChunkTest() {
       const joined: string = joinTextChunks(chunks);
       expect(joined.indexOf('正在输出') >= 0).assertTrue();
       expect(joined.indexOf('arkimg:笑') >= 0).assertTrue();
+    });
+
+    it('markdown_image_keeps_raw_source_text', 0, () => {
+      // 未加载时占位展示原始语法,故分块需保留原文
+      const chunks: ChatRenderChunk[] = parseChatChunks('![风景](https://example.com/m.png)');
+      const img: ImageChatRenderChunk | null = asImage(chunks[0]);
+      expect(img !== null).assertTrue();
+      if (img !== null) {
+        expect(img.source).assertEqual('![风景](https://example.com/m.png)');
+      }
+    });
+
+    it('img_tag_keeps_raw_source_text', 0, () => {
+      const raw: string = '<img alt="CG" src="https://example.com/n.png">';
+      const chunks: ChatRenderChunk[] = parseChatChunks(raw);
+      const img: ImageChatRenderChunk | null = asImage(chunks[0]);
+      expect(img !== null).assertTrue();
+      if (img !== null) {
+        expect(img.source).assertEqual(raw);
+      }
+    });
+
+    it('local_image_keeps_raw_source_text', 0, () => {
+      const chunks: ChatRenderChunk[] = parseChatChunks('![微笑](arkimg:微笑)');
+      const img: ImageChatRenderChunk | null = asImage(chunks[0]);
+      expect(img !== null).assertTrue();
+      if (img !== null) {
+        expect(img.source).assertEqual('![微笑](arkimg:微笑)');
+      }
     });
   });
 }
