@@ -19,6 +19,7 @@ import chatImageChunkTest from './chat_image_chunk.test';
 import stFrontendFallbackTest from './st_frontend_fallback.test';
 import presetExportTest from './preset_export.test';
 import memoryPromptBuilderTest from './memory_prompt_builder.test';
+import localImageTest from './local_image.test';
 
 export default function testsuite() {
   promptSegmentOrderTest();
@@ -37,4 +38,5 @@ export default function testsuite() {
   stFrontendFallbackTest();
   presetExportTest();
   memoryPromptBuilderTest();
+  localImageTest();
 }
