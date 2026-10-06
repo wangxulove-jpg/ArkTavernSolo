@@ -8,11 +8,29 @@
  * 每次初始化根据 presetId 重新加载,支持切换 Preset 编辑。
  */
 
-import { PromptPreset, PromptPresetPosition, DEFAULT_PRESET_POSITION } from '../models/PromptPreset';
+import {
+  PromptPreset,
+  PromptPresetPosition,
+  PresetScope,
+  DEFAULT_PRESET_POSITION,
+  DEFAULT_PRESET_SCOPE,
+  isManagedImagePresetId
+} from '../models/PromptPreset';
+import { Character } from '../models/Character';
 import { PromptPresetService } from '../services/PromptPresetService';
+import { AppServices } from '../services/AppServices';
 import { Logger } from '../utils/Logger';
 
 const LOG_TAG: string = 'PromptPresetEditViewModel';
+
+// ===== 作用域选择器数据 =====
+
+/** v52: 绑定角色卡选择器的一行 */
+export interface PresetScopeOption {
+  /** '' = 全局 */
+  readonly characterId: string;
+  readonly label: string;
+}
 
 // ===== 表单状态快照 =====
 
@@ -22,6 +40,10 @@ export interface PromptPresetEditFormState {
   systemPromptInput: string;
   /** v51: 注入位置(head=请求最前 / tail=对话之后,约束输出) */
   position: PromptPresetPosition;
+  /** v52: 作用域类型(global=所有会话 / character=仅绑定的那张角色卡) */
+  scopeKind: 'global' | 'character';
+  /** v52: scopeKind='character' 时为角色卡 id,否则空串 */
+  scopeCharacterId: string;
   overrideTemperature: boolean;
   temperatureInput: string;
   overrideTopP: boolean;
@@ -38,6 +60,8 @@ export function emptyFormState(): PromptPresetEditFormState {
     descriptionInput: '',
     systemPromptInput: '',
     position: DEFAULT_PRESET_POSITION,
+    scopeKind: 'global',
+    scopeCharacterId: '',
     overrideTemperature: false,
     temperatureInput: '',
     overrideTopP: false,
@@ -55,6 +79,8 @@ export function copyFormState(state: PromptPresetEditFormState): PromptPresetEdi
     descriptionInput: state.descriptionInput,
     systemPromptInput: state.systemPromptInput,
     position: state.position,
+    scopeKind: state.scopeKind,
+    scopeCharacterId: state.scopeCharacterId,
     overrideTemperature: state.overrideTemperature,
     temperatureInput: state.temperatureInput,
     overrideTopP: state.overrideTopP,
@@ -68,13 +94,16 @@ export function copyFormState(state: PromptPresetEditFormState): PromptPresetEdi
 
 function formStateFromPreset(
   preset: PromptPreset,
-  position: PromptPresetPosition
+  position: PromptPresetPosition,
+  scope: PresetScope
 ): PromptPresetEditFormState {
   return {
     nameInput: preset.name,
     descriptionInput: preset.description,
     systemPromptInput: preset.systemPrompt,
     position: position,
+    scopeKind: scope.kind,
+    scopeCharacterId: scope.characterId,
     overrideTemperature: preset.temperature !== undefined,
     temperatureInput: preset.temperature !== undefined ? preset.temperature.toString() : '',
     overrideTopP: preset.topP !== undefined,
@@ -84,6 +113,14 @@ function formStateFromPreset(
     overrideContextWindow: preset.contextWindow !== undefined,
     contextWindowInput: preset.contextWindow !== undefined ? preset.contextWindow.toString() : ''
   };
+}
+
+/** v52: 表单作用域 → PresetScope(character 但没选具体角色时回落全局) */
+function scopeFromForm(formState: PromptPresetEditFormState): PresetScope {
+  if (formState.scopeKind === 'character' && formState.scopeCharacterId.length > 0) {
+    return { kind: 'character', characterId: formState.scopeCharacterId };
+  }
+  return DEFAULT_PRESET_SCOPE;
 }
 
 // ===== 路由参数解析 =====
@@ -116,6 +153,10 @@ export function parsePresetEditRouteParam(param: Object | undefined): ParsedPres
 export class PromptPresetEditViewModel {
   isEditing: boolean = false;
   editingPresetId: string = '';
+  /** v52: 绑定角色卡选择器数据(第一项固定为全局;页面 aboutToAppear 调 loadScopeOptions 填充) */
+  scopeOptions: PresetScopeOption[] = [{ characterId: '', label: '全局(所有会话)' }];
+  /** v52: 当前编辑的是否为受管"本地图片清单"预设(手改会在下次对账时被覆盖,页面据此提示) */
+  isManagedPreset: boolean = false;
 
   private readonly presetService: PromptPresetService;
   private disposed: boolean = false;
@@ -141,6 +182,9 @@ export class PromptPresetEditViewModel {
     }
 
     this.initializedPresetId = presetId;
+    this.isManagedPreset = presetId !== undefined && presetId.length > 0
+      ? isManagedImagePresetId(presetId)
+      : false;
 
     if (presetId !== undefined && presetId.length > 0) {
       this.isEditing = true;
@@ -177,7 +221,10 @@ export class PromptPresetEditViewModel {
           // v51: 注入位置存本地偏好,与实体分开读取
           const position: PromptPresetPosition =
             await this.presetService.getPresetPosition(presetId);
-          return formStateFromPreset(preset, position);
+          // v52: 作用域同样存本地偏好
+          const scope: PresetScope = await this.presetService.getPresetScope(presetId);
+          this.isManagedPreset = isManagedImagePresetId(presetId);
+          return formStateFromPreset(preset, position, scope);
         }
       } catch (e) {
         Logger.error(LOG_TAG, 'form population failed');
@@ -298,6 +345,8 @@ export class PromptPresetEditViewModel {
         });
         // v51: 注入位置(本地偏好)
         await this.presetService.setPresetPosition(this.editingPresetId, formState.position);
+        // v52: 作用域(本地偏好)
+        await this.presetService.setPresetScope(this.editingPresetId, scopeFromForm(formState));
       } else {
         const created: PromptPreset = await this.presetService.create({
           name: name,
@@ -311,12 +360,31 @@ export class PromptPresetEditViewModel {
         await this.presetService.addSelectedPresetId(created.id);
         // v51: 注入位置(本地偏好)
         await this.presetService.setPresetPosition(created.id, formState.position);
+        // v52: 作用域(本地偏好)
+        await this.presetService.setPresetScope(created.id, scopeFromForm(formState));
       }
       return true;
     } catch (e) {
       Logger.error(LOG_TAG, 'save failed: ' + String(e));
       return false;
     }
+  }
+
+  /**
+   * v52: 加载绑定角色卡选择器数据(全局 + 全部角色卡)。
+   * 角色列表读取失败时至少保留「全局」项,不阻塞编辑。
+   */
+  async loadScopeOptions(): Promise<void> {
+    const options: PresetScopeOption[] = [{ characterId: '', label: '全局(所有会话)' }];
+    try {
+      const characters: Character[] = await AppServices.getCharacterService().list();
+      for (let i = 0; i < characters.length; i++) {
+        options.push({ characterId: characters[i].id, label: characters[i].name });
+      }
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'loadScopeOptions failed: ' + String(e));
+    }
+    this.scopeOptions = options;
   }
 
   dispose(): void {

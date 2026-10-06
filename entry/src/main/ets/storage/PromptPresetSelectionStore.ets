@@ -14,13 +14,15 @@
 
 import { AppPreferences } from './AppPreferences';
 import { Logger } from '../utils/Logger';
-import { isPromptPresetPosition } from '../models/PromptPreset';
+import { isPromptPresetPosition, isValidScopeValue } from '../models/PromptPreset';
 
 const LOG_TAG: string = 'PromptPresetSelectionStore';
 const KEY_SELECTED_PRESET_IDS: string = 'selected_prompt_preset_ids_v1';
 const KEY_LEGACY_CURRENT_PRESET_ID: string = 'current_prompt_preset_id_v1';
 /** v51: 预设 → 注入位置映射(presetId → 'head'|'tail') */
 const KEY_PRESET_POSITIONS: string = 'prompt_preset_positions_v1';
+/** v52: 预设 → 作用域映射(presetId → 'global'|'char:<characterId>') */
+const KEY_PRESET_SCOPES: string = 'prompt_preset_scopes_v1';
 
 export class PromptPresetSelectionStore {
   private readonly prefs: AppPreferences;
@@ -164,6 +166,96 @@ export class PromptPresetSelectionStore {
       const key: string = keys[i];
       const value: Object = record[key];
       if (key.length > 0 && typeof value === 'string' && isPromptPresetPosition(value as string)) {
+        result[key] = value as string;
+      }
+    }
+    return result;
+  }
+
+  // ===== v52: 预设作用域(本地偏好,与"是否选中"无关) =====
+
+  /**
+   * 读取"预设 → 作用域"映射(presetId → 'global'|'char:<characterId>')。
+   * 解析失败或值非法时丢弃该项(调用方按默认 global 处理)。
+   */
+  async getScopes(): Promise<Record<string, string>> {
+    this.requireInit();
+    let raw: string;
+    try {
+      raw = await this.prefs.getString(KEY_PRESET_SCOPES, '');
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'getScopes failed: ' + String(e));
+      return {};
+    }
+    return this.parseScopes(raw);
+  }
+
+  /**
+   * 设置单个预设的作用域(作用域值非法或 id 为空则忽略)。
+   */
+  async setScope(presetId: string, scope: string): Promise<void> {
+    this.requireInit();
+    if (presetId.length === 0 || !isValidScopeValue(scope)) {
+      return;
+    }
+    try {
+      const current: Record<string, string> = await this.getScopes();
+      current[presetId] = scope;
+      await this.prefs.putString(KEY_PRESET_SCOPES, JSON.stringify(current));
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'setScope failed: ' + String(e));
+    }
+  }
+
+  /**
+   * 移除单个预设的作用域记录(删除预设时调用)。
+   */
+  async removeScope(presetId: string): Promise<void> {
+    this.requireInit();
+    if (presetId.length === 0) {
+      return;
+    }
+    try {
+      const current: Record<string, string> = await this.getScopes();
+      const keys: string[] = Object.keys(current);
+      const next: Record<string, string> = {};
+      let changed: boolean = false;
+      for (let i = 0; i < keys.length; i++) {
+        if (keys[i] === presetId) {
+          changed = true;
+          continue;
+        }
+        next[keys[i]] = current[keys[i]];
+      }
+      if (changed) {
+        await this.prefs.putString(KEY_PRESET_SCOPES, JSON.stringify(next));
+      }
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'removeScope failed: ' + String(e));
+    }
+  }
+
+  /** 解析作用域映射 JSON;非法项丢弃。 */
+  private parseScopes(raw: string): Record<string, string> {
+    const result: Record<string, string> = {};
+    if (raw.length === 0) {
+      return result;
+    }
+    let parsed: Object;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (e) {
+      return result;
+    }
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return result;
+    }
+    const record: Record<string, Object> = parsed as Record<string, Object>;
+    const keys: string[] = Object.keys(record);
+    for (let i = 0; i < keys.length; i++) {
+      const key: string = keys[i];
+      const value: Object = record[key];
+      if (key.length > 0 && typeof value === 'string' && isValidScopeValue(value as string)) {
         result[key] = value as string;
       }
     }

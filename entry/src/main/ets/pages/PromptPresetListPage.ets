@@ -273,6 +273,28 @@ struct PromptPresetListPage {
             .padding({ left: 6, right: 6, top: 2, bottom: 2 })
             .margin({ left: 8 })
         }
+
+        // v52: 作用域徽标(全局为默认值,不占位;绑定了角色才显示角色名)
+        if (this.viewModel.getScopeLabel(preset.id) !== '全局') {
+          Text(this.viewModel.getScopeLabel(preset.id))
+            .fontSize(11)
+            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+            .borderRadius(4)
+            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+            .margin({ left: 8 })
+        }
+
+        // v52: 受管图片清单预设由图片库自动维护
+        if (this.viewModel.isManagedPreset(preset.id)) {
+          Text('自动维护')
+            .fontSize(11)
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+            .borderRadius(4)
+            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+            .margin({ left: 8 })
+        }
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
@@ -303,42 +325,49 @@ struct PromptPresetListPage {
             this.viewModel.toggle(preset.id);
           })
 
-        Button('编辑')
-          .fontSize(12)
-          .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-          .backgroundColor(Color.Transparent)
-          .padding({ left: 0, right: 8 })
-          .onClick(() => {
-            router.pushUrl({
-              url: 'pages/PromptPresetEditPage',
-              params: { presetId: preset.id } as PresetEditRouteParam
-            });
-          })
+        if (this.viewModel.isManagedPreset(preset.id)) {
+          // v52: 受管预设由「本地图片库」自动维护(位置固定在末尾),不允许编辑/删除
+          Text('由本地图片库自动维护')
+            .fontSize(11)
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+        } else {
+          Button('编辑')
+            .fontSize(12)
+            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+            .backgroundColor(Color.Transparent)
+            .padding({ left: 0, right: 8 })
+            .onClick(() => {
+              router.pushUrl({
+                url: 'pages/PromptPresetEditPage',
+                params: { presetId: preset.id } as PresetEditRouteParam
+              });
+            })
 
-        Button('删除')
-          .fontSize(12)
-          .fontColor($r('app.color.app_danger'))
-          .backgroundColor(Color.Transparent)
-          .padding({ left: 0, right: 0 })
-          .onClick(() => {
-            AlertDialog.show({
-              title: '删除确认',
-              message: '删除该提示词预设？\n此操作无法撤销。',
-              autoCancel: true,
-              alignment: DialogAlignment.Center,
-              primaryButton: {
-                value: '取消',
-                action: () => {}
-              },
-              secondaryButton: {
-                value: '删除',
-                fontColor: $r('app.color.app_danger'),
-                action: () => {
-                  this.viewModel.confirmDelete(preset.id);
+          Button('删除')
+            .fontSize(12)
+            .fontColor($r('app.color.app_danger'))
+            .backgroundColor(Color.Transparent)
+            .padding({ left: 0, right: 0 })
+            .onClick(() => {
+              AlertDialog.show({
+                title: '删除确认',
+                message: '删除该提示词预设？\n此操作无法撤销。',
+                autoCancel: true,
+                alignment: DialogAlignment.Center,
+                primaryButton: {
+                  value: '取消',
+                  action: () => {}
+                },
+                secondaryButton: {
+                  value: '删除',
+                  fontColor: $r('app.color.app_danger'),
+                  action: () => {
+                    this.viewModel.confirmDelete(preset.id);
+                  }
                 }
-              }
-            });
-          })
+              });
+            })
+        }
       }
       .width('100%')
       .margin({ top: 8 })

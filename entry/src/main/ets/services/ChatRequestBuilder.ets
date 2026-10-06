@@ -202,7 +202,10 @@ export class ChatRequestBuilder {
 
     let presets: PromptPreset[] = [];
     try {
-      presets = await this.promptPresetService.getSelectedPresets();
+      // v52: 只取"当前角色真正生效"的预设(已选 ∩ (全局 ∪ 绑定当前角色))。
+      // 作用域外的预设既不注入提示词,也不参与生成参数合并(温度等不被污染)。
+      const characterId: string | null = this.character !== null ? this.character.id : null;
+      presets = await this.promptPresetService.getApplicablePresets(characterId);
     } catch (e) {
       // Repository 读取失败:阻止请求
       throw new Error('无法读取当前提示词预设，请重试');

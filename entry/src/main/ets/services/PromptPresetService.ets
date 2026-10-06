@@ -27,11 +27,16 @@ import {
   CreatePromptPresetOptions,
   PromptPresetUpdates,
   PromptPresetPosition,
+  PresetScope,
   DEFAULT_PRESET_POSITION,
+  DEFAULT_PRESET_SCOPE,
   createPromptPreset,
   updatePromptPreset,
   validatePromptPreset,
-  isPromptPresetPosition
+  isPromptPresetPosition,
+  encodeScope,
+  decodeScope,
+  filterPresetsByScope
 } from '../models/PromptPreset';
 import { ParsedPromptPresetImport } from '../parser/PromptPresetImportParser';
 import { DatabaseError } from '../models/DatabaseError';
@@ -91,6 +96,70 @@ export class PromptPresetService {
     await this.removeSelectedPresetId(id);
     // v51: 同步清理该预设的注入位置记录(本地偏好)
     await this.selectionStore.removePosition(id);
+    // v52: 同步清理该预设的作用域记录(本地偏好)
+    await this.selectionStore.removeScope(id);
+  }
+
+  // ===== v52: 预设作用域(本地偏好,不进数据库) =====
+
+  /** 读取单个预设的作用域(未设置 / 异常 → 默认 global)。 */
+  async getPresetScope(id: string): Promise<PresetScope> {
+    if (id.length === 0) {
+      return DEFAULT_PRESET_SCOPE;
+    }
+    try {
+      const scopes: Record<string, string> = await this.selectionStore.getScopes();
+      const value: string | undefined = scopes[id];
+      return value !== undefined ? decodeScope(value) : DEFAULT_PRESET_SCOPE;
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'getPresetScope failed: ' + String(e));
+      return DEFAULT_PRESET_SCOPE;
+    }
+  }
+
+  /** 设置单个预设的作用域(非法值忽略)。 */
+  async setPresetScope(id: string, scope: PresetScope): Promise<void> {
+    if (id.length === 0) {
+      return;
+    }
+    await this.selectionStore.setScope(id, encodeScope(scope));
+  }
+
+  /** 读取全部预设的作用域映射(presetId → PresetScope;供请求构建 / 列表页)。 */
+  async getPresetScopes(): Promise<Record<string, PresetScope>> {
+    const result: Record<string, PresetScope> = {};
+    try {
+      const raw: Record<string, string> = await this.selectionStore.getScopes();
+      const keys: string[] = Object.keys(raw);
+      for (let i = 0; i < keys.length; i++) {
+        result[keys[i]] = decodeScope(raw[keys[i]]);
+      }
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'getPresetScopes failed: ' + String(e));
+    }
+    return result;
+  }
+
+  /**
+   * 取"当前角色真正生效"的已选预设:已选 ∩ (全局 ∪ 绑定当前角色)。
+   *
+   * 请求链路(ChatRequestBuilder / 代写 / 续写 / 估算)必须用它,
+   * 而不是 getSelectedPresets()——后者是"启用"语义,供列表页展示。
+   *
+   * @param characterId 当前会话绑定的角色卡 id(null = 无角色上下文,仅全局生效)
+   */
+  async getApplicablePresets(characterId: string | null): Promise<PromptPreset[]> {
+    const selected: PromptPreset[] = await this.getSelectedPresets();
+    if (selected.length === 0) {
+      return [];
+    }
+    let scopes: Record<string, string> = {};
+    try {
+      scopes = await this.selectionStore.getScopes();
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'getApplicablePresets getScopes failed: ' + String(e));
+    }
+    return filterPresetsByScope(selected, scopes, characterId);
   }
 
   // ===== v51: 预设注入位置(本地偏好,不进数据库) =====

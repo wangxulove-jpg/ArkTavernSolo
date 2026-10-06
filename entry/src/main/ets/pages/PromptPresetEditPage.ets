@@ -20,7 +20,7 @@
  * - 页面只需保证根容器背景色与主题一致,深色模式下状态栏区域透出深色背景
  */
 
-import { PromptPresetEditViewModel, PromptPresetEditFormState, emptyFormState, copyFormState, parsePresetEditRouteParam } from '../viewmodels/PromptPresetEditViewModel';
+import { PromptPresetEditViewModel, PromptPresetEditFormState, PresetScopeOption, emptyFormState, copyFormState, parsePresetEditRouteParam } from '../viewmodels/PromptPresetEditViewModel';
 import { PromptPresetPosition } from '../models/PromptPreset';
 import { AppServices } from '../services/AppServices';
 import { router } from '@kit.ArkUI';
@@ -33,6 +33,10 @@ const LOG_TAG: string = 'PromptPresetEditPage';
 @Component
 struct PromptPresetEditPage {
   @State formState: PromptPresetEditFormState = emptyFormState();
+  /** v52: 绑定角色卡选择器数据(全局 + 全部角色卡) */
+  @State scopeOptions: PresetScopeOption[] = [];
+  /** v52: 当前预设是否为受管"本地图片清单"(由图片库自动维护) */
+  @State isManagedPreset: boolean = false;
   @State isLoading: boolean = true;
   @State isEditing: boolean = false;
   @State errorMessage: string = '';
@@ -223,6 +227,37 @@ struct PromptPresetEditPage {
       .width('100%')
       .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
       .borderRadius(8)
+
+      if (this.isManagedPreset) {
+        Text('此预设由「本地图片库」自动维护:正文清单随图片增删自动重写,手动修改会在下次对账时被覆盖。如需自定义规则,请新建一条预设。')
+          .fontSize(12)
+          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+          .width('100%')
+          .margin({ top: 12 })
+      }
+
+      // 5. 绑定角色卡(v52):全局(默认,所有会话生效) / 仅某张角色卡
+      this.fieldLabel('绑定角色卡')
+      Text('默认全局生效;绑定后只有该角色卡的会话会用到这条预设')
+        .fontSize(11)
+        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+        .width('100%')
+        .margin({ bottom: 6 })
+
+      Scroll() {
+        Column() {
+          ForEach(this.scopeOptions, (option: PresetScopeOption) => {
+            this.scopeOption(option.label, option.characterId)
+          }, (option: PresetScopeOption): string => {
+            return option.characterId.length > 0 ? option.characterId : '__global__';
+          })
+        }
+        .width('100%')
+      }
+      .constraintSize({ maxHeight: 190 })
+      .width('100%')
+      .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+      .borderRadius(8)
     }
     .width('100%')
     .padding(16)
@@ -385,6 +420,11 @@ struct PromptPresetEditPage {
     // 初始化 ViewModel
     await this.viewModel.initialize(this.presetId);
 
+    // v52: 绑定角色卡选择器数据(全局 + 角色卡列表)+ 受管预设标记
+    await this.viewModel.loadScopeOptions();
+    this.scopeOptions = this.viewModel.scopeOptions;
+    this.isManagedPreset = this.viewModel.isManagedPreset;
+
     // 编辑模式:要检查是否找到记录
     if (this.presetId !== undefined && this.presetId.length > 0) {
       // 加载表单状态
@@ -478,6 +518,57 @@ struct PromptPresetEditPage {
   private selectPresetPosition(value: PromptPresetPosition): void {
     const updated: PromptPresetEditFormState = copyFormState(this.formState);
     updated.position = value;
+    this.formState = updated;
+  }
+
+  /**
+   * v52: 绑定角色卡选项行。
+   * 选中态在 Builder 体内直接读 `this.formState`(不通过参数传状态,避免不刷新)。
+   * @param label 展示名(「全局(所有会话)」或角色名)
+   * @param characterId '' 表示全局
+   */
+  @Builder
+  scopeOption(label: string, characterId: string) {
+    Column() {
+      Divider()
+        .color(ThemePalette.dividerColor(this.effectiveTheme))
+
+      Row() {
+        Column() {
+          Text(label)
+            .fontSize(14)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+            .width('100%')
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text(characterId.length === 0 ? '所有角色卡的会话都生效' : '仅该角色卡的会话生效')
+            .fontSize(11)
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            .width('100%')
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        if (this.formState.scopeCharacterId === characterId) {
+          Text('✓')
+            .fontSize(16)
+            .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+        }
+      }
+      .width('100%')
+      .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+      .onClick(() => {
+        this.selectPresetScope(characterId);
+      })
+    }
+    .width('100%')
+  }
+
+  /** v52: 选择作用域(不可变替换 formState 触发刷新)。 */
+  private selectPresetScope(characterId: string): void {
+    const updated: PromptPresetEditFormState = copyFormState(this.formState);
+    updated.scopeKind = characterId.length > 0 ? 'character' : 'global';
+    updated.scopeCharacterId = characterId;
     this.formState = updated;
   }
 
