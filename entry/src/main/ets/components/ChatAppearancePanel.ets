@@ -9,7 +9,7 @@
  * - 业务动作:全部回调上抛,由页面执行(Preferences 持久化、字体设置、恢复默认、符号规则增删)
  */
 import { ThemePalette } from '../theme/ThemePalette';
-import { ChatTextStyle } from '../utils/ChatTextStyleSettings';
+import { ChatTextStyle, DEFAULT_CHAT_TEXT_STYLE, IMAGE_WIDTH_RATIO_MIN, IMAGE_WIDTH_RATIO_MAX } from '../utils/ChatTextStyleSettings';
 import { CHAT_FONT_OPTIONS, CHAT_FONT_SYSTEM, ChatFontOption, chatFontLabel } from '../utils/ChatFontRegistry';
 import {
   ChatTextColorMode,
@@ -90,6 +90,8 @@ export struct ChatAppearancePanel {
   onPersistContentHeightRatio: (ratio: number) => void = (_: number) => {};
   /** 应用字体大小(实时更新 ChatTextStyle) */
   onApplyFontSize: (fontSize: number) => void = (_: number) => {};
+  /** v52: 应用消息内图片大小(宽度占气泡比例 0.3~1.0) */
+  onApplyImageWidthRatio: (ratio: number) => void = (_: number) => {};
   /** 切换正文字体族(含持久化) */
   onApplyFontFamily: (family: string) => void = (_: string) => {};
   /** 切换文字配色模式(含持久化) */
@@ -279,6 +281,59 @@ export struct ChatAppearancePanel {
             .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
           Blank()
           Text('24fp')
+            .fontSize(11)
+            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+        }
+        .width('100%')
+        .margin({ top: 4 })
+
+        Divider()
+          .color(ThemePalette.dividerColor(this.effectiveTheme))
+          .margin({ top: 16, bottom: 12 })
+
+        // ===== 图片大小(v52:消息内图片宽度占气泡的比例) =====
+        Row() {
+          Text('图片大小')
+            .fontSize($r('app.float.app_font_caption'))
+            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+          Blank()
+          Text(this.chatTextStyle !== null
+            ? Math.round(this.chatTextStyle!.imageWidthRatio * 100).toString() + '%'
+            : Math.round(DEFAULT_CHAT_TEXT_STYLE.imageWidthRatio * 100).toString() + '%')
+            .fontSize($r('app.float.app_font_caption'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+        .margin({ bottom: 8 })
+
+        Slider({
+          value: this.chatTextStyle !== null
+            ? this.chatTextStyle!.imageWidthRatio
+            : DEFAULT_CHAT_TEXT_STYLE.imageWidthRatio,
+          min: IMAGE_WIDTH_RATIO_MIN,
+          max: IMAGE_WIDTH_RATIO_MAX,
+          step: 0.05,
+          style: SliderStyle.OutSet
+        })
+          .blockColor(ThemePalette.accentColor(this.effectiveTheme))
+          .sliderInteractionMode(SliderInteraction.SLIDE_ONLY)
+          .trackColor(ThemePalette.surface2Color(this.effectiveTheme))
+          .selectedColor(ThemePalette.accentColor(this.effectiveTheme))
+          .width('100%')
+          .onChange((value: number, mode: SliderChangeMode) => {
+            if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
+              this.onApplyImageWidthRatio(value);
+            }
+          })
+
+        Row() {
+          Text(Math.round(IMAGE_WIDTH_RATIO_MIN * 100).toString() + '%')
+            .fontSize(11)
+            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+          Blank()
+          Text(Math.round(IMAGE_WIDTH_RATIO_MAX * 100).toString() + '%')
             .fontSize(11)
             .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
         }

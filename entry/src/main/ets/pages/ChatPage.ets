@@ -2743,6 +2743,9 @@ struct ChatPage {
       onApplyFontSize: (fontSize: number): void => {
         this.applyFontSize(fontSize);
       },
+      onApplyImageWidthRatio: (ratio: number): void => {
+        this.applyImageWidthRatio(ratio);
+      },
       onApplyFontFamily: (family: string): void => {
         this.applyFontFamily(family);
       },
@@ -5104,6 +5107,18 @@ struct ChatPage {
     settings.update({ fontSize: fontSize }).then((): void => {
       this.chatTextStyle = settings.get();
     });
+  }
+
+  /** v52: 应用消息内图片大小(宽度占气泡比例,实时更新 ChatTextStyle) */
+  private applyImageWidthRatio(ratio: number): void {
+    const settings = AppServices.getInstance().chatTextStyleSettings;
+    settings.update({ imageWidthRatio: ratio })
+      .then((): void => {
+        this.chatTextStyle = settings.get();
+      })
+      .catch((e: Object): void => {
+        Logger.warn(LOG_TAG, 'applyImageWidthRatio failed: ' + (e as Error).message);
+      });
   }
 
   /** 应用正文字体族设置(实时更新 ChatTextStyle) */

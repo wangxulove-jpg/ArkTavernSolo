@@ -25,6 +25,13 @@ import {
   buildLocalImagePresetDescription
 } from '../main/ets/services/LocalImagePromptComposer';
 import {
+  ChatTextStyle,
+  DEFAULT_CHAT_TEXT_STYLE,
+  IMAGE_WIDTH_RATIO_MIN,
+  IMAGE_WIDTH_RATIO_MAX,
+  normalizeImageWidthRatio
+} from '../main/ets/utils/ChatTextStyleSettings';
+import {
   PromptPreset,
   PresetScope,
   encodeScope,
@@ -224,6 +231,28 @@ export default function localImageTest() {
       expect(managedImageCharacterPresetId('c1')).assertEqual('arkimg-char-c1');
       expect(isManagedImagePresetId(managedImageCharacterPresetId('c1'))).assertTrue();
       expect(isManagedImagePresetId('user-preset-1')).assertFalse();
+    });
+  // ===== 消息内图片大小设置(ChatTextStyle.imageWidthRatio) =====
+
+    it('image_width_ratio_keeps_valid_value', 0, () => {
+      expect(normalizeImageWidthRatio(0.6)).assertEqual(0.6);
+      expect(normalizeImageWidthRatio(IMAGE_WIDTH_RATIO_MAX)).assertEqual(1.0);
+      expect(normalizeImageWidthRatio(IMAGE_WIDTH_RATIO_MIN)).assertEqual(0.3);
+    });
+
+    it('image_width_ratio_clamps_out_of_range', 0, () => {
+      expect(normalizeImageWidthRatio(0.0)).assertEqual(IMAGE_WIDTH_RATIO_MIN);
+      expect(normalizeImageWidthRatio(-1)).assertEqual(IMAGE_WIDTH_RATIO_MIN);
+      expect(normalizeImageWidthRatio(5)).assertEqual(IMAGE_WIDTH_RATIO_MAX);
+    });
+
+    it('image_width_ratio_falls_back_on_invalid', 0, () => {
+      // 非法值(NaN/非有限)回落默认,保证旧数据与脏数据都不炸
+      expect(normalizeImageWidthRatio(Number.NaN)).assertEqual(DEFAULT_CHAT_TEXT_STYLE.imageWidthRatio);
+      expect(DEFAULT_CHAT_TEXT_STYLE.imageWidthRatio).assertEqual(1.0);
+      // 默认样式是新装用户的比例来源
+      const style: ChatTextStyle = DEFAULT_CHAT_TEXT_STYLE;
+      expect(style.imageWidthRatio > 0).assertTrue();
     });
   });
 }

@@ -14,17 +14,27 @@
 
 @Component
 export struct ChatMessageImage {
-  /** 图片 URL(已保证 https:// 前缀,由解析层过滤) */
+  /** 图片地址:网络 https URL 或本地图片库的沙箱 file:// URI(由解析层/渲染层保证) */
   @Prop url: string = '';
   /** 替代文本(加载失败占位与无障碍用) */
   @Prop alt: string = '';
+  /**
+   * 宽度占气泡的比例(0.3~1.0)。
+   * 来自聊天外观设置(Aa 面板「图片大小」),由 ChatRichText 经 settings 透传。
+   */
+  @Prop widthRatio: number = 1.0;
   /** 加载失败状态(内部) */
   @State loadFailed: boolean = false;
+
+  /** 图片宽度(百分比字符串;比例只看气泡宽度,不改变高宽比) */
+  private imageWidth(): string {
+    return Math.round(this.widthRatio * 100).toString() + '%';
+  }
 
   build(): void {
     if (!this.loadFailed && this.url.length > 0) {
       Image(this.url)
-        .width('100%')
+        .width(this.imageWidth())
         .objectFit(ImageFit.Contain)
         .borderRadius(8)
         .clip(true)
@@ -40,7 +50,7 @@ export struct ChatMessageImage {
           .maxLines(2)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
       }
-      .width('100%')
+      .width(this.imageWidth())
       .height(72)
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)

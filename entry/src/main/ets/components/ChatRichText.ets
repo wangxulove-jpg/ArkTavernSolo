@@ -27,7 +27,7 @@
 
 import { ChatTextSegment, parseChatChunks, ChatRenderChunk, ChatTextParserOptions, TableChatRenderChunk, TableChunkRow, ImageChatRenderChunk } from '../parser/ChatTextParser';
 import { getCharacterColor } from '../utils/ChatPalette';
-import { ChatTextStyle } from '../utils/ChatTextStyleSettings';
+import { ChatTextStyle, DEFAULT_CHAT_TEXT_STYLE } from '../utils/ChatTextStyleSettings';
 import { CHAT_FONT_SYSTEM } from '../utils/ChatFontRegistry';
 import { ChatMarkdownColorTheme, ChatSymbolColorRule } from '../utils/ChatTextColorTheme';
 import { ChatCollapsibleBlock } from './ChatCollapsibleBlock';
@@ -293,7 +293,8 @@ export struct ChatRichText {
       lineHeight: 1.5,
       fontFamily: CHAT_FONT_SYSTEM,
       quoteStyle: 'line',
-      codeStyle: 'bg'
+      codeStyle: 'bg',
+      imageWidthRatio: DEFAULT_CHAT_TEXT_STYLE.imageWidthRatio
     };
 
     const options: ChatTextParserOptions = {
@@ -704,7 +705,11 @@ export struct ChatRichText {
           } else if (chunk.type === 'image') {
             ChatMessageImage({
               url: chunk.url,
-              alt: chunk.alt
+              alt: chunk.alt,
+              // v52: 图片大小跟随聊天外观设置(Aa 面板「图片大小」)
+              widthRatio: this.settings !== null
+                ? this.settings.imageWidthRatio
+                : DEFAULT_CHAT_TEXT_STYLE.imageWidthRatio
             })
           } else {
             // 表格分块:按列对齐渲染

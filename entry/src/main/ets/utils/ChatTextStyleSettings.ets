@@ -16,6 +16,7 @@
  * - fontFamily: 正文字体族(见 ChatFontRegistry)
  * - quoteStyle: 引用样式
  * - codeStyle: 代码样式
+ * - imageWidthRatio: 消息内图片宽度占气泡的比例(v52,Aa 面板可调)
  */
 
 import { AppPreferences } from '../storage/AppPreferences';
@@ -29,6 +30,28 @@ export type QuoteStyle = 'line' | 'indent';
 /** 代码样式选项 */
 export type CodeStyle = 'bg' | 'plain';
 
+/** 消息内图片宽度比例下限(相对气泡宽度) */
+export const IMAGE_WIDTH_RATIO_MIN: number = 0.3;
+/** 消息内图片宽度比例上限(1.0 = 铺满气泡宽度) */
+export const IMAGE_WIDTH_RATIO_MAX: number = 1.0;
+
+/**
+ * 归一化图片宽度比例(纯函数):
+ * 非法值 / NaN / 越界 → 夹到 [MIN, MAX];默认取 DEFAULT。
+ */
+export function normalizeImageWidthRatio(value: number): number {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_CHAT_TEXT_STYLE.imageWidthRatio;
+  }
+  if (value < IMAGE_WIDTH_RATIO_MIN) {
+    return IMAGE_WIDTH_RATIO_MIN;
+  }
+  if (value > IMAGE_WIDTH_RATIO_MAX) {
+    return IMAGE_WIDTH_RATIO_MAX;
+  }
+  return value;
+}
+
 /** 聊天文本样式设置 */
 export interface ChatTextStyle {
   readonly enableMarkdown: boolean;
@@ -39,6 +62,8 @@ export interface ChatTextStyle {
   readonly fontFamily: string;
   readonly quoteStyle: QuoteStyle;
   readonly codeStyle: CodeStyle;
+  /** v52: 消息内图片宽度占气泡的比例(0.3~1.0;1.0 = 铺满气泡宽度) */
+  readonly imageWidthRatio: number;
 }
 
 /** 默认设置 */
@@ -50,7 +75,8 @@ export const DEFAULT_CHAT_TEXT_STYLE: ChatTextStyle = {
   lineHeight: 1.5,
   fontFamily: CHAT_FONT_SYSTEM,
   quoteStyle: 'line',
-  codeStyle: 'bg'
+  codeStyle: 'bg',
+  imageWidthRatio: 1.0
 };
 
 // Preferences keys
@@ -62,6 +88,8 @@ const KEY_LINE_HEIGHT: string = 'chat_text_line_height';
 const KEY_FONT_FAMILY: string = 'chat_text_font_family';
 const KEY_QUOTE_STYLE: string = 'chat_text_quote_style';
 const KEY_CODE_STYLE: string = 'chat_text_code_style';
+/** v52: 消息内图片宽度比例 */
+const KEY_IMAGE_WIDTH_RATIO: string = 'chat_text_image_width_ratio';
 
 /**
  * 聊天文本样式设置管理器。
@@ -93,9 +121,11 @@ export class ChatTextStyleSettings {
       const fontFamilyStr: string = await this.prefs.getString(KEY_FONT_FAMILY, DEFAULT_CHAT_TEXT_STYLE.fontFamily);
       const quoteStyleStr: string = await this.prefs.getString(KEY_QUOTE_STYLE, DEFAULT_CHAT_TEXT_STYLE.quoteStyle);
       const codeStyleStr: string = await this.prefs.getString(KEY_CODE_STYLE, DEFAULT_CHAT_TEXT_STYLE.codeStyle);
+      const imageWidthStr: string = await this.prefs.getString(KEY_IMAGE_WIDTH_RATIO, DEFAULT_CHAT_TEXT_STYLE.imageWidthRatio.toString());
 
       const fontSize: number = parseInt(fontSizeStr, 10);
       const lineHeight: number = parseFloat(lineHeightStr);
+      const imageWidthRatio: number = parseFloat(imageWidthStr);
 
       this.current = {
         enableMarkdown,
@@ -105,7 +135,8 @@ export class ChatTextStyleSettings {
         lineHeight: isNaN(lineHeight) ? DEFAULT_CHAT_TEXT_STYLE.lineHeight : lineHeight,
         fontFamily: fontFamilyStr.length > 0 ? fontFamilyStr : DEFAULT_CHAT_TEXT_STYLE.fontFamily,
         quoteStyle: quoteStyleStr === 'indent' ? 'indent' : 'line',
-        codeStyle: codeStyleStr === 'plain' ? 'plain' : 'bg'
+        codeStyle: codeStyleStr === 'plain' ? 'plain' : 'bg',
+        imageWidthRatio: normalizeImageWidthRatio(imageWidthRatio)
       };
     } catch (e) {
       Logger.warn(LOG_TAG, 'load failed, use default: ' + (e as Error).message);
@@ -140,7 +171,10 @@ export class ChatTextStyleSettings {
       lineHeight: partial.lineHeight !== undefined ? partial.lineHeight : this.current.lineHeight,
       fontFamily: partial.fontFamily !== undefined ? partial.fontFamily : this.current.fontFamily,
       quoteStyle: partial.quoteStyle !== undefined ? partial.quoteStyle : this.current.quoteStyle,
-      codeStyle: partial.codeStyle !== undefined ? partial.codeStyle : this.current.codeStyle
+      codeStyle: partial.codeStyle !== undefined ? partial.codeStyle : this.current.codeStyle,
+      imageWidthRatio: partial.imageWidthRatio !== undefined
+        ? normalizeImageWidthRatio(partial.imageWidthRatio)
+        : this.current.imageWidthRatio
     };
     await this.persist(next);
     this.current = next;
@@ -169,6 +203,7 @@ export class ChatTextStyleSettings {
       await this.prefs.putString(KEY_FONT_FAMILY, style.fontFamily);
       await this.prefs.putString(KEY_QUOTE_STYLE, style.quoteStyle);
       await this.prefs.putString(KEY_CODE_STYLE, style.codeStyle);
+      await this.prefs.putString(KEY_IMAGE_WIDTH_RATIO, style.imageWidthRatio.toString());
     } catch (e) {
       Logger.warn(LOG_TAG, 'persist failed: ' + (e as Error).message);
     }
