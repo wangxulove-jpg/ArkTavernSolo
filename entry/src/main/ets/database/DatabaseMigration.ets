@@ -20,7 +20,8 @@ import { V1_TO_V2_STATEMENTS, V2_TO_V3_STATEMENTS, V3_TO_V4_STATEMENTS, V4_TO_V5
   V41_TO_V42_DDL_STATEMENTS,
   V44_TO_V45_DDL_STATEMENTS,
   V45_TO_V46_DDL_STATEMENTS,
-  V46_TO_V47_DDL_STATEMENTS
+  V46_TO_V47_DDL_STATEMENTS,
+  V47_TO_V48_DDL_STATEMENTS
 } from './DatabaseSchema';
 import {
   TABLE_CHATS,
@@ -1544,6 +1545,25 @@ class V46ToV47Migration implements DatabaseMigration {
   async migrate(store: relationalStore.RdbStore): Promise<void> {
     for (let i = 0; i < V46_TO_V47_DDL_STATEMENTS.length; i++) {
       await store.executeSql(V46_TO_V47_DDL_STATEMENTS[i]);
+    }
+  }
+}
+
+/**
+ * v47→v48:本地图片库表(local_images)。
+ * 纯新建表 + 索引,不修改任何现有表与数据。
+ */
+export function createV47ToV48Migration(): DatabaseMigration {
+  return new V47ToV48Migration();
+}
+
+class V47ToV48Migration implements DatabaseMigration {
+  readonly fromVersion: number = 47;
+  readonly toVersion: number = 48;
+
+  async migrate(store: relationalStore.RdbStore): Promise<void> {
+    for (let i = 0; i < V47_TO_V48_DDL_STATEMENTS.length; i++) {
+      await store.executeSql(V47_TO_V48_DDL_STATEMENTS[i]);
     }
   }
 }

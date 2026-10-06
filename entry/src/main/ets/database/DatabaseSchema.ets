@@ -256,6 +256,13 @@ import {
   CREATE_WORLD_SESSION_SUMMARIES_TABLE
 } from './schema/SchemaWorld';
 
+import {
+  CREATE_INDEX_LOCAL_IMAGES_CHARACTER,
+  CREATE_INDEX_LOCAL_IMAGES_OWNER_NAME,
+  CREATE_LOCAL_IMAGES_TABLE,
+  V48_NEW_DDL_STATEMENTS
+} from './schema/SchemaLocalImages';
+
 export const VERSION_1_STATEMENTS: string[] = [
   CREATE_CHARACTERS_TABLE,
   CREATE_CHATS_TABLE,
@@ -1213,6 +1220,23 @@ export const V47_SCHEMA_STATEMENTS: string[] = [
   ...V46_TO_V47_DDL_STATEMENTS
 ];
 
+// ===== v48: 本地图片库(表情/插图;全局 + 角色专属) =====
+
+/**
+ * v47→v48 迁移 DDL:仅创建 local_images 表与两个索引。
+ * 安全性:纯 CREATE TABLE / CREATE INDEX IF NOT EXISTS,幂等,不修改任何现有表与数据。
+ * 任一语句失败由 DbHelper 事务回滚,数据库版本保持 47。
+ */
+export const V47_TO_V48_DDL_STATEMENTS: string[] = [
+  ...V48_NEW_DDL_STATEMENTS
+];
+
+/** v48 完整 Schema(新安装使用) */
+export const V48_SCHEMA_STATEMENTS: string[] = [
+  ...V47_SCHEMA_STATEMENTS,
+  ...V47_TO_V48_DDL_STATEMENTS
+];
+
 /**
  * 版本 → 完整建库语句注册表(P3-3③:逐版 if 链改写为 Registry)。
  * 每个条目代表"从空库建到该版本"的完整语句序列;取值时统一返回浅拷贝。
@@ -1271,6 +1295,7 @@ SCHEMA_BY_VERSION.set(44, V44_SCHEMA_STATEMENTS);
 SCHEMA_BY_VERSION.set(45, V45_SCHEMA_STATEMENTS);
 SCHEMA_BY_VERSION.set(46, V46_SCHEMA_STATEMENTS);
 SCHEMA_BY_VERSION.set(47, V47_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(48, V48_SCHEMA_STATEMENTS);
 
 /** 返回指定版本的完整建库语句(未知版本返回空数组)。 */
 export function getSchemaStatements(version: number): string[] {
@@ -1319,7 +1344,8 @@ export function getCreateTableStatements(): string[] {
     CREATE_WORLD_KNOWN_EVENT_ENTRIES_TABLE,
     CREATE_WORLD_DIRECTIONAL_RELATIONSHIP_ENTRIES_TABLE,
     CREATE_WORLD_SESSION_POST_PROCESS_RUNS_TABLE,
-    CREATE_PERSONAS_TABLE
+    CREATE_PERSONAS_TABLE,
+    CREATE_LOCAL_IMAGES_TABLE
   ];
 }
 
@@ -1443,6 +1469,8 @@ export function getCreateIndexStatements(): string[] {
     CREATE_INDEX_GROUP_CHARACTER_OVERRIDES_GROUP_CHARACTER,
     CREATE_INDEX_PERSONAS_UPDATED_AT,
     CREATE_INDEX_CHATS_WORLD_ID,
-    CREATE_INDEX_CHAT_MEMORIES_WORLD_ID
+    CREATE_INDEX_CHAT_MEMORIES_WORLD_ID,
+    CREATE_INDEX_LOCAL_IMAGES_OWNER_NAME,
+    CREATE_INDEX_LOCAL_IMAGES_CHARACTER
   ];
 }

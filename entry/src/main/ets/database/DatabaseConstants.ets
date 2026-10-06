@@ -6,7 +6,7 @@
  */
 
 export const DATABASE_NAME: string = 'arktavern_solo.db';
-export const DATABASE_VERSION: number = 47;
+export const DATABASE_VERSION: number = 48;
 
 export const TABLE_CHARACTERS: string = 'characters';
 export const TABLE_CHATS: string = 'chats';
@@ -879,3 +879,20 @@ export const COLUMN_NICKNAME: string = 'nickname';
 
 export const ALTER_CHARACTERS_ADD_NICKNAME: string =
   `ALTER TABLE ${TABLE_CHARACTERS} ADD COLUMN ${COLUMN_NICKNAME} TEXT NOT NULL DEFAULT ''`;
+
+// ===== v48: 本地图片库(表情/插图;全局 + 角色专属) =====
+// 用户导入的图片/表情包/GIF:每张图一个名字,AI 用 ![描述](arkimg:名字) 引用。
+// character_id = '' 表示全局;非空表示该角色卡专属。
+// 表名 / 列名 / 索引名集中定义,Repository / Schema / Migration 只读取此处。
+// 复用既有同名常量:COLUMN_ID / COLUMN_NAME / COLUMN_CHARACTER_ID / COLUMN_CREATED_AT / COLUMN_UPDATED_AT
+export const TABLE_LOCAL_IMAGES: string = 'local_images';
+
+/** local_images.name_key 列名(归一化名字:trim + 小写;唯一性与大小写不敏感查找用) */
+export const COLUMN_IMAGE_NAME_KEY: string = 'name_key';
+/** local_images.file_uri 列名(沙箱文件 URI,file://...) */
+export const COLUMN_IMAGE_FILE_URI: string = 'file_uri';
+
+/** 同一作用域内名字唯一(character_id + name_key) */
+export const INDEX_LOCAL_IMAGES_OWNER_NAME: string = 'idx_local_images_owner_name';
+/** 按作用域查询(全局 / 某角色) */
+export const INDEX_LOCAL_IMAGES_CHARACTER: string = 'idx_local_images_character';

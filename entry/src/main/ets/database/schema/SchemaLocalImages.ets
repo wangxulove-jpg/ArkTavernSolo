@@ -1,0 +1,54 @@
+/**
+ * v48: 本地图片库表 DDL。
+ *
+ * 与其它 Schema* 文件同口径:表名/列名/索引名只引用 DatabaseConstants,不硬编码字符串。
+ * NEW INSTALL 与 v47→v48 迁移共用同一份 DDL(纯新建表,不含 ALTER)。
+ */
+
+import {
+  COLUMN_CHARACTER_ID,
+  COLUMN_CREATED_AT,
+  COLUMN_ID,
+  COLUMN_IMAGE_FILE_URI,
+  COLUMN_IMAGE_NAME_KEY,
+  COLUMN_NAME,
+  COLUMN_UPDATED_AT,
+  INDEX_LOCAL_IMAGES_CHARACTER,
+  INDEX_LOCAL_IMAGES_OWNER_NAME,
+  TABLE_LOCAL_IMAGES
+} from '../DatabaseConstants';
+
+/**
+ * 本地图片表。
+ * - character_id = '' 表示全局图片库;非空表示该角色卡专属
+ * - name_key 为归一化名字(trim + 小写)
+ */
+export const CREATE_LOCAL_IMAGES_TABLE: string =
+  `CREATE TABLE IF NOT EXISTS ${TABLE_LOCAL_IMAGES} (` +
+  `${COLUMN_ID} TEXT PRIMARY KEY NOT NULL, ` +
+  `${COLUMN_NAME} TEXT NOT NULL, ` +
+  `${COLUMN_IMAGE_NAME_KEY} TEXT NOT NULL, ` +
+  `${COLUMN_IMAGE_FILE_URI} TEXT NOT NULL, ` +
+  `${COLUMN_CHARACTER_ID} TEXT NOT NULL DEFAULT '', ` +
+  `${COLUMN_CREATED_AT} INTEGER NOT NULL, ` +
+  `${COLUMN_UPDATED_AT} INTEGER NOT NULL)`;
+
+/**
+ * 同一作用域内名字唯一:
+ * 全局库(character_id='')内不可重名;单角色专属库内不可重名;跨作用域允许同名。
+ */
+export const CREATE_INDEX_LOCAL_IMAGES_OWNER_NAME: string =
+  `CREATE UNIQUE INDEX IF NOT EXISTS ${INDEX_LOCAL_IMAGES_OWNER_NAME} ` +
+  `ON ${TABLE_LOCAL_IMAGES}(${COLUMN_CHARACTER_ID}, ${COLUMN_IMAGE_NAME_KEY})`;
+
+/** 按作用域查询(全局 / 某角色) */
+export const CREATE_INDEX_LOCAL_IMAGES_CHARACTER: string =
+  `CREATE INDEX IF NOT EXISTS ${INDEX_LOCAL_IMAGES_CHARACTER} ` +
+  `ON ${TABLE_LOCAL_IMAGES}(${COLUMN_CHARACTER_ID})`;
+
+/** v48 新增 DDL 语句(新安装与迁移共用) */
+export const V48_NEW_DDL_STATEMENTS: string[] = [
+  CREATE_LOCAL_IMAGES_TABLE,
+  CREATE_INDEX_LOCAL_IMAGES_OWNER_NAME,
+  CREATE_INDEX_LOCAL_IMAGES_CHARACTER
+];
