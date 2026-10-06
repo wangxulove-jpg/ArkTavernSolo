@@ -1083,6 +1083,13 @@ const BLOCK_HTML_TAGS: string =
   'div|p|section|article|ul|ol|li|tr|td|table|thead|tbody|h1|h2|h3|h4|h5|h6|blockquote|center|form|nav|header|footer';
 
 /**
+ * 块级标签的中间态占位符。
+ * 块级标签先替换为它,随后把「占位符 + 周边缩进空白」整段收敛为单个换行,
+ * 避免「每标签一行、带前导缩进」的 HTML 源码在纯文本回退里留下大段空行。
+ */
+const BLOCK_BOUNDARY: string = '\uE400';
+
+/**
  * 解析聊天内容为渲染分块列表。
  * 失败时降级为单个文本块(原始内容)。
  */
@@ -1743,14 +1750,25 @@ function rollDice(formula: string): string {
  * HTML 消毒:整体删除 style/script/head/title 块;
  * <br>→换行、<hr>→分隔线、块级标签→换行边界;
  * 剥除其余标签保留文字;解码常见 HTML 实体;收敛连续空行。
+ *
+ * 换行与缩进处理:
+ * - CRLF/CR 统一为 LF(部分角色卡内嵌数据用 \r\n,残留 \r 会阻止空行收敛并多撑出空行)
+ * - 块级标签先落占位符,再连同周边空白收敛为单个换行:
+ *   HTML 源码通常「每标签一行 + 前导缩进」,直接换成 \n 会在纯文本回退里
+ *   残留大量仅含空白的行,渲染成标签之间的大段空行
  */
 function sanitizeHtmlTags(input: string): string {
   let s: string = input;
+  s = s.replace(/\r\n?/g, '\n');
   s = s.replace(/<(style|script|head|title)[^>]*>[\s\S]*?<\/\1>/gi, '');
   s = s.replace(/<br\s*\/?>/gi, '\n');
   s = s.replace(/<hr\s*\/?>/gi, '\n---\n');
-  s = s.replace(new RegExp('</?(' + BLOCK_HTML_TAGS + ')[^>]*>', 'gi'), '\n');
+  s = s.replace(new RegExp('</?(' + BLOCK_HTML_TAGS + ')[^>]*>', 'gi'), BLOCK_BOUNDARY);
   s = s.replace(/<[^>]+>/g, '');
+  s = s.replace(
+    new RegExp('[ \\t]*' + BLOCK_BOUNDARY + '(?:[ \\t\\n]*' + BLOCK_BOUNDARY + ')*[ \\t]*', 'g'),
+    '\n'
+  );
   s = decodeHtmlEntities(s);
   s = s.replace(/\n{3,}/g, '\n\n');
   s = s.replace(/^\n+|\n+$/g, '');

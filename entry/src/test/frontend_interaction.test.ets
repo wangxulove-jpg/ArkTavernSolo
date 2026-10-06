@@ -68,6 +68,20 @@ function statusEntry(name: string, value: string, fromUser: boolean): ChatStatus
   return { name: name, value: value, fromUser: fromUser, locked: false };
 }
 
+/** 拼接所有文本分块的片段文本(断言"渲染出的纯文本"用) */
+function flattenText(chunks: ChatRenderChunk[]): string {
+  let out: string = '';
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk: ChatRenderChunk = chunks[i];
+    if (chunk.type === 'text') {
+      for (let j = 0; j < chunk.segments.length; j++) {
+        out += chunk.segments[j].text;
+      }
+    }
+  }
+  return out;
+}
+
 /** 构建测试用世界书条目(仅 id/name 参与断言,其余字段固定) */
 function stickyEntry(id: string, name: string): LorebookEntry {
   return {
@@ -330,6 +344,46 @@ export default function frontendInteractionTest() {
       const content: string = '流式输出中\n\n```html\n<div>' + repeatStr('z', 700);
       const seen: ChunkStats = inspectChunks(parseChatChunks(content), 'zzz');
       expect(seen.collapsible).assertEqual(0);
+    });
+  });
+
+  describe('HtmlBlockWhitespace', () => {
+    it('crlf_indented_html_blocks_render_compact', 0, () => {
+      // 复刻问题卡:CRLF + 每标签一行 + 前导缩进的状态面板 HTML
+      const html: string = '<div style="x">\r\n  <p>状态: 独处</p>\r\n  <div>\r\n'
+        + '    <p>体力: 100/100</p>\r\n    <p>理智: 100/100</p>\r\n  </div>\r\n</div>';
+      const text: string = flattenText(parseChatChunks(html));
+      // 标签之间的缩进空行全部收敛,不残留 \r
+      expect(text).assertEqual('状态: 独处\n体力: 100/100\n理智: 100/100');
+      expect(text.indexOf('\r') >= 0).assertFalse();
+    });
+
+    it('crlf_plain_paragraphs_keep_single_blank_line', 0, () => {
+      const text: string = flattenText(parseChatChunks('甲\r\n\r\n乙'));
+      expect(text).assertEqual('甲\n\n乙');
+      expect(text.indexOf('\r') >= 0).assertFalse();
+    });
+
+    it('explicit_br_blank_line_is_preserved', 0, () => {
+      const text: string = flattenText(parseChatChunks('<div>a<br><br>b</div>'));
+      expect(text).assertEqual('a\n\nb');
+    });
+
+    it('collapsible_body_without_html_keeps_paragraphs', 0, () => {
+      const content: string = '前言\r\n\r\n<details><summary>面板</summary>\r\n'
+        + '<div>\r\n  <p>行一</p>\r\n  <p>行二</p>\r\n</div>\r\n</details>';
+      const chunks: ChatRenderChunk[] = parseChatChunks(content);
+      let found: number = 0;
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk: ChatRenderChunk = chunks[i];
+        if (chunk.type === 'collapsible') {
+          found++;
+          // 折叠体原文照旧,嵌套渲染时才做 HTML 消毒(其纯文本结果由上面用例覆盖)
+          expect(chunk.title).assertEqual('面板');
+          expect(chunk.content.indexOf('<p>行一</p>') >= 0).assertTrue();
+        }
+      }
+      expect(found).assertEqual(1);
     });
   });
 }
