@@ -32,6 +32,7 @@ import { CHAT_FONT_SYSTEM } from '../utils/ChatFontRegistry';
 import { ChatMarkdownColorTheme, ChatSymbolColorRule } from '../utils/ChatTextColorTheme';
 import { ChatCollapsibleBlock } from './ChatCollapsibleBlock';
 import { ChatBranchBlock } from './ChatBranchBlock';
+import { ChatMessageImage } from './ChatMessageImage';
 
 /** 发送者类型 */
 export type ChatSenderType = 'user' | 'assistant' | 'character' | 'narrator' | 'system';
@@ -628,6 +629,11 @@ export struct ChatRichText {
             ChatBranchBlock({
               options: chunk.options,
               onSelect: this.onInteractiveAction
+            })
+          } else if (chunk.type === 'image') {
+            ChatMessageImage({
+              url: chunk.url,
+              alt: chunk.alt
             })
           } else {
             // 表格分块:按列对齐渲染

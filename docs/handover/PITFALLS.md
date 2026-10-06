@@ -114,6 +114,7 @@
 | P-64 | 把 `$r()` 颜色缓存进变量 | **不缓存**；颜色一律 `$r('app.color.*')`（并做 dark 覆盖） |
 | P-65 | `LazyForEach` 用 index 当 key | keyGenerator **必须用业务唯一 id**；复用组件在 `aboutToReuse` 重置视觉状态 |
 | P-90 | 记忆总结请求**独立拼装 prompt** → 与聊天请求前缀不同 → LLM prompt cache **全量 miss**（60k 输入全额计费）；且每章落库后**立即**注入 head + 立即更新核心记忆（位于 head 最高位，其后全部作废）+ 立即前移窗口锚点 → 每个归档周期一次全量冷重建（自动归档下每 50 条/2 万字符一次） | ① 总结请求 = **聊天请求基座逐字节复用 + 末尾追加总结指令**（"后缀扩展"）：`ChatContextMaintenanceService` 经 `buildSummaryBaseMessages` 取 `ChatService` 重建后的 `lastBuiltRequestMessages`，`MemoryPromptBuilder.buildChapterSuffixInstruction` 生成尾部指令；无基座时回退独立 prompt。② **延迟激活**：会话级"激活边界"`activeBoundary`（`ChatMemoryModeService`，Preferences，key `chat_memory_<id>_aboundary`）——章节生成只写库，注入只取 `endPosition <= activeBoundary`、锚点也停在激活边界（实际边界更小时 clamp 自愈）；仅在手动"立即归档"或自动归档待激活达 4 章时推进边界（一次冷重建）。参考 commit `99f2469` / `d4f91a0` / `11eb2b0` |
+| P-92 | 在聊天文本管线的 `sanitizeHtmlTags` **之后**才处理 `<img>` 标签 → 消毒正则 `/<[^>]+>/g` 已把标签连同 src 整段删除，URL 无从提取（2026-10-06 消息内图片渲染） | 任何依赖 HTML 标签**属性内容**的抽取（img src / a href 等）必须在 `buildLightChunks` 的 `sanitizeHtmlTags` **之前**做，先抽走再消毒；仅依赖标签存在性/换行语义的处理（如 BLOCK_HTML_TAGS 边界）不受此限 |
 
 ## 7. 文档与协作
 

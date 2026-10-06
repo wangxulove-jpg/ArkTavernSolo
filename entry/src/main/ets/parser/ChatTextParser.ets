@@ -1011,12 +1011,21 @@ export interface TableChatRenderChunk {
   readonly rows: TableChunkRow[];
 }
 
+/** 图片分块(markdown ![](url) 或 <img src>;仅 https) */
+export interface ImageChatRenderChunk {
+  readonly type: 'image';
+  readonly id: string;
+  readonly url: string;
+  readonly alt: string;
+}
+
 /** 渲染分块联合 */
 export type ChatRenderChunk =
   | TextChatRenderChunk
   | CollapsibleChatRenderChunk
   | BranchesChatRenderChunk
-  | TableChatRenderChunk;
+  | TableChatRenderChunk
+  | ImageChatRenderChunk;
 
 /** 交互块占位符前缀/后缀(仅用于解析中间态) */
 const BLOCK_PLACEHOLDER: string = '\uE200';
@@ -1156,6 +1165,101 @@ interface FrontendExtraction {
   readonly blocks: CollapsibleChatRenderChunk[];
 }
 
+/** 消息内图片占位符(仅用于解析中间态;独立成行,渲染时按序还原为图片分块) */
+const IMG_PLACEHOLDER: string = '\uE202';
+const IMG_PLACEHOLDER_END: string = '\uE203';
+/** 匹配单个图片占位符 "索引" */
+const IMG_PLACEHOLDER_PATTERN: RegExp =
+  new RegExp('^' + IMG_PLACEHOLDER + '(\\d+)' + IMG_PLACEHOLDER_END + '$');
+
+/** 消息内图片抽取结果 */
+interface ImageExtraction {
+  /** 抽走图片后的剩余文本(原位置留占位符行) */
+  readonly residual: string;
+  /** 图片分块(按出现顺序) */
+  readonly blocks: ImageChatRenderChunk[];
+}
+
+/** 图片语法命中区间(原文下标 + 提取结果) */
+interface ImageHit {
+  readonly start: number;
+  readonly end: number;
+  readonly url: string;
+  readonly alt: string;
+}
+
+/** markdown 图片语法:![alt](https://...) */
+const MD_IMAGE_RE: RegExp = /!\[([^\]]*)\]\((https:\/\/[^)\s]+)\)/g;
+/** HTML img 标签(属性顺序任意;src 是否 https 由抽取逻辑判断) */
+const IMG_TAG_RE: RegExp = /<img\b[^>]*>/gi;
+/** img 标签内 src 属性(双引号/单引号) */
+const IMG_TAG_SRC_RE: RegExp = /src\s*=\s*(?:"([^"]*)"|'([^']*)')/i;
+/** img 标签内 alt 属性(双引号/单引号,可选) */
+const IMG_TAG_ALT_RE: RegExp = /alt\s*=\s*(?:"([^"]*)"|'([^']*)')/i;
+
+/** 从 img 标签串里提取 src(无 src 返回空串) */
+function extractImgTagSrc(tag: string): string {
+  const m: RegExpExecArray | null = IMG_TAG_SRC_RE.exec(tag);
+  if (m === null) {
+    return '';
+  }
+  return m[1] !== undefined ? m[1] : (m[2] !== undefined ? m[2] : '');
+}
+
+/** 从 img 标签串里提取 alt(无 alt 返回空串) */
+function extractImgTagAlt(tag: string): string {
+  const m: RegExpExecArray | null = IMG_TAG_ALT_RE.exec(tag);
+  if (m === null) {
+    return '';
+  }
+  return m[1] !== undefined ? m[1] : (m[2] !== undefined ? m[2] : '');
+}
+
+/**
+ * 抽取消息文本内的网络图片(markdown ![](url) 与 <img src> 两种语法)为图片分块。
+ * - 仅 https:// 生效;http:// 命中不抽取,留给原消毒管线(与 MarketCharacterAvatar 口径一致)
+ * - 必须在 sanitizeHtmlTags 之前调用:消毒会删除 <img> 标签导致 URL 丢失
+ * - 占位符两侧以换行隔离,保证行扫描时独立成行(不与表格行判断互相干扰)
+ */
+function extractImageLinks(text: string): ImageExtraction {
+  const blocks: ImageChatRenderChunk[] = [];
+  // 收集所有命中区间(含 url/alt),按原文位置排序后重建文本,避免下标位移
+  const hits: ImageHit[] = [];
+  MD_IMAGE_RE.lastIndex = 0;
+  let m: RegExpExecArray | null = MD_IMAGE_RE.exec(text);
+  while (m !== null) {
+    hits.push({ start: m.index, end: m.index + m[0].length, url: m[2], alt: m[1] });
+    m = MD_IMAGE_RE.exec(text);
+  }
+  IMG_TAG_RE.lastIndex = 0;
+  m = IMG_TAG_RE.exec(text);
+  while (m !== null) {
+    const src: string = extractImgTagSrc(m[0]);
+    if (src.startsWith('https://')) {
+      hits.push({ start: m.index, end: m.index + m[0].length, url: src, alt: extractImgTagAlt(m[0]) });
+    }
+    m = IMG_TAG_RE.exec(text);
+  }
+  if (hits.length === 0) {
+    return { residual: text, blocks: blocks };
+  }
+  hits.sort((a: ImageHit, b: ImageHit): number => a.start - b.start);
+  const out: string[] = [];
+  let cursor: number = 0;
+  for (let i = 0; i < hits.length; i++) {
+    const h: ImageHit = hits[i];
+    if (h.start < cursor) {
+      continue; // 重叠命中(不应出现)跳过
+    }
+    out.push(text.substring(cursor, h.start));
+    out.push('\n' + IMG_PLACEHOLDER + blocks.length.toString() + IMG_PLACEHOLDER_END + '\n');
+    blocks.push({ type: 'image', id: 'img' + blocks.length.toString(), url: h.url, alt: h.alt });
+    cursor = h.end;
+  }
+  out.push(text.substring(cursor));
+  return { residual: out.join(''), blocks: blocks };
+}
+
 /** 该围栏内容是否像「角色卡前端界面」(整页 HTML):先过长度门槛(短示例不折叠),再看语言/结构 */
 function isFrontendHtmlFence(lang: string, body: string): boolean {
   // 短片段(对话里的 HTML 示例)保持原样,不当成前端页面
@@ -1260,6 +1364,9 @@ function buildLightChunks(text: string, options: ChatTextParserOptions): ChatRen
     fe = extractFrontendHtmlBlocks(s);
   }
   s = fe.residual;
+  // 消息内网络图片抽取(必须在 sanitizeHtmlTags 之前:消毒会删 <img> 标签导致 URL 丢失)
+  const imgs: ImageExtraction = extractImageLinks(s);
+  s = imgs.residual;
   s = sanitizeHtmlTags(s);
   if (s.length === 0) {
     return [];
@@ -1304,6 +1411,17 @@ function buildLightChunks(text: string, options: ChatTextParserOptions): ChatRen
       const feIdx: number = parseInt(feMatch[1], 10);
       if (feIdx >= 0 && feIdx < fe.blocks.length) {
         result.push(fe.blocks[feIdx]);
+      }
+      continue;
+    }
+    // 消息内图片占位符 → 按序还原为图片分块(位置与原文一致)
+    const imgMatch: RegExpMatchArray | null = lines[i].match(IMG_PLACEHOLDER_PATTERN);
+    if (imgMatch !== null) {
+      flushText();
+      flushTable();
+      const imgIdx: number = parseInt(imgMatch[1], 10);
+      if (imgIdx >= 0 && imgIdx < imgs.blocks.length) {
+        result.push(imgs.blocks[imgIdx]);
       }
       continue;
     }

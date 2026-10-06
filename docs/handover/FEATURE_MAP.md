@@ -38,6 +38,7 @@ bridge/：仅承载「页面 ↔ 组件」的宿主契约（例：FrontendCardHo
 | 分支地图页（缩进树，无画布/缩放） | `pages/BranchMapPage.ets` | `viewmodels/BranchMapViewModel` → `services/ConversationBranchPersistenceService`；行文案 `utils/BranchTreeFlatten` | UI→VM→S |
 | 会话生命周期（新建/切换/删除/新建章节） | `services/ChatSessionService.ets` | `services/ChatPersistenceService` / `services/WorldGroupService` | S |
 | 消息删除 / 编辑 | `services/ChatMessageService.ets` | — | S |
+| 消息富文本渲染（Markdown 子集 / 折叠块 / 分支选项 / 表格 / **消息内网络图片**） | `components/ChatRichText.ets` / `components/ChatMessageBubble.ets` | 解析管线 `parser/ChatTextParser.parseChatChunks`（`ChatRenderChunk` 五类分块；图片抽取 `extractImageLinks` 必须在 `sanitizeHtmlTags` 之前——见 PITFALLS P-92，仅 https，markdown `![]()` 与 `<img src>` 双语法）；图片组件 `components/ChatMessageImage` | UI→parser |
 | 上下文维护（记忆总结触发 / 记忆失效 / 世界书激活刷新） | `services/ChatContextMaintenanceService.ets` | `services/MemoryService` / `services/LorebookPinService` | S |
 | 用户称呼 / Persona 注入 | `services/ChatUserIdentityService.ets` | `services/PersonaService` | S |
 | **Prompt 如何拼装** | `services/PromptBuilder.ets` | `services/MacroReplacer` / `RecentMessageSelector` / `HistoryTrimmer` / `PromptSegment` 段序 | S |
