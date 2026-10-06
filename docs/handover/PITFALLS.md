@@ -117,6 +117,8 @@
 | P-92 | 在聊天文本管线的 `sanitizeHtmlTags` **之后**才处理 `<img>` 标签 → 消毒正则 `/<[^>]+>/g` 已把标签连同 src 整段删除，URL 无从提取（2026-10-06 消息内图片渲染） | 任何依赖 HTML 标签**属性内容**的抽取（img src / a href 等）必须在 `buildLightChunks` 的 `sanitizeHtmlTags` **之前**做，先抽走再消毒；仅依赖标签存在性/换行语义的处理（如 BLOCK_HTML_TAGS 边界）不受此限 |
 | P-93 | 角色卡 HTML（`<details>` 状态栏等）在纯文本回退里**标签之间出现大段空行**（2026-10-06 用户报"知名艺术画廊馆长"卡）。两个叠加原因：① 卡片内嵌数据是 **CRLF**，`\n\r\n` 使 `/^\n+\|…/` 的 `\n{3,}` 收敛失效、每行尾残留 `\r`；② 块级标签直接换成 `\n`，而 HTML 源码「每标签一行 + 前导缩进」→ 产生大量**仅含空白**的行，逐行渲染即成空行 | `sanitizeHtmlTags` 里：① 先 `/\r\n?/g → '\n'` 统一换行；② 块级标签先落中间态占位符 `BLOCK_BOUNDARY`（`\uE400`），再 `/[ \t]*占位符(?:[ \t\n]*占位符)*[ \t]*/ → '\n'` 把「占位符 + 周边缩进空白」整段收敛为单个换行（`<br>` 仍走 `\n`，故 `<br><br>` 的空行语义保留）。回归用例见 `frontend_interaction.test.ets` 的 `HtmlBlockWhitespace`（CRLF+缩进 HTML → 紧凑无空行、纯文本 `\r\n\r\n` → 保留单空行且无 `\r`） |
 
+| P-94 | 在 ArkTS 里 `catch (e) { throw e; }` 直接重抛原值 | 编译器报 **`arkts-limited-throw`**（throw 不接受任意类型）。重抛必须转成 `Error`：`throw new Error('…:' + (e as Error).message)`（仓内 service 层通用写法），或至少 `throw e as Error`。（2026-10-06 本地图片库 `LocalImageService.addImage` 入库失败回滚时踩到） |
+
 ## 7. 文档与协作
 
 | # | 坑 | 正确做法 |

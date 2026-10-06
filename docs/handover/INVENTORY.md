@@ -40,6 +40,7 @@
 | `ChatMessageDataSource` | 消息列表懒加载数据源 | **>20 条列表的标准做法** |
 | `ChatMessageBubble` | 单条消息气泡 | — |
 | `ChatRichText` | 富文本渲染（含 `ChatSenderType` 渲染类型） | 改渲染类型前先读 AGENTS §7 消息三层体系 |
+| `ChatMessageImage` | 消息内图片（网络 https URL **或**沙箱 `file://` URI） | 宽度 100% 自适应 + `onError` 占位；本地图未命中时上层传空 url + `alt='未找到图片「名」'` 即可复用其占位 |
 | `ChatInputArea` | 聊天输入区（含发送/停止按钮、代写候选区） | 键盘避让由页面负责；停止键为低对比描边圆钮（刻意不用高饱和红）；发送/停止切换带形变过渡 |
 | `MessageSwipeControls` | Swipe 候选切换控件 | — |
 | `ChatAppearancePanel` | 聊天显示设置面板（滑块/配色/色盘/恢复默认） | 语义色经 `@Prop`，色盘请求经 `ColorPickerRequest` 上抛 |
@@ -82,6 +83,9 @@
 | **错误文案映射** | 纯函数收口，调用点直连 | `viewmodels/ChatErrorMapper.ets` |
 | **纯常量 / 契约文本** | 独立契约模块 | `services/ChatTextContract.ets` |
 | **纯 prompt 文本构建** | 独立 builder（无网络/无 DB） | `services/MemoryPromptBuilder.ets` |
+| **"受管记录"自动维护**（内容派生自单一数据源、列表只读、对账自愈） | 固定 id 常量 + `isManagedXxxId()` 判定（不动 DB 列）；数据变更后重写、启动时对账、正文不一致才写；强制位置/作用域/加入已选；UI 隐藏编辑删除、导出排除 | `services/LocalImageService.syncManagedPresets()` + `services/LocalImagePromptComposer`（正文 = 固定规则段 + 按归一化键**稳定排序**的清单，保证逐字节可复现） |
+| **"预设级本地偏好"映射**（不进数据库、不改实体） | Preferences 单键 JSON `presetId → 值`；读取时逐键校验、非法丢弃；`remove()` 同步清理 | `storage/PromptPresetSelectionStore` 的 `prompt_preset_positions_v1`(注入位置) 与 `prompt_preset_scopes_v1`(作用域) |
+| **"名字 → 本地文件"解析映射**（组件不碰服务的替代做法） | 页面/VM 层把字典解析好，经 `@Prop` 逐层透传；`@Watch` 只重跑解析映射、不重跑文本解析；渲染 key 并入解析结果 | `pages/ChatPage.refreshLocalImages()` → `ChatMessageList` → `ChatMessageBubble` → `ChatRichText.localImages`（本地图 `![x](arkimg:名)`） |
 | **阈值/策略判定** | 独立策略类 + 宿主回调取宿主私有能力 | `services/MemoryTriggerPolicy.ets` |
 | **DDL 常量组织** | 按域拆文件 + `DatabaseConstants` 取名字 | `database/schema/Schema*.ets` |
 | **版本 → 语句映射** | `Map` 注册表，取值返回浅拷贝 | `database/DatabaseSchema.ets` 的 `SCHEMA_BY_VERSION` |
