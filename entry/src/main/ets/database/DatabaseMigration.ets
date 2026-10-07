@@ -21,7 +21,9 @@ import { V1_TO_V2_STATEMENTS, V2_TO_V3_STATEMENTS, V3_TO_V4_STATEMENTS, V4_TO_V5
   V44_TO_V45_DDL_STATEMENTS,
   V45_TO_V46_DDL_STATEMENTS,
   V46_TO_V47_DDL_STATEMENTS,
-  V47_TO_V48_DDL_STATEMENTS
+  V47_TO_V48_DDL_STATEMENTS,
+  V48_TO_V49_DDL_STATEMENTS,
+  V49_TO_V50_DDL_STATEMENTS
 } from './DatabaseSchema';
 import {
   TABLE_CHATS,
@@ -1564,6 +1566,44 @@ class V47ToV48Migration implements DatabaseMigration {
   async migrate(store: relationalStore.RdbStore): Promise<void> {
     for (let i = 0; i < V47_TO_V48_DDL_STATEMENTS.length; i++) {
       await store.executeSql(V47_TO_V48_DDL_STATEMENTS[i]);
+    }
+  }
+}
+
+/**
+ * v48→v49:本地图片库自定义分类(分类表 + 多态关联表)。
+ * 纯新建表 + 索引,不改 local_images 与任何现有数据(现有 character_id 语义不变)。
+ */
+export function createV48ToV49Migration(): DatabaseMigration {
+  return new V48ToV49Migration();
+}
+
+class V48ToV49Migration implements DatabaseMigration {
+  readonly fromVersion: number = 48;
+  readonly toVersion: number = 49;
+
+  async migrate(store: relationalStore.RdbStore): Promise<void> {
+    for (let i = 0; i < V48_TO_V49_DDL_STATEMENTS.length; i++) {
+      await store.executeSql(V48_TO_V49_DDL_STATEMENTS[i]);
+    }
+  }
+}
+
+/**
+ * v49→v50:图片池模型——仅给 local_images 补 description 列。
+ * character_id 自 v50 起停用(列保留);无数据迁移。
+ */
+export function createV49ToV50Migration(): DatabaseMigration {
+  return new V49ToV50Migration();
+}
+
+class V49ToV50Migration implements DatabaseMigration {
+  readonly fromVersion: number = 49;
+  readonly toVersion: number = 50;
+
+  async migrate(store: relationalStore.RdbStore): Promise<void> {
+    for (let i = 0; i < V49_TO_V50_DDL_STATEMENTS.length; i++) {
+      await store.executeSql(V49_TO_V50_DDL_STATEMENTS[i]);
     }
   }
 }

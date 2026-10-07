@@ -2,18 +2,19 @@
  * LocalImageRepository
  *
  * 职责:
- * - LocalImage 的 CRUD 操作
- * - 列表稳定排序(character_id ASC, name_key ASC)
+ * - LocalImage 的 CRUD 操作(图片池:全部图片一张表,不再按角色分层)
+ * - 列表稳定排序(name_key ASC)
  * - 行映射走 LocalImageRepositoryMapper,损坏数据抛 InvalidData
  * - 不打印 name / fileUri
  *
  * 不负责:
  * - 图片文件读写(见 LocalImageAssetStore)
  * - 引用解析 / 注入(见上层服务)
+ * - 标签(= 提示词预设正文,见 utils/LocalImageTagText)
  *
  * 规则:
- * - insert 时同一作用域名字重复(UNIQUE 冲突)映射为 AlreadyExists
- * - updateName 时名字冲突映射为 AlreadyExists,目标不存在返回 NotFound
+ * - insert / updateName 时名字重复(UNIQUE 冲突)映射为 AlreadyExists(名字全局唯一)
+ * - update 目标不存在返回 NotFound
  * - remove 幂等
  * - 不修改输入 LocalImage 对象
  * - ResultSet 所有路径关闭
@@ -28,7 +29,7 @@ import {
   COLUMN_ID,
   COLUMN_NAME,
   COLUMN_IMAGE_NAME_KEY,
-  COLUMN_CHARACTER_ID,
+  COLUMN_IMAGE_DESCRIPTION,
   COLUMN_UPDATED_AT
 } from '../database/DatabaseConstants';
 import {
@@ -82,11 +83,11 @@ export class LocalImageRepository {
     }
   }
 
+  /** 全部图片(按名字升序,稳定) */
   async listAll(): Promise<LocalImage[]> {
     const store: relationalStore.RdbStore = this.dbHelper.getStore();
     const predicates: relationalStore.RdbPredicates =
       new relationalStore.RdbPredicates(TABLE_LOCAL_IMAGES);
-    predicates.orderByAsc(COLUMN_CHARACTER_ID);
     predicates.orderByAsc(COLUMN_IMAGE_NAME_KEY);
     const rs: relationalStore.ResultSet = await store.query(predicates);
     try {
@@ -95,53 +96,6 @@ export class LocalImageRepository {
         images.push(localImageFromRow(rs));
       }
       return images;
-    } finally {
-      rs.close();
-    }
-  }
-
-  async listByCharacter(characterId: string): Promise<LocalImage[]> {
-    const store: relationalStore.RdbStore = this.dbHelper.getStore();
-    const predicates: relationalStore.RdbPredicates =
-      new relationalStore.RdbPredicates(TABLE_LOCAL_IMAGES);
-    predicates.equalTo(COLUMN_CHARACTER_ID, characterId);
-    predicates.orderByAsc(COLUMN_CHARACTER_ID);
-    predicates.orderByAsc(COLUMN_IMAGE_NAME_KEY);
-    const rs: relationalStore.ResultSet = await store.query(predicates);
-    try {
-      const images: LocalImage[] = [];
-      while (rs.goToNextRow()) {
-        images.push(localImageFromRow(rs));
-      }
-      return images;
-    } finally {
-      rs.close();
-    }
-  }
-
-  /**
-   * 返回所有存在专属图片的非空 character_id(去重,升序)。
-   * 用于"哪些角色有专属图片"。
-   */
-  async listCharacterIdsWithImages(): Promise<string[]> {
-    const store: relationalStore.RdbStore = this.dbHelper.getStore();
-    const sql: string =
-      `SELECT DISTINCT ${COLUMN_CHARACTER_ID} FROM ${TABLE_LOCAL_IMAGES} ` +
-      `WHERE ${COLUMN_CHARACTER_ID} <> '' ORDER BY ${COLUMN_CHARACTER_ID} ASC`;
-    const rs: relationalStore.ResultSet = await store.querySql(sql);
-    try {
-      const ids: string[] = [];
-      const ci: number = rs.getColumnIndex(COLUMN_CHARACTER_ID);
-      if (ci < 0) {
-        return ids;
-      }
-      while (rs.goToNextRow()) {
-        const id: string = rs.getString(ci);
-        if (id.length > 0) {
-          ids.push(id);
-        }
-      }
-      return ids;
     } finally {
       rs.close();
     }
@@ -182,17 +136,14 @@ export class LocalImageRepository {
     }
   }
 
-  async updateCharacter(
-    id: string,
-    characterId: string,
-    updatedAt: number
-  ): Promise<void> {
+  /** 更新图片描述(可空) */
+  async updateDescription(id: string, description: string, updatedAt: number): Promise<void> {
     if (id.length === 0) {
-      throw DatabaseError.invalidData('localImage.updateCharacter: id empty');
+      throw DatabaseError.invalidData('localImage.updateDescription: id empty');
     }
     const store: relationalStore.RdbStore = this.dbHelper.getStore();
     const bucket: relationalStore.ValuesBucket = {};
-    bucket[COLUMN_CHARACTER_ID] = characterId;
+    bucket[COLUMN_IMAGE_DESCRIPTION] = description;
     bucket[COLUMN_UPDATED_AT] = updatedAt;
 
     const predicates: relationalStore.RdbPredicates =
@@ -204,11 +155,11 @@ export class LocalImageRepository {
       affected = await store.update(bucket, predicates);
     } catch (err) {
       throw DatabaseError.queryFailed(
-        `localImage.updateCharacter: ${extractCauseMessage(err)}`
+        `localImage.updateDescription: ${extractCauseMessage(err)}`
       );
     }
     if (affected === 0) {
-      throw DatabaseError.notFound('localImage.updateCharacter');
+      throw DatabaseError.notFound('localImage.updateDescription');
     }
   }
 
@@ -229,14 +180,14 @@ export class LocalImageRepository {
     }
   }
 
-  async nameTaken(characterId: string, nameKey: string): Promise<boolean> {
+  /** 名字是否已被占用(名字全局唯一) */
+  async nameTaken(nameKey: string): Promise<boolean> {
     if (nameKey.length === 0) {
       return false;
     }
     const store: relationalStore.RdbStore = this.dbHelper.getStore();
     const predicates: relationalStore.RdbPredicates =
       new relationalStore.RdbPredicates(TABLE_LOCAL_IMAGES);
-    predicates.equalTo(COLUMN_CHARACTER_ID, characterId);
     predicates.equalTo(COLUMN_IMAGE_NAME_KEY, nameKey);
     try {
       const rs: relationalStore.ResultSet = await store.query(predicates);

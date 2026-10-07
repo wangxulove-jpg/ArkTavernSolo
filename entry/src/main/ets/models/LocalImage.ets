@@ -1,12 +1,13 @@
 /**
  * LocalImage 领域模型
  *
- * 用户导入的本地图片/表情包/GIF:每张图有一个名字,AI 在回复正文里用
+ * 用户导入的图片/表情包/GIF:每张图有一个名字,AI 在回复正文里用
  * `![描述](arkimg:名字)` 引用,App 解析后渲染沙箱内的本地图。
  *
- * 分层(作用域):
- * - characterId === '' → 全局图片库,所有会话可调用
- * - characterId !== '' → 角色卡专属,仅该角色卡的会话可调用
+ * 图片池(v50 起):
+ * - **所有图片一个池子**,不再分「全局 / 角色专属」(旧 `character_id` 列已停用,不读不写)
+ * - 分组一律用**标签**表达,而标签就是普通提示词预设 —— 把图片名写进预设正文即视为打上该标签
+ * - 每张图另有一段**描述**(给模型看"这图是什么"),写进标签预设时随名字一起列出
  *
  * 不依赖 ArkUI、RDB、页面或 Provider。
  *
@@ -23,6 +24,8 @@ import { DatabaseError } from './DatabaseError';
 
 /** 图片名长度上限 */
 export const IMAGE_NAME_MAX_LENGTH: number = 50;
+/** 图片描述长度上限(写进标签预设时与名字一起给模型看,故不宜过长) */
+export const IMAGE_DESCRIPTION_MAX_LENGTH: number = 200;
 /** 名字 id 前缀 */
 const ID_PREFIX: string = 'img-';
 
@@ -52,8 +55,8 @@ export interface LocalImage {
   readonly nameKey: string;
   /** 沙箱内的文件 URI(file://...) */
   readonly fileUri: string;
-  /** '' = 全局;非空 = 该角色专属 */
-  readonly characterId: string;
+  /** 给模型看的描述(可空;写进标签预设时与名字一起列出) */
+  readonly description: string;
   readonly createdAt: number;
   readonly updatedAt: number;
 }
@@ -63,7 +66,7 @@ export interface CreateLocalImageOptions {
   readonly id?: string;
   readonly name: string;
   readonly fileUri: string;
-  readonly characterId?: string;
+  readonly description?: string;
   readonly createdAt?: number;
 }
 
@@ -119,11 +122,34 @@ export function describeImageNameProblem(name: string): string {
   return '';
 }
 
+// ===== 描述处理 =====
+
+/** 描述内的连续空白(含换行)压成单个空格(ArkTS 禁正则字面量,故用 new RegExp) */
+const DESCRIPTION_WHITESPACE_PATTERN: RegExp = new RegExp('\\s+', 'g');
+
+/** 归一化描述:去首尾空白 + 压平换行(描述会被写进预设正文的单行条目) */
+export function normalizeImageDescription(description: string): string {
+  return description.trim().replace(DESCRIPTION_WHITESPACE_PATTERN, ' ');
+}
+
+/** 描述是否合法:长度 ≤ IMAGE_DESCRIPTION_MAX_LENGTH(可空) */
+export function isValidImageDescription(description: string): boolean {
+  return normalizeImageDescription(description).length <= IMAGE_DESCRIPTION_MAX_LENGTH;
+}
+
+/** 描述不合法时的原因文案(供 UI 直接展示) */
+export function describeImageDescriptionProblem(description: string): string {
+  if (!isValidImageDescription(description)) {
+    return `图片描述不能超过 ${IMAGE_DESCRIPTION_MAX_LENGTH} 个字符`;
+  }
+  return '';
+}
+
 // ===== 工厂与校验 =====
 
 /**
  * 创建 LocalImage 实例。
- * @throws DatabaseError.InvalidData 名字或 URI 非法
+ * @throws DatabaseError.InvalidData 名字/描述/URI 非法
  */
 export function createLocalImage(options: CreateLocalImageOptions): LocalImage {
   const id: string = options.id !== undefined && options.id.length > 0
@@ -135,7 +161,7 @@ export function createLocalImage(options: CreateLocalImageOptions): LocalImage {
     name: options.name.trim(),
     nameKey: normalizeImageName(options.name),
     fileUri: options.fileUri,
-    characterId: options.characterId !== undefined ? options.characterId : '',
+    description: options.description !== undefined ? normalizeImageDescription(options.description) : '',
     createdAt: now,
     updatedAt: now
   };
@@ -159,6 +185,9 @@ export function validateLocalImage(image: LocalImage): void {
   }
   if (image.fileUri.length === 0) {
     throw DatabaseError.invalidData('local image fileUri empty');
+  }
+  if (!isValidImageDescription(image.description)) {
+    throw DatabaseError.invalidData('local image description too long');
   }
   if (!Number.isFinite(image.createdAt) || !Number.isInteger(image.createdAt) || image.createdAt < 0) {
     throw DatabaseError.invalidData('local image createdAt invalid');

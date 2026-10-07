@@ -39,7 +39,7 @@ bridge/：仅承载「页面 ↔ 组件」的宿主契约（例：FrontendCardHo
 | 会话生命周期（新建/切换/删除/新建章节） | `services/ChatSessionService.ets` | `services/ChatPersistenceService` / `services/WorldGroupService` | S |
 | 消息删除 / 编辑 | `services/ChatMessageService.ets` | — | S |
 | 消息富文本渲染（Markdown 子集 / 折叠块 / 分支选项 / 表格 / **消息内网络图片 + 本地图片库图片**） | `components/ChatRichText.ets` / `components/ChatMessageBubble.ets` | 解析管线 `parser/ChatTextParser.parseChatChunks`（`ChatRenderChunk` 五类分块；图片抽取 `extractImageLinks` 必须在 `sanitizeHtmlTags` **之前**——见 PITFALLS P-92；网络图仅 https，markdown `![]()` 与 `<img src>` 双语法；**本地图 `![描述](arkimg:名字)`** → `kind='local'` + `name`，URI 由 `ChatRichText` 的 `localImages` prop 解析、未命中显示「未找到图片」）；图片组件 `components/ChatMessageImage`（未加载显示**源码占位 + 加载动画**，加载完成只显示图片；点击图片走 **`geometryTransition` 一镜到底**放大/收回（`modalTransition: NONE` + `animateTo`，见 PITFALLS P-96），预览支持**双指缩放（以手指捏合点为锚点）+ 拖动（缩放走布局尺寸、平移走布局 offset，锚点用窗口坐标，见 PITFALLS P-97）**；源码取自 `ImageChatRenderChunk.source`） | UI→parser |
-| **本地图片库（表情/插图/GIF）+ 提示词预设作用域**（v52，`docs/角色卡` 之外的用户资产） | `pages/LocalImageLibraryPage.ets` → `viewmodels/LocalImageLibraryViewModel` | `services/LocalImageService`（增删改查 + 受管预设对账 `syncManagedPresets` + `buildResolutionMap`）→ `repositories/LocalImageRepository` / `storage/LocalImageAssetStore`（`filesDir/local_images`，GIF 不转码）；清单预设按作用域一组（`arkimg-global` / `arkimg-char-<id>`，**强制 tail**）；预设作用域存本地偏好 `prompt_preset_scopes_v1`，**唯一过滤点** `services/ChatRequestBuilder.createPresetRequestSnapshot` | UI→VM→S→Repo |
+| **本地图片库（图片池 + 标签即预设）**（v48 建表 / v50 图片池模型） | `pages/LocalImageLibraryPage.ets` → `viewmodels/LocalImageLibraryViewModel` | `services/LocalImageService`（图片 CRUD + **标签正文读写** `attachImageToPresets`/`detachImageFromPresets` + `buildResolutionMap`）→ `repositories/LocalImageRepository` / `storage/LocalImageAssetStore`（`filesDir/local_images`，GIF 不转码）；**模型**：所有图片一个池子，**不分全局/角色**（`local_images.character_id` 自 v50 停用）；每张图 = 唯一名字（模型用 `![描述](arkimg:名字)` 引用）+ 可空**描述**；**标签就是普通提示词预设** —— 正文出现 `- 名字：描述` 即视为打上该标签（反推，见 `utils/LocalImageTagText`），不存任何关联表；改名/改描述/删图会**同步回**提到它的预设正文；渲染解析 = 全部图片（`utils/LocalImageResolution.toResolutionMap`），AI 能用哪些图完全由"会话启用了哪些预设"决定（`prompt_preset_scopes_v1` + 已选集合） | UI→VM→S→Repo |
 | 上下文维护（记忆总结触发 / 记忆失效 / 世界书激活刷新） | `services/ChatContextMaintenanceService.ets` | `services/MemoryService` / `services/LorebookPinService` | S |
 | 用户称呼 / Persona 注入 | `services/ChatUserIdentityService.ets` | `services/PersonaService` | S |
 | **Prompt 如何拼装** | `services/PromptBuilder.ets` | `services/MacroReplacer` / `RecentMessageSelector` / `HistoryTrimmer` / `PromptSegment` 段序 | S |
@@ -72,10 +72,10 @@ bridge/：仅承载「页面 ↔ 组件」的宿主契约（例：FrontendCardHo
 
 | 我想改… | 第一定位 |
 |---|---|
-| 表名 / 列名 / 索引名（唯一来源） | `database/DatabaseConstants.ets`（`DATABASE_VERSION` = 47） |
-| **DDL 常量**（CREATE/ALTER） | `database/schema/Schema{Core,Lorebook,Presets,Swipe,Branch,Memory,World}.ets`（P3-3② 按域拆分） |
+| 表名 / 列名 / 索引名（唯一来源） | `database/DatabaseConstants.ets`（`DATABASE_VERSION` = 50） |
+| **DDL 常量**（CREATE/ALTER） | `database/schema/Schema{Core,Lorebook,Presets,Swipe,Branch,Memory,World,LocalImages}.ets`（P3-3② 按域拆分） |
 | 版本组装 / `getSchemaStatements` | `database/DatabaseSchema.ets`（`SCHEMA_BY_VERSION` Map 注册表，P3-3③） |
-| **新增数据库迁移** | `database/DatabaseMigration.ets`（**只增不改、版本连续、禁 DROP**；当前到 v47） |
+| **新增数据库迁移** | `database/DatabaseMigration.ets`（**只增不改、版本连续、禁 DROP**；当前到 v50。**新增一版要改 4 处**，见 PITFALLS P-99） |
 | 数据库连接 / 事务 | `database/DbHelper.ets`（`runInTransaction` / `getStore` / `getVersion`） |
 | **新增 Repository** | 仿 `repositories/CharacterRepository.ets`（+ 同名 `*RepositoryMapper.ets`）；事务内复用传 `store` |
 | **跨表事务编排** | 仿 `services/ChatPersistenceService.ets`（`dbHelper.runInTransaction`）；**新服务不得新增 DbHelper 直连**（P3-4 口径 C） |
@@ -87,7 +87,7 @@ bridge/：仅承载「页面 ↔ 组件」的宿主契约（例：FrontendCardHo
 | SSE 流式解析 | `network/streaming/{SseParser,OpenAiSseDeltaParser,Utf8StreamDecoder}.ets` |
 | 角色卡 V1/V2/V3 解析 / PNG 内嵌卡 | `parser/CharacterCardJsonParser.ets` / `parser/PngCharacterCardParser.ets` |
 | 宏替换 / Token 估算 | `services/MacroReplacer.ets` / `services/TokenCounter.ets` |
-| 新增可复用纯函数 | 放 `utils/`（无副作用）；契约常量仿 `services/ChatTextContract.ets` |
+| 新增可复用纯函数 | 放 `utils/`（无副作用）；契约常量仿 `services/ChatTextContract.ets`；文本行级增删改仿 `utils/LocalImageTagText.ets`（`upsert/remove/list/has` 一套，逐行稳定、可单测） |
 | 新增纯数据/类型 | 放 `models/`（例：`models/LorebookPanel.ets`、`models/ChatMemory.ets` 的 `ChapterTriggerConfig`） |
 
 ## 3. 数据模型定位
@@ -112,6 +112,7 @@ bridge/：仅承载「页面 ↔ 组件」的宿主契约（例：FrontendCardHo
 | TokenBudget / ContextBudgetConfig | `models/TokenBudget.ets` / `ContextBudgetConfig.ets` |
 | MessageSwipe / 候选上限 | `models/MessageSwipe.ets` |
 | 世界分组 | `models/WorldGroup.ets` |
+| **本地图片** | `models/LocalImage.ets`（id / name / nameKey / fileUri / **description**；`character_id` 已于 v50 停用）|
 | TTS 模型 | `models/TtsReadMode.ets` / `TtsEngine.ets` |
 | 市场模型 | `models/MarketCharacter*.ets` |
 

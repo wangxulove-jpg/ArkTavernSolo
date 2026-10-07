@@ -1049,11 +1049,10 @@ struct ChatPage {
    * 失败不阻塞聊天(仅记日志),未命中名字的图片按「未找到图片」降级展示。
    */
   private refreshLocalImages(): void {
-    const rawId: string = this.character !== null ? this.character!.id : '';
-    const characterId: string | null = rawId.length > 0 ? rawId : null;
     AppServices.whenReady()
       .then((): Promise<Record<string, string>> => {
-        return AppServices.getLocalImageService().buildResolutionMap(characterId);
+        // v50 图片池模型:解析映射 = 全部图片(不再按角色过滤)
+        return AppServices.getLocalImageService().buildResolutionMap();
       })
       .then((map: Record<string, string>): void => {
         this.localImages = map;

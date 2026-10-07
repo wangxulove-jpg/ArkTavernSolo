@@ -257,10 +257,17 @@ import {
 } from './schema/SchemaWorld';
 
 import {
+  CREATE_INDEX_LOCAL_IMAGE_CATEGORIES_NAME,
+  CREATE_INDEX_LOCAL_IMAGE_CATEGORY_LINKS_TARGET,
   CREATE_INDEX_LOCAL_IMAGES_CHARACTER,
   CREATE_INDEX_LOCAL_IMAGES_OWNER_NAME,
+  CREATE_LOCAL_IMAGE_CATEGORIES_TABLE,
+  CREATE_LOCAL_IMAGE_CATEGORY_LINKS_TABLE,
   CREATE_LOCAL_IMAGES_TABLE,
-  V48_NEW_DDL_STATEMENTS
+  CREATE_UNIQUE_INDEX_LOCAL_IMAGE_CATEGORY_LINKS,
+  V48_NEW_DDL_STATEMENTS,
+  V49_NEW_DDL_STATEMENTS,
+  V50_NEW_DDL_STATEMENTS
 } from './schema/SchemaLocalImages';
 
 export const VERSION_1_STATEMENTS: string[] = [
@@ -1237,6 +1244,38 @@ export const V48_SCHEMA_STATEMENTS: string[] = [
   ...V47_TO_V48_DDL_STATEMENTS
 ];
 
+// ===== v49: 本地图片库自定义分类 =====
+
+/**
+ * v48→v49 迁移 DDL:仅创建分类表、关联表与三个索引。
+ * 安全性:纯 CREATE TABLE / CREATE INDEX IF NOT EXISTS,幂等;不改 local_images 与任何现有数据。
+ */
+export const V48_TO_V49_DDL_STATEMENTS: string[] = [
+  ...V49_NEW_DDL_STATEMENTS
+];
+
+/** v49 完整 Schema(新安装使用) */
+export const V49_SCHEMA_STATEMENTS: string[] = [
+  ...V48_SCHEMA_STATEMENTS,
+  ...V48_TO_V49_DDL_STATEMENTS
+];
+
+// ===== v50: 图片池模型(仅给 local_images 补 description 列) =====
+
+/**
+ * v49→v50 迁移 DDL:仅一条 ALTER 加列(可空文本,默认 '')。
+ * 安全性:纯 ALTER ADD COLUMN,不改任何已有列与数据;character_id 停用但列保留。
+ */
+export const V49_TO_V50_DDL_STATEMENTS: string[] = [
+  ...V50_NEW_DDL_STATEMENTS
+];
+
+/** v50 完整 Schema(新安装使用) */
+export const V50_SCHEMA_STATEMENTS: string[] = [
+  ...V49_SCHEMA_STATEMENTS,
+  ...V49_TO_V50_DDL_STATEMENTS
+];
+
 /**
  * 版本 → 完整建库语句注册表(P3-3③:逐版 if 链改写为 Registry)。
  * 每个条目代表"从空库建到该版本"的完整语句序列;取值时统一返回浅拷贝。
@@ -1296,6 +1335,8 @@ SCHEMA_BY_VERSION.set(45, V45_SCHEMA_STATEMENTS);
 SCHEMA_BY_VERSION.set(46, V46_SCHEMA_STATEMENTS);
 SCHEMA_BY_VERSION.set(47, V47_SCHEMA_STATEMENTS);
 SCHEMA_BY_VERSION.set(48, V48_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(49, V49_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(50, V50_SCHEMA_STATEMENTS);
 
 /** 返回指定版本的完整建库语句(未知版本返回空数组)。 */
 export function getSchemaStatements(version: number): string[] {
@@ -1345,7 +1386,9 @@ export function getCreateTableStatements(): string[] {
     CREATE_WORLD_DIRECTIONAL_RELATIONSHIP_ENTRIES_TABLE,
     CREATE_WORLD_SESSION_POST_PROCESS_RUNS_TABLE,
     CREATE_PERSONAS_TABLE,
-    CREATE_LOCAL_IMAGES_TABLE
+    CREATE_LOCAL_IMAGES_TABLE,
+    CREATE_LOCAL_IMAGE_CATEGORIES_TABLE,
+    CREATE_LOCAL_IMAGE_CATEGORY_LINKS_TABLE
   ];
 }
 
@@ -1471,6 +1514,9 @@ export function getCreateIndexStatements(): string[] {
     CREATE_INDEX_CHATS_WORLD_ID,
     CREATE_INDEX_CHAT_MEMORIES_WORLD_ID,
     CREATE_INDEX_LOCAL_IMAGES_OWNER_NAME,
-    CREATE_INDEX_LOCAL_IMAGES_CHARACTER
+    CREATE_INDEX_LOCAL_IMAGES_CHARACTER,
+    CREATE_INDEX_LOCAL_IMAGE_CATEGORIES_NAME,
+    CREATE_UNIQUE_INDEX_LOCAL_IMAGE_CATEGORY_LINKS,
+    CREATE_INDEX_LOCAL_IMAGE_CATEGORY_LINKS_TARGET
   ];
 }

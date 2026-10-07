@@ -1,15 +1,15 @@
 /**
- * 本地图片库(模型 + 清单构建 + 预设作用域)纯函数测试
+ * 本地图片库(模型 + 预设作用域)纯函数测试
  *
  * 覆盖:
- * - 图片名归一化/合法性/错误文案
- * - 清单 System Prompt:空集、稳定排序(与输入顺序无关)、逐字节可复现、标题与计数
+ * - 图片名归一化/合法性/错误文案;描述归一化与长度校验
  * - 预设作用域编解码:往返、非法值兜底、合法性判定
  * - 按作用域过滤预设:全局恒保留 / 角色匹配 / 缺省=全局 / 无角色上下文时不泄漏
- * - 受管图片清单预设 id:全局固定 id、角色 id 前缀、isManaged 判定
+ * - 消息内图片大小设置(ChatTextStyle.imageWidthRatio)归一化
  *
  * 说明:为避免依赖设备端 crypto(generateUuid),本文件一律用对象字面量直接构造
  * LocalImage / PromptPreset,不调用 createLocalImage / createPromptPreset。
+ * 「标签 = 预设正文」的文本操作与 v50 迁移校验在 local_image_tag_text.test.ets。
  */
 
 import { describe, it, expect } from '@ohos/hypium';
@@ -17,13 +17,12 @@ import {
   LocalImage,
   normalizeImageName,
   isValidImageName,
-  describeImageNameProblem
+  isValidImageDescription,
+  describeImageNameProblem,
+  describeImageDescriptionProblem,
+  normalizeImageDescription,
+  IMAGE_DESCRIPTION_MAX_LENGTH
 } from '../main/ets/models/LocalImage';
-import {
-  buildLocalImageSystemPrompt,
-  buildLocalImagePresetName,
-  buildLocalImagePresetDescription
-} from '../main/ets/services/LocalImagePromptComposer';
 import {
   ChatTextStyle,
   DEFAULT_CHAT_TEXT_STYLE,
@@ -38,19 +37,17 @@ import {
   decodeScope,
   isValidScopeValue,
   filterPresetsByScope,
-  MANAGED_IMAGE_GLOBAL_PRESET_ID,
-  managedImageCharacterPresetId,
   isManagedImagePresetId
 } from '../main/ets/models/PromptPreset';
 
 /** 构造图片(不依赖 generateUuid) */
-function makeImage(id: string, name: string, characterId: string): LocalImage {
+function makeImage(id: string, name: string, description: string): LocalImage {
   return {
     id: id,
     name: name,
     nameKey: normalizeImageName(name),
     fileUri: 'file:///data/local_images/' + id + '.png',
-    characterId: characterId,
+    description: description,
     createdAt: 1,
     updatedAt: 1
   };
@@ -107,59 +104,33 @@ export default function localImageTest() {
       expect(describeImageNameProblem('开心').length).assertEqual(0);
     });
 
-    // ===== 清单 System Prompt =====
+    // ===== 描述 =====
 
-    it('composer_empty_images_returns_empty', 0, () => {
-      const empty: LocalImage[] = [];
-      expect(buildLocalImageSystemPrompt(empty, '全局')).assertEqual('');
+    it('description_normalize_flattens_whitespace', 0, () => {
+      expect(normalizeImageDescription('  角色  在雨里\n\n撑着伞  ')).assertEqual('角色 在雨里 撑着伞');
+      expect(normalizeImageDescription('')).assertEqual('');
     });
 
-    it('composer_contains_rule_and_sorted_list', 0, () => {
-      const images: LocalImage[] = [
-        makeImage('img-2', 'Sad', ''),
-        makeImage('img-1', 'Angry', ''),
-        makeImage('img-3', 'Happy', '')
-      ];
-      const text: string = buildLocalImageSystemPrompt(images, '全局');
-      expect(text.indexOf('arkimg:') >= 0).assertTrue();
-      expect(text.indexOf('共 3 张') >= 0).assertTrue();
-      // nameKey(小写)升序:angry < happy < sad
-      const i1: number = text.indexOf('- Angry');
-      const i2: number = text.indexOf('- Happy');
-      const i3: number = text.indexOf('- Sad');
-      expect(i1 >= 0 && i2 > i1 && i3 > i2).assertTrue();
+    it('description_length_limit', 0, () => {
+      expect(isValidImageDescription('')).assertTrue();
+      expect(isValidImageDescription('短的描述')).assertTrue();
+      expect(describeImageDescriptionProblem('短的描述').length).assertEqual(0);
+      let longDesc: string = '';
+      for (let i = 0; i < IMAGE_DESCRIPTION_MAX_LENGTH + 1; i++) {
+        longDesc += 'a';
+      }
+      expect(isValidImageDescription(longDesc)).assertFalse();
+      expect(describeImageDescriptionProblem(longDesc).length > 0).assertTrue();
     });
 
-    it('composer_is_byte_stable_regardless_of_input_order', 0, () => {
-      const a: LocalImage[] = [
-        makeImage('img-1', '开心', ''),
-        makeImage('img-2', '哭', ''),
-        makeImage('img-3', '怒', '')
-      ];
-      const b: LocalImage[] = [
-        makeImage('img-3', '怒', ''),
-        makeImage('img-1', '开心', ''),
-        makeImage('img-2', '哭', '')
-      ];
-      const t1: string = buildLocalImageSystemPrompt(a, '全局');
-      const t2: string = buildLocalImageSystemPrompt(b, '全局');
-      // 稳定排序:库没变时清单逐字节一致(缓存前缀不受影响)
-      expect(t1).assertEqual(t2);
-      expect(buildLocalImageSystemPrompt(a, '全局')).assertEqual(t1);
+    it('image_fields_are_independent_of_former_scope', 0, () => {
+      // v50:图片池模型已无 characterId 字段(编译通过即为该断言)
+      const image: LocalImage = makeImage('img-1', '笑', '开心大笑');
+      expect(image.description).assertEqual('开心大笑');
+      expect(image.nameKey).assertEqual('笑');
     });
 
-    it('composer_scope_label_in_list_header', 0, () => {
-      const images: LocalImage[] = [makeImage('img-1', '开心', 'char-1')];
-      const text: string = buildLocalImageSystemPrompt(images, '林霖');
-      expect(text.indexOf('可用图片(林霖') >= 0).assertTrue();
-      expect(buildLocalImagePresetName('林霖').indexOf('林霖') >= 0).assertTrue();
-    });
-
-    it('composer_description_mentions_auto_maintained', 0, () => {
-      expect(buildLocalImagePresetDescription(5).indexOf('自动维护') >= 0).assertTrue();
-    });
-
-    // ===== 作用域 =====
+    // ===== 作用域(仍用于"预设在哪些会话生效") =====
 
     it('scope_roundtrip_global_and_character', 0, () => {
       const globalScope: PresetScope = { kind: 'global', characterId: '' };
@@ -223,16 +194,13 @@ export default function localImageTest() {
       expect(filterPresetsByScope(presets, scopes, 'charA').length).assertEqual(1);
     });
 
-    // ===== 受管预设 id =====
-
-    it('managed_ids_are_recognisable', 0, () => {
-      expect(MANAGED_IMAGE_GLOBAL_PRESET_ID).assertEqual('arkimg-global');
-      expect(isManagedImagePresetId(MANAGED_IMAGE_GLOBAL_PRESET_ID)).assertTrue();
-      expect(managedImageCharacterPresetId('c1')).assertEqual('arkimg-char-c1');
-      expect(isManagedImagePresetId(managedImageCharacterPresetId('c1'))).assertTrue();
+    it('managed_preset_concept_is_retired', 0, () => {
+      // v50:标签就是普通预设,不再有"受管图片清单预设"
+      expect(isManagedImagePresetId('arkimg-global')).assertFalse();
       expect(isManagedImagePresetId('user-preset-1')).assertFalse();
     });
-  // ===== 消息内图片大小设置(ChatTextStyle.imageWidthRatio) =====
+
+    // ===== 消息内图片大小设置(ChatTextStyle.imageWidthRatio) =====
 
     it('image_width_ratio_keeps_valid_value', 0, () => {
       expect(normalizeImageWidthRatio(0.6)).assertEqual(0.6);

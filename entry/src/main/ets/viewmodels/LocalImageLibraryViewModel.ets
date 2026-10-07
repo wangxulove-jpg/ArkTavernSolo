@@ -1,58 +1,70 @@
 /**
  * LocalImageLibraryViewModel 本地图片库页面状态管理
  *
- * 页面与 LocalImageService / CharacterService 之间的唯一桥梁。
- * 不直接依赖 Repository / DbHelper / Preferences。
+ * 页面与 LocalImageService 之间的唯一桥梁,不直接依赖 Repository / DbHelper / Preferences。
  *
- * 数据流:图片库(单一数据源)+ 角色列表 → 组装展示条目与分组(全局 / 各角色 / 孤儿)。
+ * 模型(v50):
+ * - **所有图片一个池子**(不再分全局/角色),页面用**标签**分组与筛选
+ * - **标签就是普通提示词预设**:预设正文里出现某张图的名字 ⇒ 该图属于该标签(由正文反推)
  */
 
-import { LocalImage, isValidImageName, normalizeImageName } from '../models/LocalImage';
-import { Character } from '../models/Character';
+import {
+  LocalImage,
+  isValidImageName,
+  isValidImageDescription,
+  normalizeImageName,
+  describeImageNameProblem,
+  describeImageDescriptionProblem
+} from '../models/LocalImage';
+import { PromptPreset } from '../models/PromptPreset';
 import { LocalImageService } from '../services/LocalImageService';
-import { CharacterService } from '../services/CharacterService';
+import { listTagEntryNames } from '../utils/LocalImageTagText';
 import { Logger } from '../utils/Logger';
 
 const LOG_TAG: string = 'LocalImageLibraryViewModel';
 
-/** 全局作用域的选择项标签 */
-const GLOBAL_SCOPE_LABEL: string = '全局(所有会话)';
-/** 全局分组的标题 */
-const GLOBAL_GROUP_LABEL: string = '全局';
-/** 角色已删除的标签(条目作用域标签与孤儿分组标题共用) */
-const ORPHAN_GROUP_LABEL: string = '角色已删除';
+/** 筛选:全部图片 */
+export const IMAGE_FILTER_ALL: string = '';
+/** 筛选:未分类(没被任何预设提到) */
+export const IMAGE_FILTER_NONE: string = '__none__';
 
-/** 作用域选择项('' = 全局) */
-export interface ScopeOption {
-  readonly characterId: string;
-  readonly label: string;
+/** 标签选项(= 一个可当标签用的提示词预设) */
+export interface LocalImageTagOption {
+  readonly id: string;
+  readonly name: string;
+  /** 当前被多少张图提到(筛选芯片与"未使用"判断) */
+  readonly imageCount: number;
 }
 
 /** 展示用条目 */
 export interface LocalImageEntry {
   readonly image: LocalImage;
-  readonly scopeLabel: string;
-  /** 角色 id 存在但角色已删除 */
-  readonly orphan: boolean;
+  /** 命中的标签 id 与名字(由预设正文反推) */
+  readonly tagIds: string[];
+  readonly tagNames: string[];
 }
 
-/** 展示用分组 */
-export interface LocalImageGroup {
-  readonly key: string;
-  readonly label: string;
-  readonly orphan: boolean;
-  readonly entries: LocalImageEntry[];
+/** 按 id 找标签选项(找不到返回 null) */
+function findOption(options: LocalImageTagOption[], id: string): LocalImageTagOption | null {
+  for (let i = 0; i < options.length; i++) {
+    if (options[i].id === id) {
+      return options[i];
+    }
+  }
+  return null;
 }
 
 @Observed
 export class LocalImageLibraryViewModel {
-  /** 展示用条目(扁平,含作用域标签) */
+  /** 展示用条目(图片 + 反推出的标签) */
   entries: LocalImageEntry[] = [];
-  /** 展示用分组(全局 / 各角色 / 孤儿) */
-  groups: LocalImageGroup[] = [];
-  /** 作用域选择项(首项固定全局) */
-  scopeOptions: ScopeOption[] = [{ characterId: '', label: GLOBAL_SCOPE_LABEL }];
-  /** 列表数据版本(每次刷新自增,用于 ForEach key,确保条目内容变更后重建) */
+  /** 全部预设(都可当标签用) */
+  tagOptions: LocalImageTagOption[] = [];
+  /** 至少被一张图提到的标签(顶部筛选芯片) */
+  usedTagOptions: LocalImageTagOption[] = [];
+  /** 当前筛选(IMAGE_FILTER_ALL / IMAGE_FILTER_NONE / 预设 id) */
+  activeFilter: string = IMAGE_FILTER_ALL;
+  /** 列表数据版本(每次刷新自增,ForEach key 用) */
   version: number = 0;
 
   isLoading: boolean = false;
@@ -63,12 +75,10 @@ export class LocalImageLibraryViewModel {
   pendingDeleteId: string = '';
 
   private readonly imageService: LocalImageService;
-  private readonly characterService: CharacterService;
   private disposed: boolean = false;
 
-  constructor(imageService: LocalImageService, characterService: CharacterService) {
+  constructor(imageService: LocalImageService) {
     this.imageService = imageService;
-    this.characterService = characterService;
   }
 
   async initialize(): Promise<void> {
@@ -78,7 +88,7 @@ export class LocalImageLibraryViewModel {
     await this.refresh();
   }
 
-  /** 重新加载图片库与角色列表,重建条目与分组。 */
+  /** 重新加载图片池与预设,反推每张图的标签 */
   async refresh(): Promise<void> {
     if (this.disposed) {
       return;
@@ -87,31 +97,58 @@ export class LocalImageLibraryViewModel {
     this.errorMessage = '';
     try {
       const images: LocalImage[] = await this.imageService.listImages();
-      const characters: Character[] = await this.characterService.listSummaries();
+      const presets: PromptPreset[] = await this.imageService.listPresets();
 
-      const options: ScopeOption[] = [{ characterId: '', label: GLOBAL_SCOPE_LABEL }];
-      for (let i = 0; i < characters.length; i++) {
-        options.push({ characterId: characters[i].id, label: characters[i].name });
+      // 预设 id → 正文条目名(归一化,做大小写不敏感匹配)
+      const entryNamesByPreset: Record<string, string[]> = {};
+      for (let i = 0; i < presets.length; i++) {
+        const names: string[] = [];
+        const raw: string[] = listTagEntryNames(presets[i].systemPrompt);
+        for (let j = 0; j < raw.length; j++) {
+          names.push(normalizeImageName(raw[j]));
+        }
+        entryNamesByPreset[presets[i].id] = names;
       }
 
       const entries: LocalImageEntry[] = [];
+      const countById: Record<string, number> = {};
       for (let i = 0; i < images.length; i++) {
         const image: LocalImage = images[i];
-        if (image.characterId.length === 0) {
-          entries.push({ image: image, scopeLabel: GLOBAL_GROUP_LABEL, orphan: false });
-        } else {
-          const name: string = resolveCharacterName(characters, image.characterId);
-          if (name.length > 0) {
-            entries.push({ image: image, scopeLabel: name, orphan: false });
-          } else {
-            entries.push({ image: image, scopeLabel: ORPHAN_GROUP_LABEL, orphan: true });
+        const tagIds: string[] = [];
+        const tagNames: string[] = [];
+        for (let j = 0; j < presets.length; j++) {
+          const preset: PromptPreset = presets[j];
+          const names: string[] | undefined = entryNamesByPreset[preset.id];
+          if (names === undefined || names.indexOf(image.nameKey) < 0) {
+            continue;
           }
+          tagIds.push(preset.id);
+          tagNames.push(preset.name);
+          const current: number | undefined = countById[preset.id];
+          countById[preset.id] = (current === undefined ? 0 : current) + 1;
         }
+        entries.push({ image: image, tagIds: tagIds, tagNames: tagNames });
       }
 
-      this.scopeOptions = options;
+      const options: LocalImageTagOption[] = [];
+      for (let i = 0; i < presets.length; i++) {
+        const count: number | undefined = countById[presets[i].id];
+        options.push({
+          id: presets[i].id,
+          name: presets[i].name,
+          imageCount: count === undefined ? 0 : count
+        });
+      }
+
+      // 当前筛选的标签若已被删除 → 回退到「全部」
+      if (this.activeFilter !== IMAGE_FILTER_ALL && this.activeFilter !== IMAGE_FILTER_NONE
+        && findOption(options, this.activeFilter) === null) {
+        this.activeFilter = IMAGE_FILTER_ALL;
+      }
+
+      this.tagOptions = options;
+      this.usedTagOptions = options.filter((option: LocalImageTagOption): boolean => option.imageCount > 0);
       this.entries = entries;
-      this.groups = buildGroups(entries, options);
       this.version = this.version + 1;
     } catch (e) {
       this.errorMessage = '加载本地图片库失败';
@@ -121,16 +158,49 @@ export class LocalImageLibraryViewModel {
     }
   }
 
+  /** 切换筛选(全部 / 未分类 / 某标签) */
+  setFilter(filter: string): void {
+    if (this.disposed) {
+      return;
+    }
+    this.activeFilter = filter;
+  }
+
+  /** 当前筛选下的条目 */
+  filteredEntries(): LocalImageEntry[] {
+    if (this.activeFilter === IMAGE_FILTER_ALL) {
+      return this.entries;
+    }
+    if (this.activeFilter === IMAGE_FILTER_NONE) {
+      return this.entries.filter((entry: LocalImageEntry): boolean => entry.tagIds.length === 0);
+    }
+    const tagId: string = this.activeFilter;
+    return this.entries.filter((entry: LocalImageEntry): boolean => entry.tagIds.indexOf(tagId) >= 0);
+  }
+
+  /** 未分类图片张数 */
+  uncategorizedCount(): number {
+    let count: number = 0;
+    for (let i = 0; i < this.entries.length; i++) {
+      if (this.entries[i].tagIds.length === 0) {
+        count = count + 1;
+      }
+    }
+    return count;
+  }
+
+  /** 某标签下的图片张数 */
+  countForTag(tagId: string): number {
+    const option: LocalImageTagOption | null = findOption(this.tagOptions, tagId);
+    return option === null ? 0 : option.imageCount;
+  }
+
   /**
-   * 逐张导入图片。
-   * 每张默认名取源 URI 的文件名去扩展名;非法或在该作用域已存在时退化为 图片1、图片2…
-   * 失败项收集到 errorMessage,单张失败不影响其余。
-   *
-   * @param sourceUris 系统选择器返回的源 URI 列表
-   * @param characterId '' = 全局;非空 = 该角色专属
-   * @returns 成功导入的张数
+   * 逐张导入图片(池子,无归属)。
+   * 默认名取源 URI 的文件名去扩展名;非法或重名时退化为 图片1、图片2…
+   * 描述留空,导入后在图片行编辑。
    */
-  async importImages(sourceUris: string[], characterId: string): Promise<number> {
+  async importImages(sourceUris: string[]): Promise<number> {
     if (this.disposed || this.isOperating) {
       return 0;
     }
@@ -140,18 +210,16 @@ export class LocalImageLibraryViewModel {
     let success: number = 0;
     const failures: string[] = [];
     try {
-      // 该作用域下已占用的名字键(用于避免重名)
+      // 池子里已占用的名字键(名字全局唯一)
       const taken: string[] = [];
       for (let i = 0; i < this.entries.length; i++) {
-        if (this.entries[i].image.characterId === characterId) {
-          taken.push(this.entries[i].image.nameKey);
-        }
+        taken.push(this.entries[i].image.nameKey);
       }
       for (let i = 0; i < sourceUris.length; i++) {
         const uri: string = sourceUris[i];
         const name: string = pickUniqueName(basenameWithoutExtension(uri), taken);
         try {
-          await this.imageService.addImage(uri, name, characterId);
+          await this.imageService.addImage(uri, name, '');
           taken.push(normalizeImageName(name));
           success = success + 1;
         } catch (e) {
@@ -175,7 +243,7 @@ export class LocalImageLibraryViewModel {
     return success;
   }
 
-  /** 改名(同一作用域内不可重名) */
+  /** 改名(全局唯一;服务会同步标签预设正文里的条目名) */
   async renameImage(id: string, name: string): Promise<void> {
     if (this.disposed || this.isOperating) {
       return;
@@ -195,8 +263,8 @@ export class LocalImageLibraryViewModel {
     }
   }
 
-  /** 改作用域('' = 全局) */
-  async changeScope(id: string, characterId: string): Promise<void> {
+  /** 改描述(服务会同步标签预设正文里的条目描述) */
+  async updateDescription(id: string, description: string): Promise<void> {
     if (this.disposed || this.isOperating) {
       return;
     }
@@ -204,15 +272,88 @@ export class LocalImageLibraryViewModel {
     this.errorMessage = '';
     this.successMessage = '';
     try {
-      await this.imageService.changeScope(id, characterId);
-      this.successMessage = '已切换作用域';
+      await this.imageService.updateImageDescription(id, description);
+      this.successMessage = '已保存描述';
       await this.refresh();
     } catch (e) {
       this.errorMessage = (e as Error).message ?? String(e);
-      Logger.error(LOG_TAG, 'changeScope failed: ' + String(e));
+      Logger.error(LOG_TAG, 'updateDescription failed: ' + String(e));
     } finally {
       this.isOperating = false;
     }
+  }
+
+  /** 新建标签(= 新建一个空正文的提示词预设) */
+  async createTag(name: string): Promise<boolean> {
+    if (this.disposed || this.isOperating) {
+      return false;
+    }
+    this.isOperating = true;
+    this.errorMessage = '';
+    this.successMessage = '';
+    let ok: boolean = false;
+    try {
+      await this.imageService.createTagPreset(name);
+      this.successMessage = '已新建标签';
+      await this.refresh();
+      ok = true;
+    } catch (e) {
+      this.errorMessage = (e as Error).message ?? String(e);
+      Logger.error(LOG_TAG, 'createTag failed: ' + String(e));
+    } finally {
+      this.isOperating = false;
+    }
+    return ok;
+  }
+
+  /**
+   * 设置某张图的标签(整组替换语义,内部算差集):
+   * 新增的 ⇒ 把「名字(:描述)」写进那些预设正文;取消的 ⇒ 从正文删掉该条目。
+   */
+  async setImageTags(imageId: string, nextTagIds: string[]): Promise<void> {
+    if (this.disposed || this.isOperating) {
+      return;
+    }
+    const currentIds: string[] = this.tagIdsOf(imageId);
+    const addIds: string[] = [];
+    for (let i = 0; i < nextTagIds.length; i++) {
+      if (currentIds.indexOf(nextTagIds[i]) < 0) {
+        addIds.push(nextTagIds[i]);
+      }
+    }
+    const removeIds: string[] = [];
+    for (let i = 0; i < currentIds.length; i++) {
+      if (nextTagIds.indexOf(currentIds[i]) < 0) {
+        removeIds.push(currentIds[i]);
+      }
+    }
+    if (addIds.length === 0 && removeIds.length === 0) {
+      return;
+    }
+    this.isOperating = true;
+    this.errorMessage = '';
+    this.successMessage = '';
+    try {
+      await this.imageService.attachImageToPresets(imageId, addIds);
+      await this.imageService.detachImageFromPresets(imageId, removeIds);
+      this.successMessage = '已更新标签';
+      await this.refresh();
+    } catch (e) {
+      this.errorMessage = (e as Error).message ?? String(e);
+      Logger.error(LOG_TAG, 'setImageTags failed: ' + String(e));
+    } finally {
+      this.isOperating = false;
+    }
+  }
+
+  /** 某张图当前的标签 id(从展示条目取) */
+  tagIdsOf(imageId: string): string[] {
+    for (let i = 0; i < this.entries.length; i++) {
+      if (this.entries[i].image.id === imageId) {
+        return this.entries[i].tagIds;
+      }
+    }
+    return [];
   }
 
   requestDelete(id: string): void {
@@ -255,74 +396,6 @@ export class LocalImageLibraryViewModel {
   }
 }
 
-/** 按 id 解析角色名(角色已删除时返回空串) */
-function resolveCharacterName(characters: Character[], characterId: string): string {
-  for (let i = 0; i < characters.length; i++) {
-    if (characters[i].id === characterId) {
-      return characters[i].name;
-    }
-  }
-  return '';
-}
-
-/** 组装分组:全局 → 各角色(按传入顺序)→ 孤儿;空分组不输出 */
-function buildGroups(entries: LocalImageEntry[], options: ScopeOption[]): LocalImageGroup[] {
-  const groups: LocalImageGroup[] = [];
-
-  const globalEntries: LocalImageEntry[] = [];
-  for (let i = 0; i < entries.length; i++) {
-    if (!entries[i].orphan && entries[i].image.characterId.length === 0) {
-      globalEntries.push(entries[i]);
-    }
-  }
-  if (globalEntries.length > 0) {
-    groups.push({
-      key: 'global',
-      label: GLOBAL_GROUP_LABEL,
-      orphan: false,
-      entries: globalEntries
-    });
-  }
-
-  for (let i = 0; i < options.length; i++) {
-    const option: ScopeOption = options[i];
-    if (option.characterId.length === 0) {
-      continue;
-    }
-    const own: LocalImageEntry[] = [];
-    for (let j = 0; j < entries.length; j++) {
-      if (!entries[j].orphan && entries[j].image.characterId === option.characterId) {
-        own.push(entries[j]);
-      }
-    }
-    if (own.length > 0) {
-      groups.push({
-        key: option.characterId,
-        label: option.label,
-        orphan: false,
-        entries: own
-      });
-    }
-  }
-
-  const orphans: LocalImageEntry[] = [];
-  for (let i = 0; i < entries.length; i++) {
-    if (entries[i].orphan) {
-      orphans.push(entries[i]);
-    }
-  }
-  if (orphans.length > 0) {
-    groups.push({
-      key: '__orphan__',
-      label: ORPHAN_GROUP_LABEL,
-      orphan: true,
-      entries: orphans
-    });
-  }
-
-  return groups;
-}
-
 /** 选取可用名字:合法且未占用则直接用;否则退化为 图片N(N 自增到未占用) */
 function pickUniqueName(base: string, taken: string[]): string {
   if (isValidImageName(base) && taken.indexOf(normalizeImageName(base)) < 0) {
@@ -335,7 +408,7 @@ function pickUniqueName(base: string, taken: string[]): string {
   return '图片' + n.toString();
 }
 
-/** 从文件 URI 中提取不含扩展名的文件名(用于命名缺失时的兜底)。 */
+/** 从文件 URI 中提取不含扩展名的文件名(用于命名缺失时的兜底) */
 function basenameWithoutExtension(uri: string): string {
   const idx: number = uri.lastIndexOf('/');
   let name: string = idx >= 0 ? uri.substring(idx + 1) : uri;

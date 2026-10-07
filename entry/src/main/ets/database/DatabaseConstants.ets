@@ -6,7 +6,7 @@
  */
 
 export const DATABASE_NAME: string = 'arktavern_solo.db';
-export const DATABASE_VERSION: number = 48;
+export const DATABASE_VERSION: number = 50;
 
 export const TABLE_CHARACTERS: string = 'characters';
 export const TABLE_CHATS: string = 'chats';
@@ -896,3 +896,36 @@ export const COLUMN_IMAGE_FILE_URI: string = 'file_uri';
 export const INDEX_LOCAL_IMAGES_OWNER_NAME: string = 'idx_local_images_owner_name';
 /** 按作用域查询(全局 / 某角色) */
 export const INDEX_LOCAL_IMAGES_CHARACTER: string = 'idx_local_images_character';
+
+// ===== v49: 本地图片库自定义分类(分类可绑多张角色卡;一张图可挂多个分类) =====
+// 图片来源归属三态(互斥,由 character_id 与分类关联共同表达):
+//   - 全局:character_id='' 且无 image 关联 → 所有会话可用
+//   - 角色专属:character_id=非空 且无 image 关联 → 仅该角色卡可用
+//   - 分类:character_id='' 且在本关联表有 image 关联 → 该图所属分类绑定的所有角色卡可用
+// 关联表为**多态**表:target_kind='image' 表示 分类↔图片;'character' 表示 分类↔角色卡。
+export const TABLE_LOCAL_IMAGE_CATEGORIES: string = 'local_image_categories';
+export const TABLE_LOCAL_IMAGE_CATEGORY_LINKS: string = 'local_image_category_links';
+
+/** local_image_categories.name_key 列名(归一化分类名:trim + 小写) */
+export const COLUMN_CATEGORY_NAME_KEY: string = 'name_key';
+
+/** 关联表:分类 id */
+export const COLUMN_LINK_CATEGORY_ID: string = 'category_id';
+/** 关联表:目标类型('image' | 'character') */
+export const COLUMN_LINK_TARGET_KIND: string = 'target_kind';
+/** 关联表:目标 id(图片 id 或 角色 id) */
+export const COLUMN_LINK_TARGET_ID: string = 'target_id';
+
+/** 分类名全局唯一 */
+export const INDEX_LOCAL_IMAGE_CATEGORIES_NAME: string = 'idx_local_image_categories_name';
+/** 分类内同一目标唯一(分类 + 类型 + 目标) */
+export const INDEX_LOCAL_IMAGE_CATEGORY_LINKS_UNIQUE: string = 'idx_local_image_category_links_unique';
+/** 反向查询索引:某张图片挂了哪些分类 / 某角色命中了哪些分类 */
+export const INDEX_LOCAL_IMAGE_CATEGORY_LINKS_TARGET: string = 'idx_local_image_category_links_target';
+
+// ===== v50: 图片池模型(只加一列) =====
+// 所有图片一个池子,不再分「全局 / 角色专属」;分组一律用「标签」表达,
+// 而**标签就是普通提示词预设**(把图片名写进预设正文即视为打上该标签),故不新增任何表。
+// character_id 自 v50 起**停用**(列保留不删,迁移只增不改),代码不再读写。
+/** local_images.description 列名(给模型看的图片描述,可空) */
+export const COLUMN_IMAGE_DESCRIPTION: string = 'description';

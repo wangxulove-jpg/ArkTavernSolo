@@ -26,7 +26,7 @@ import {
   COLUMN_NAME,
   COLUMN_IMAGE_NAME_KEY,
   COLUMN_IMAGE_FILE_URI,
-  COLUMN_CHARACTER_ID,
+  COLUMN_IMAGE_DESCRIPTION,
   COLUMN_CREATED_AT,
   COLUMN_UPDATED_AT
 } from '../database/DatabaseConstants';
@@ -74,8 +74,9 @@ export function localImageFromRow(
   const ciFileUri: number = rs.getColumnIndex(COLUMN_IMAGE_FILE_URI);
   const fileUri: string = readString(rs, ciFileUri);
 
-  const ciCharacterId: number = rs.getColumnIndex(COLUMN_CHARACTER_ID);
-  const characterId: string = readString(rs, ciCharacterId);
+  // v50 新列:旧库该列不存在(ci < 0)时安全回退空串
+  const ciDescription: number = rs.getColumnIndex(COLUMN_IMAGE_DESCRIPTION);
+  const description: string = readString(rs, ciDescription);
 
   const ciCreatedAt: number = rs.getColumnIndex(COLUMN_CREATED_AT);
   const createdAt: number = readLong(rs, ciCreatedAt);
@@ -94,14 +95,15 @@ export function localImageFromRow(
     name: name,
     nameKey: nameKey,
     fileUri: fileUri,
-    characterId: characterId,
+    description: description,
     createdAt: createdAt,
     updatedAt: updatedAt
   };
 }
 
 /**
- * 将 LocalImage 转换为 ValuesBucket(7 个键全部写入)。
+ * 将 LocalImage 转换为 ValuesBucket。
+ * 只写仍在使用的列(character_id 自 v50 起停用,由表默认值 '' 兜底)。
  * 不修改输入对象。
  */
 export function buildLocalImageValues(
@@ -112,7 +114,7 @@ export function buildLocalImageValues(
   bucket[COLUMN_NAME] = image.name;
   bucket[COLUMN_IMAGE_NAME_KEY] = image.nameKey;
   bucket[COLUMN_IMAGE_FILE_URI] = image.fileUri;
-  bucket[COLUMN_CHARACTER_ID] = image.characterId;
+  bucket[COLUMN_IMAGE_DESCRIPTION] = image.description;
   bucket[COLUMN_CREATED_AT] = image.createdAt;
   bucket[COLUMN_UPDATED_AT] = image.updatedAt;
   return bucket;

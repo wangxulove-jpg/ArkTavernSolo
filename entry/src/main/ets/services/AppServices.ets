@@ -303,20 +303,13 @@ export class AppServices {
       this.promptPresetSelectionStore
     );
 
-    // 本地图片库组装(需要 promptPresetService 维护受管"本地图片清单"预设)
+    // 本地图片库组装(v50 图片池模型:标签 = 普通预设,服务只做图片 CRUD 与标签正文读写)
     this.localImageRepository = new LocalImageRepository(this.dbHelper);
     this.localImageAssetStore = new LocalImageAssetStore();
     this.localImageService = new LocalImageService(
       this.localImageRepository,
       this.localImageAssetStore,
-      this.promptPresetService,
-      (characterId: string): Promise<string> => {
-        // 角色名解析(角色已删除时返回空串,由服务回退为「角色已删除」标识)
-        return this.characterRepository.getById(characterId)
-          .then((character: Character | null): string => {
-            return character !== null ? character.name : '';
-          });
-      }
+      this.promptPresetService
     );
     const macroReplacer: MacroReplacer = new MacroReplacer();
     this.promptBuilder = new PromptBuilder(this.lorebookService, macroReplacer);
@@ -780,11 +773,11 @@ export class AppServices {
 
   /**
    * 创建 LocalImageLibraryViewModel 实例(本地图片库页面)。
-   * 注入 LocalImageService(图片库业务)与 CharacterService(角色名解析)。
+   * 注入 LocalImageService(图片池 + 标签=预设正文)。
    */
   static createLocalImageLibraryViewModel(): LocalImageLibraryViewModel {
     const services: AppServices = AppServices.getInstance();
-    return new LocalImageLibraryViewModel(services.localImageService, services.characterService);
+    return new LocalImageLibraryViewModel(services.localImageService);
   }
 
   /**

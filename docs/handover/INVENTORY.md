@@ -65,6 +65,8 @@
 | `Uuid` | `generateUuid`（v4） | 生成 id；**不要自己拼随机串** |
 | `SessionListCollapseState` | 会话列表折叠状态 key + parse/serialize + 判定纯函数 | 折叠态持久化（P1-4 收口了三处重复） |
 | `BranchTreeFlatten` | 分支树拍平成缩进树行序列（含 `formatRowTitle/formatRowHint` 文案口径） | 画分支地图时；**行文案只在这一处格式化** |
+| `LocalImageTagText` | 「标签 = 提示词预设正文」的行级文本操作（`buildTagEntryLine` / `upsertTagEntry` / `removeTagEntry` / `listTagEntryNames` / `hasTagEntry`） | 往预设正文里增删改图片条目、以及**由正文反推**"这张图属于哪些标签"；**行格式只在这一处定义**（`- 名字：描述`） |
+| `LocalImageResolution` | 图片池 → 渲染解析映射（`toResolutionMap`：nameKey → 沙箱 URI） | 聊天页解析 `![x](arkimg:名字)`；图片池模型下就是**全部图片**，不做范围过滤 |
 | `ChatTextColorTheme` | 字体配色主题（浅/深、校验/归一 hex） | 聊天气泡文字配色 |
 | `ChatTextStyleSettings` | 聊天文本样式设置（含 `DEFAULT_CHAT_TEXT_STYLE`） | 字号/行距类设置 |
 | `ChatBubbleAppearance` | 气泡外观（透明度归一 + 气泡底色计算） | 气泡配色；**不要在页面里重算** |
@@ -83,13 +85,14 @@
 | **错误文案映射** | 纯函数收口，调用点直连 | `viewmodels/ChatErrorMapper.ets` |
 | **纯常量 / 契约文本** | 独立契约模块 | `services/ChatTextContract.ets` |
 | **纯 prompt 文本构建** | 独立 builder（无网络/无 DB） | `services/MemoryPromptBuilder.ets` |
-| **"受管记录"自动维护**（内容派生自单一数据源、列表只读、对账自愈） | 固定 id 常量 + `isManagedXxxId()` 判定（不动 DB 列）；数据变更后重写、启动时对账、正文不一致才写；强制位置/作用域/加入已选；UI 隐藏编辑删除、导出排除 | `services/LocalImageService.syncManagedPresets()` + `services/LocalImagePromptComposer`（正文 = 固定规则段 + 按归一化键**稳定排序**的清单，保证逐字节可复现） |
+| **"受管记录"自动维护**（内容派生自单一数据源、列表只读、对账自愈） | 固定 id 常量 + `isManagedXxxId()` 判定（不动 DB 列）；数据变更后重写、启动时对账、正文不一致才写；强制位置/作用域/加入已选；UI 隐藏编辑删除、导出排除 | ⚠️ **本模式当前无在用实现**：原参考实现（`LocalImageService.syncManagedPresets` + `LocalImagePromptComposer`）已在 v50 随"标签即普通预设"模型删除；保留本行供将来复用（注意 `isManagedImagePresetId` 现在恒 false） |
 | **"预设级本地偏好"映射**（不进数据库、不改实体） | Preferences 单键 JSON `presetId → 值`；读取时逐键校验、非法丢弃；`remove()` 同步清理 | `storage/PromptPresetSelectionStore` 的 `prompt_preset_positions_v1`(注入位置) 与 `prompt_preset_scopes_v1`(作用域) |
 | **"名字 → 本地文件"解析映射**（组件不碰服务的替代做法） | 页面/VM 层把字典解析好，经 `@Prop` 逐层透传；`@Watch` 只重跑解析映射、不重跑文本解析；渲染 key 并入解析结果 | `pages/ChatPage.refreshLocalImages()` → `ChatMessageList` → `ChatMessageBubble` → `ChatRichText.localImages`（本地图 `![x](arkimg:名)`） |
 | **阈值/策略判定** | 独立策略类 + 宿主回调取宿主私有能力 | `services/MemoryTriggerPolicy.ets` |
 | **DDL 常量组织** | 按域拆文件 + `DatabaseConstants` 取名字 | `database/schema/Schema*.ets` |
 | **版本 → 语句映射** | `Map` 注册表，取值返回浅拷贝 | `database/DatabaseSchema.ets` 的 `SCHEMA_BY_VERSION` |
 | **跨表事务** | `dbHelper.runInTransaction(fn)`，Repository 传 `store` | `services/ChatPersistenceService.ets` |
+| **"列表即数据源"的标签**（不建关联表：用一段文本承载多对多关系） | 把"关系"写成**约定格式的行**，增删改只做行级文本操作；反向查询用同一套解析函数（**格式与解析只写一处**），脏数据/手工编辑天然兼容 | `utils/LocalImageTagText.ets` + `services/LocalImageService.attachImageToPresets/detachImageFromPresets`（图片 ↔ 标签 = 预设正文里的 `- 名字：描述` 行） |
 | **纯数据/共享类型** | 下沉 `models/`（跨模块复用必须 export） | `models/LorebookPanel.ets` |
 | **设置类页面紧凑行版式**（提高信息密度用） | 分区 = `caption` 小标题（tertiary 色，`padding-left 4`）+ 一张 `surface_1` 卡片；卡内行高 **44**、行间 `Divider`（左右缩进 12）、行 = 标签(次要色) + 值(主色，右对齐 `layoutWeight(1)`) + `›`；动作以 `surface_2` 胶囊呈现在行尾；危险项独立成行用 `app_danger` | `components/ChatMoreMenuSheet.ets`（sheet 场景）、`pages/AppSettingsPage.ets`（整页场景） |
 | **入口行版式（图标在行尾）** | 行 = 标题(主色 medium) + 小字说明(次要色 caption) 左对齐 + **行尾只放一个入口图标**（18，tertiary 色，兼作视觉锚点，**不放箭头**）；行高 **56**、卡内 1px 分隔线、卡片左右各缩进 16（`app_spacing_16`）；同组共用一张卡（不再每项一张整宽卡）。**替代已删除的 `components/ui/AppEntryCard.ets`**（该项每入口一张整宽卡，0 引用后删除，2026-09-28） | `pages/tabs/SettingsRootView.ets` 的 `entryRow`（6 个入口）；图标取仓内**已编译通过**的 `sys.symbol.*`（key / book / textformat / exposure / arrow_clockwise / speaker_wave_2） |

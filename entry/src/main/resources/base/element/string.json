@@ -4373,16 +4373,16 @@
       "value": "改名"
     },
     {
-      "name": "local_image_action_scope",
-      "value": "作用域"
+      "name": "local_image_action_description",
+      "value": "描述"
     },
     {
       "name": "local_image_action_delete",
       "value": "删除"
     },
     {
-      "name": "local_image_scope_sheet_title",
-      "value": "选择作用域"
+      "name": "local_image_action_tag",
+      "value": "标签"
     },
     {
       "name": "local_image_rename_sheet_title",
@@ -4411,6 +4411,70 @@
     {
       "name": "local_image_picker_failed",
       "value": "打开图片选择器失败"
+    },
+    {
+      "name": "local_image_filter_all",
+      "value": "全部"
+    },
+    {
+      "name": "local_image_filter_uncategorized",
+      "value": "未分类"
+    },
+    {
+      "name": "local_image_filter_empty",
+      "value": "这个标签下还没有图片"
+    },
+    {
+      "name": "local_image_tag_prefix",
+      "value": "标签："
+    },
+    {
+      "name": "local_image_tag_none",
+      "value": "未分类"
+    },
+    {
+      "name": "local_image_tag_sheet_title",
+      "value": "所属标签"
+    },
+    {
+      "name": "local_image_tag_sheet_hint",
+      "value": "勾选会把这张图的名字（和描述）写进对应预设的正文；取消勾选则从正文移除"
+    },
+    {
+      "name": "local_image_tag_empty_title",
+      "value": "还没有标签"
+    },
+    {
+      "name": "local_image_tag_empty_desc",
+      "value": "标签就是一个提示词预设；新建后把图片勾进去"
+    },
+    {
+      "name": "local_image_tag_create",
+      "value": "新建标签"
+    },
+    {
+      "name": "local_image_tag_create_title",
+      "value": "新建标签"
+    },
+    {
+      "name": "local_image_tag_create_hint",
+      "value": "会新建一个空正文的提示词预设，正文在你勾选图片时自动写入"
+    },
+    {
+      "name": "local_image_tag_name_placeholder",
+      "value": "输入标签名（如：校园风表情）"
+    },
+    {
+      "name": "local_image_description_sheet_title",
+      "value": "图片描述"
+    },
+    {
+      "name": "local_image_description_hint",
+      "value": "描述会随图片名一起写进标签预设，帮助模型选对图"
+    },
+    {
+      "name": "local_image_description_placeholder",
+      "value": "告诉模型这图是什么（可空）"
     }
   ]
 }

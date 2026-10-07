@@ -1,22 +1,28 @@
 /**
  * LocalImageLibraryPage 本地图片库页面
  *
- * 功能:
- * - 展示本地图片库(缩略图 + 名字 + 作用域标签),按 全局 / 各角色 / 孤儿 分组
- * - 导入图片(先选作用域 → photoAccessHelper 图片选择器,支持多选)
- * - 改名 / 改作用域 / 删除
+ * 模型(v50,**图片池 + 标签即预设**):
+ * - 所有图片一个池子,页面用**标签**分组与筛选(不再有全局/角色专属)
+ * - 标签就是**普通提示词预设**:把图片名(和描述)写进预设正文即视为打上该标签
+ * - 顶部筛选芯片:全部 / 未分类 / 各标签;图片行显示它属于哪些标签,并可一键勾选
+ * - 图片可改名、编辑描述(描述会随名字写进标签预设,帮助模型选对图)、删除
  *
  * 通过 LocalImageLibraryViewModel 操作,不直接访问 Service / Repository。
- * 顶栏复用 AppPageHeader(标题区)+ 统一系统返回图标。
  */
 
 import {
   LocalImageLibraryViewModel,
-  LocalImageGroup,
   LocalImageEntry,
-  ScopeOption
+  LocalImageTagOption,
+  IMAGE_FILTER_ALL,
+  IMAGE_FILTER_NONE
 } from '../viewmodels/LocalImageLibraryViewModel';
-import { describeImageNameProblem, IMAGE_NAME_MAX_LENGTH } from '../models/LocalImage';
+import {
+  describeImageNameProblem,
+  describeImageDescriptionProblem,
+  IMAGE_NAME_MAX_LENGTH,
+  IMAGE_DESCRIPTION_MAX_LENGTH
+} from '../models/LocalImage';
 import { AppServices } from '../services/AppServices';
 import { AppPageHeader } from '../components/AppPageHeader';
 import { CharacterImageView } from '../components/CharacterImageView';
@@ -29,6 +35,8 @@ import { photoAccessHelper } from '@kit.MediaLibraryKit';
 const LOG_TAG: string = 'LocalImageLibraryPage';
 /** 选择器最大多选张数 */
 const MAX_PICK_COUNT: number = 20;
+/** 标签名长度上限(与预设名一致,宽松) */
+const TAG_NAME_MAX_LENGTH: number = 30;
 
 @Entry
 @Component
@@ -36,20 +44,32 @@ struct LocalImageLibraryPage {
   @State viewModel: LocalImageLibraryViewModel = AppServices.createLocalImageLibraryViewModel();
   @State isImporting: boolean = false;
 
-  /** 作用域选择面板(两段式:挂载 → 上滑) */
-  @State scopeSheetMounted: boolean = false;
-  @State scopeSheetShow: boolean = false;
-  /** 'import' = 导入前选作用域;'scope' = 修改某张图的作用域 */
-  @State scopeAction: string = '';
-  @State scopeImageId: string = '';
-  @State scopeCurrentCharacterId: string = '';
-
   /** 改名面板(两段式:挂载 → 上滑) */
   @State renameSheetMounted: boolean = false;
   @State renameSheetShow: boolean = false;
   @State renameImageId: string = '';
   @State renameText: string = '';
   @State renameProblem: string = '';
+
+  /** 描述编辑面板 */
+  @State descSheetMounted: boolean = false;
+  @State descSheetShow: boolean = false;
+  @State descImageId: string = '';
+  @State descText: string = '';
+  @State descProblem: string = '';
+
+  /** 标签多选面板 */
+  @State tagSheetMounted: boolean = false;
+  @State tagSheetShow: boolean = false;
+  @State tagImageId: string = '';
+  @State tagImageName: string = '';
+  @State tagSelection: string[] = [];
+
+  /** 新建标签面板 */
+  @State tagCreateMounted: boolean = false;
+  @State tagCreateShow: boolean = false;
+  @State tagNameText: string = '';
+  @State tagNameProblem: string = '';
 
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   @StorageProp('effectiveTheme') effectiveTheme: string = 'dark';
@@ -78,11 +98,17 @@ struct LocalImageLibraryPage {
       .width('100%')
       .height('100%')
 
-      if (this.scopeSheetMounted) {
-        this.scopeSheetHost()
-      }
       if (this.renameSheetMounted) {
         this.renameSheetHost()
+      }
+      if (this.descSheetMounted) {
+        this.descSheetHost()
+      }
+      if (this.tagSheetMounted) {
+        this.tagSheetHost()
+      }
+      if (this.tagCreateMounted) {
+        this.tagCreateSheetHost()
       }
     }
     .width('100%')
@@ -122,7 +148,7 @@ struct LocalImageLibraryPage {
         .margin({ top: this.statusBarHeight + 14 })
         .enabled(!this.isImporting && !this.viewModel.isOperating)
         .onClick(() => {
-          this.openImportFlow();
+          void this.pickPhotos();
         })
     }
     .width('100%')
@@ -173,55 +199,105 @@ struct LocalImageLibraryPage {
           .padding({ left: 20, right: 20, top: 10, bottom: 10 })
           .enabled(!this.isImporting && !this.viewModel.isOperating)
           .onClick(() => {
-            this.openImportFlow();
+            void this.pickPhotos();
           })
       }
       .width('100%')
       .layoutWeight(1)
       .justifyContent(FlexAlign.Center)
     } else {
-      Scroll() {
-        Column() {
-          // TODO: 条目数超过 20 时改用 LazyForEach(需实现 IDataSource;keyGenerator 仍用图片 id)。
-          // 当前用 ForEach(分组渲染 + 缩略图,实现 LazyForEach 成本较高,暂缓)。
-          ForEach(this.viewModel.groups, (group: LocalImageGroup): void => {
-            this.groupSection(group);
-          }, (group: LocalImageGroup): string => group.key + '_' + this.viewModel.version.toString())
-          Blank().height(80)
+      Column() {
+        this.filterChips()
+        Scroll() {
+          Column() {
+            // TODO: 条目数超过 20 时改用 LazyForEach(需实现 IDataSource;keyGenerator 仍用图片 id)。
+            ForEach(this.viewModel.filteredEntries(), (entry: LocalImageEntry, index: number): void => {
+              this.imageRow(entry, index > 0);
+            }, (entry: LocalImageEntry): string => entry.image.id + '_' + this.viewModel.version.toString())
+            if (this.viewModel.filteredEntries().length === 0) {
+              Text($r('app.string.local_image_filter_empty'))
+                .fontSize($r('app.float.app_font_caption'))
+                .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+                .width('100%')
+                .padding({ top: 24 })
+                .textAlign(TextAlign.Center)
+            }
+            Blank().height(80)
+          }
+          .width('100%')
+          .padding({ left: 16, right: 16 })
         }
         .width('100%')
-        .padding({ left: 16, right: 16 })
+        .layoutWeight(1)
+        .scrollable(ScrollDirection.Vertical)
+        .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring)
+        .align(Alignment.Top)
       }
       .width('100%')
       .layoutWeight(1)
-      .scrollable(ScrollDirection.Vertical)
-      .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.Spring)
-      .align(Alignment.Top)
     }
   }
 
+  /** 顶部筛选芯片:全部 / 未分类 / 各标签 / 新建标签(横向滚动,标签多也不挤) */
   @Builder
-  groupSection(group: LocalImageGroup) {
-    Column() {
-      Text(group.label)
-        .fontSize($r('app.float.app_font_caption'))
-        .fontColor(group.orphan
-          ? $r('app.color.app_danger')
-          : ThemePalette.textTertiaryColor(this.effectiveTheme))
-        .width('100%')
-        .padding({ left: 4, top: 14, bottom: 6 })
+  filterChips() {
+    Scroll() {
+      Row({ space: 8 }) {
+        this.filterChip($r('app.string.local_image_filter_all'),
+          this.viewModel.entries.length, IMAGE_FILTER_ALL)
+        this.filterChip($r('app.string.local_image_filter_uncategorized'),
+          this.viewModel.uncategorizedCount(), IMAGE_FILTER_NONE)
+        ForEach(this.viewModel.usedTagOptions, (option: LocalImageTagOption): void => {
+          this.filterChip(option.name, option.imageCount, option.id);
+        }, (option: LocalImageTagOption): string =>
+        option.id + '_' + option.imageCount.toString() + '_' + this.viewModel.version.toString())
 
-      Column() {
-        ForEach(group.entries, (entry: LocalImageEntry, index: number): void => {
-          this.imageRow(entry, index > 0);
-        }, (entry: LocalImageEntry): string => entry.image.id + '_' + this.viewModel.version.toString())
+        Button($r('app.string.local_image_tag_create'))
+          .fontSize(13)
+          .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+          .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+          .borderRadius(17)
+          .height(34)
+          .padding({ left: 14, right: 14 })
+          .enabled(!this.viewModel.isOperating)
+          .onClick(() => {
+            this.openCreateTag();
+          })
       }
-      .width('100%')
-      .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
-      .borderRadius($r('app.float.app_radius_md'))
+      .padding({ left: 16, right: 16 })
     }
     .width('100%')
+    .scrollable(ScrollDirection.Horizontal)
+    .scrollBar(BarState.Off)
+    .padding({ bottom: 6 })
+  }
+
+  @Builder
+  filterChip(label: ResourceStr, count: number, filterKey: string) {
+    Row({ space: 5 }) {
+      Text(label)
+        .fontSize(13)
+        .fontWeight(this.viewModel.activeFilter === filterKey ? FontWeight.Medium : FontWeight.Normal)
+        .fontColor(this.viewModel.activeFilter === filterKey
+          ? $r('app.color.app_on_accent')
+          : ThemePalette.textPrimaryColor(this.effectiveTheme))
+        .maxLines(1)
+      Text(count.toString())
+        .fontSize(12)
+        .fontColor(this.viewModel.activeFilter === filterKey
+          ? $r('app.color.app_on_accent')
+          : ThemePalette.textTertiaryColor(this.effectiveTheme))
+    }
+    .height(34)
+    .padding({ left: 14, right: 14 })
+    .backgroundColor(this.viewModel.activeFilter === filterKey
+      ? ThemePalette.accentColor(this.effectiveTheme)
+      : ThemePalette.surface2Color(this.effectiveTheme))
+    .borderRadius(17)
+    .onClick(() => {
+      this.viewModel.setFilter(filterKey);
+    })
   }
 
   @Builder
@@ -251,11 +327,21 @@ struct LocalImageLibraryPage {
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .width('100%')
             .textAlign(TextAlign.Start)
-          Text(entry.scopeLabel)
+          if (entry.image.description.length > 0) {
+            Text(entry.image.description)
+              .fontSize($r('app.float.app_font_caption'))
+              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .margin({ top: 2 })
+              .width('100%')
+              .textAlign(TextAlign.Start)
+          }
+          Text(entry.tagNames.length > 0
+            ? $r('app.string.local_image_tag_prefix') + entry.tagNames.join('、')
+            : $r('app.string.local_image_tag_none'))
             .fontSize($r('app.float.app_font_caption'))
-            .fontColor(entry.orphan
-              ? $r('app.color.app_danger')
-              : ThemePalette.textSecondaryColor(this.effectiveTheme))
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .margin({ top: 2 })
@@ -276,14 +362,24 @@ struct LocalImageLibraryPage {
             this.openRenameFlow(entry);
           })
 
-        Button($r('app.string.local_image_action_scope'))
+        Button($r('app.string.local_image_action_description'))
           .fontSize(12)
           .fontColor(ThemePalette.accentColor(this.effectiveTheme))
           .backgroundColor(Color.Transparent)
           .padding({ left: 6, right: 6 })
           .enabled(!this.viewModel.isOperating)
           .onClick(() => {
-            this.openScopeFlow(entry);
+            this.openDescFlow(entry);
+          })
+
+        Button($r('app.string.local_image_action_tag'))
+          .fontSize(12)
+          .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+          .backgroundColor(Color.Transparent)
+          .padding({ left: 6, right: 6 })
+          .enabled(!this.viewModel.isOperating)
+          .onClick(() => {
+            this.openTagFlow(entry);
           })
 
         Button($r('app.string.local_image_action_delete'))
@@ -301,94 +397,6 @@ struct LocalImageLibraryPage {
       .alignItems(VerticalAlign.Center)
     }
     .width('100%')
-  }
-
-  // ===== 作用域选择面板 ====
-
-  @Builder
-  scopeSheetHost() {
-    Column()
-      .width('100%')
-      .height(0)
-      .backgroundColor(Color.Transparent)
-      .bindSheet(this.scopeSheetShow, this.scopeSheetContent(), {
-        height: SheetSize.MEDIUM,
-        dragBar: false,
-        showClose: false,
-        backgroundColor: ThemePalette.surface1Color(this.effectiveTheme),
-        onDisappear: () => {
-          this.scopeSheetMounted = false;
-        }
-      })
-      .onAppear(() => {
-        this.scopeSheetShow = true;
-      })
-  }
-
-  @Builder
-  scopeSheetContent() {
-    Column() {
-      Row() {
-        Text($r('app.string.local_image_scope_sheet_title'))
-          .fontSize($r('app.float.app_font_subtitle'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-        Blank()
-        SymbolGlyph($r('sys.symbol.xmark'))
-          .fontSize(22)
-          .fontColor([ThemePalette.textSecondaryColor(this.effectiveTheme)])
-          .onClick(() => {
-            this.scopeSheetShow = false;
-          })
-      }
-      .width('100%')
-      .height(56)
-      .padding({ left: 16, right: 16 })
-      .alignItems(VerticalAlign.Center)
-
-      List({ space: 4 }) {
-        ForEach(this.viewModel.scopeOptions, (option: ScopeOption): void => {
-          ListItem() {
-            this.scopeRow(option);
-          }
-        }, (option: ScopeOption): string => option.characterId)
-      }
-      .width('100%')
-      .layoutWeight(1)
-      .scrollBar(BarState.Auto)
-    }
-    .width('100%')
-    .height('100%')
-    .padding({ bottom: 8 })
-  }
-
-  @Builder
-  scopeRow(option: ScopeOption) {
-    Row() {
-      Text(option.label)
-        .fontSize($r('app.float.app_font_body'))
-        .fontColor(option.characterId === this.scopeCurrentCharacterId
-          ? ThemePalette.accentColor(this.effectiveTheme)
-          : ThemePalette.textPrimaryColor(this.effectiveTheme))
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .layoutWeight(1)
-      if (option.characterId === this.scopeCurrentCharacterId) {
-        SymbolGlyph($r('sys.symbol.checkmark'))
-          .fontSize(20)
-          .fontColor([ThemePalette.accentColor(this.effectiveTheme)])
-      }
-    }
-    .width('100%')
-    .height(52)
-    .padding({ left: 16, right: 16 })
-    .backgroundColor(option.characterId === this.scopeCurrentCharacterId
-      ? $r('app.color.app_accent_surface')
-      : Color.Transparent)
-    .borderRadius($r('app.float.app_radius_sm'))
-    .onClick(() => {
-      this.onScopeChosen(option.characterId);
-    })
   }
 
   // ===== 改名面板 ====
@@ -472,46 +480,335 @@ struct LocalImageLibraryPage {
     .padding({ left: 16, right: 16, bottom: 16 })
   }
 
+  // ===== 描述编辑面板 ====
+
+  @Builder
+  descSheetHost() {
+    Column()
+      .width('100%')
+      .height(0)
+      .backgroundColor(Color.Transparent)
+      .bindSheet(this.descSheetShow, this.descSheetContent(), {
+        height: SheetSize.FIT_CONTENT,
+        dragBar: false,
+        showClose: false,
+        backgroundColor: ThemePalette.surface1Color(this.effectiveTheme),
+        onDisappear: () => {
+          this.descSheetMounted = false;
+        }
+      })
+      .onAppear(() => {
+        this.descSheetShow = true;
+      })
+  }
+
+  @Builder
+  descSheetContent() {
+    Column() {
+      Text($r('app.string.local_image_description_sheet_title'))
+        .fontSize($r('app.float.app_font_subtitle'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        .width('100%')
+        .padding({ left: 4, top: 16, bottom: 4 })
+
+      Text($r('app.string.local_image_description_hint'))
+        .fontSize($r('app.float.app_font_caption'))
+        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+        .width('100%')
+        .padding({ left: 4, bottom: 12 })
+
+      TextArea({
+        text: this.descText,
+        placeholder: $r('app.string.local_image_description_placeholder')
+      })
+        .width('100%')
+        .height(88)
+        .fontSize($r('app.float.app_font_body'))
+        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        .placeholderColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+        .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+        .borderRadius($r('app.float.app_radius_sm'))
+        .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+        .maxLength(IMAGE_DESCRIPTION_MAX_LENGTH)
+        .onChange((value: string) => {
+          this.descText = value;
+          this.descProblem = describeImageDescriptionProblem(value);
+        })
+
+      // TextArea 没有 showError,错误文案单独一行展示
+      if (this.descProblem.length > 0) {
+        Text(this.descProblem)
+          .fontSize($r('app.float.app_font_caption'))
+          .fontColor($r('app.color.app_danger'))
+          .width('100%')
+          .padding({ left: 4, top: 6 })
+      }
+
+      Row() {
+        Button($r('app.string.local_image_cancel'))
+          .fontSize($r('app.float.app_font_body'))
+          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+          .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+          .height(44)
+          .layoutWeight(1)
+          .onClick(() => {
+            this.descSheetShow = false;
+          })
+
+        Button($r('app.string.local_image_confirm'))
+          .fontSize($r('app.float.app_font_body'))
+          .fontColor($r('app.color.app_on_accent'))
+          .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
+          .height(44)
+          .layoutWeight(1)
+          .margin({ left: 12 })
+          .enabled(!this.viewModel.isOperating)
+          .onClick(() => {
+            void this.confirmDesc();
+          })
+      }
+      .width('100%')
+      .margin({ top: 16 })
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, bottom: 16 })
+  }
+
+  // ===== 标签多选面板 ====
+
+  @Builder
+  tagSheetHost() {
+    Column()
+      .width('100%')
+      .height(0)
+      .backgroundColor(Color.Transparent)
+      .bindSheet(this.tagSheetShow, this.tagSheetContent(), {
+        height: SheetSize.MEDIUM,
+        dragBar: false,
+        showClose: false,
+        backgroundColor: ThemePalette.surface1Color(this.effectiveTheme),
+        onDisappear: () => {
+          this.tagSheetMounted = false;
+        }
+      })
+      .onAppear(() => {
+        this.tagSheetShow = true;
+      })
+  }
+
+  @Builder
+  tagSheetContent() {
+    Column() {
+      Row() {
+        Column() {
+          Text($r('app.string.local_image_tag_sheet_title'))
+            .fontSize($r('app.float.app_font_subtitle'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+          Text(this.tagImageName)
+            .fontSize($r('app.float.app_font_caption'))
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .margin({ top: 2 })
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+        SymbolGlyph($r('sys.symbol.xmark'))
+          .fontSize(22)
+          .fontColor([ThemePalette.textSecondaryColor(this.effectiveTheme)])
+          .onClick(() => {
+            this.tagSheetShow = false;
+          })
+      }
+      .width('100%')
+      .height(56)
+      .padding({ left: 16, right: 16 })
+      .alignItems(VerticalAlign.Center)
+
+      Text($r('app.string.local_image_tag_sheet_hint'))
+        .fontSize($r('app.float.app_font_caption'))
+        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+        .width('100%')
+        .padding({ left: 16, right: 16, bottom: 8 })
+
+      if (this.viewModel.tagOptions.length === 0) {
+        Column() {
+          EmptyStateView({
+            title: $r('app.string.local_image_tag_empty_title'),
+            description: $r('app.string.local_image_tag_empty_desc')
+          })
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .justifyContent(FlexAlign.Center)
+
+        Row() {
+          Button($r('app.string.local_image_tag_create'))
+            .fontSize($r('app.float.app_font_body'))
+            .fontColor($r('app.color.app_on_accent'))
+            .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
+            .height(44)
+            .layoutWeight(1)
+            .onClick(() => {
+              this.tagSheetShow = false;
+              this.openCreateTag();
+            })
+        }
+        .width('100%')
+        .padding({ bottom: 16 })
+      } else {
+        List({ space: 4 }) {
+          ForEach(this.viewModel.tagOptions, (option: LocalImageTagOption): void => {
+            ListItem() {
+              this.tagCheckRow(option);
+            }
+          }, (option: LocalImageTagOption): string =>
+          option.id + (this.tagSelection.indexOf(option.id) >= 0 ? '_1' : '_0'))
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .scrollBar(BarState.Auto)
+
+        Button($r('app.string.local_image_confirm'))
+          .fontSize($r('app.float.app_font_body'))
+          .fontColor($r('app.color.app_on_accent'))
+          .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
+          .height(44)
+          .width('100%')
+          .margin({ top: 12 })
+          .enabled(!this.viewModel.isOperating)
+          .onClick(() => {
+            void this.confirmTags();
+          })
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ left: 16, right: 16, bottom: 16 })
+  }
+
+  /** 标签多选行(勾选态直接读 @State,并参与 ForEach key,保证勾选即时刷新) */
+  @Builder
+  tagCheckRow(option: LocalImageTagOption) {
+    Row() {
+      Text(option.name)
+        .fontSize($r('app.float.app_font_body'))
+        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .layoutWeight(1)
+      if (this.tagSelection.indexOf(option.id) >= 0) {
+        SymbolGlyph($r('sys.symbol.checkmark'))
+          .fontSize(20)
+          .fontColor([ThemePalette.accentColor(this.effectiveTheme)])
+      }
+    }
+    .width('100%')
+    .height(52)
+    .padding({ left: 12, right: 12 })
+    .backgroundColor(this.tagSelection.indexOf(option.id) >= 0
+      ? $r('app.color.app_accent_surface')
+      : Color.Transparent)
+    .borderRadius($r('app.float.app_radius_sm'))
+    .onClick(() => {
+      this.toggleTagSelection(option.id);
+    })
+  }
+
+  // ===== 新建标签面板 ====
+
+  @Builder
+  tagCreateSheetHost() {
+    Column()
+      .width('100%')
+      .height(0)
+      .backgroundColor(Color.Transparent)
+      .bindSheet(this.tagCreateShow, this.tagCreateSheetContent(), {
+        height: SheetSize.FIT_CONTENT,
+        dragBar: false,
+        showClose: false,
+        backgroundColor: ThemePalette.surface1Color(this.effectiveTheme),
+        onDisappear: () => {
+          this.tagCreateMounted = false;
+        }
+      })
+      .onAppear(() => {
+        this.tagCreateShow = true;
+      })
+  }
+
+  @Builder
+  tagCreateSheetContent() {
+    Column() {
+      Text($r('app.string.local_image_tag_create_title'))
+        .fontSize($r('app.float.app_font_subtitle'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        .width('100%')
+        .padding({ left: 4, top: 16, bottom: 4 })
+
+      Text($r('app.string.local_image_tag_create_hint'))
+        .fontSize($r('app.float.app_font_caption'))
+        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+        .width('100%')
+        .padding({ left: 4, bottom: 12 })
+
+      TextInput({
+        text: this.tagNameText,
+        placeholder: $r('app.string.local_image_tag_name_placeholder')
+      })
+        .width('100%')
+        .height(44)
+        .fontSize($r('app.float.app_font_body'))
+        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        .placeholderColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+        .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+        .borderRadius($r('app.float.app_radius_sm'))
+        .padding({ left: 12, right: 12 })
+        .maxLength(TAG_NAME_MAX_LENGTH)
+        .showError(this.tagNameProblem.length > 0 ? this.tagNameProblem : undefined)
+        .onChange((value: string) => {
+          this.tagNameText = value;
+          this.tagNameProblem = value.trim().length === 0 ? '标签名不能为空' : '';
+        })
+
+      Row() {
+        Button($r('app.string.local_image_cancel'))
+          .fontSize($r('app.float.app_font_body'))
+          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+          .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+          .height(44)
+          .layoutWeight(1)
+          .onClick(() => {
+            this.tagCreateShow = false;
+          })
+
+        Button($r('app.string.local_image_confirm'))
+          .fontSize($r('app.float.app_font_body'))
+          .fontColor($r('app.color.app_on_accent'))
+          .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
+          .height(44)
+          .layoutWeight(1)
+          .margin({ left: 12 })
+          .enabled(!this.viewModel.isOperating)
+          .onClick(() => {
+            void this.confirmCreateTag();
+          })
+      }
+      .width('100%')
+      .margin({ top: 16 })
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, bottom: 16 })
+  }
+
   // ===== 交互 ====
 
-  private openImportFlow(): void {
+  /** 打开系统图片选择器并逐张导入(池子;描述留空,导入后再编辑) */
+  private async pickPhotos(): Promise<void> {
     if (this.isImporting || this.viewModel.isOperating) {
-      return;
-    }
-    this.scopeAction = 'import';
-    this.scopeImageId = '';
-    this.scopeCurrentCharacterId = '';
-    this.scopeSheetMounted = true;
-  }
-
-  private openScopeFlow(entry: LocalImageEntry): void {
-    this.scopeAction = 'scope';
-    this.scopeImageId = entry.image.id;
-    this.scopeCurrentCharacterId = entry.image.characterId;
-    this.scopeSheetMounted = true;
-  }
-
-  private openRenameFlow(entry: LocalImageEntry): void {
-    this.renameImageId = entry.image.id;
-    this.renameText = entry.image.name;
-    this.renameProblem = '';
-    this.renameSheetMounted = true;
-  }
-
-  private onScopeChosen(characterId: string): void {
-    const action: string = this.scopeAction;
-    const imageId: string = this.scopeImageId;
-    this.scopeSheetShow = false;
-    if (action === 'import') {
-      void this.pickPhotos(characterId);
-    } else if (action === 'scope') {
-      void this.applyScopeChange(imageId, characterId);
-    }
-  }
-
-  /** 打开系统图片选择器并逐张导入。 */
-  private async pickPhotos(characterId: string): Promise<void> {
-    if (this.isImporting) {
       return;
     }
     let uris: string[] = [];
@@ -534,7 +831,7 @@ struct LocalImageLibraryPage {
       return;
     }
     try {
-      await this.viewModel.importImages(uris, characterId);
+      await this.viewModel.importImages(uris);
       if (this.viewModel.successMessage.length > 0) {
         promptAction.showToast({ message: this.viewModel.successMessage });
       }
@@ -543,11 +840,11 @@ struct LocalImageLibraryPage {
     }
   }
 
-  private async applyScopeChange(imageId: string, characterId: string): Promise<void> {
-    await this.viewModel.changeScope(imageId, characterId);
-    if (this.viewModel.successMessage.length > 0) {
-      promptAction.showToast({ message: this.viewModel.successMessage });
-    }
+  private openRenameFlow(entry: LocalImageEntry): void {
+    this.renameImageId = entry.image.id;
+    this.renameText = entry.image.name;
+    this.renameProblem = '';
+    this.renameSheetMounted = true;
   }
 
   private async confirmRename(): Promise<void> {
@@ -559,6 +856,80 @@ struct LocalImageLibraryPage {
     this.renameSheetShow = false;
     await this.viewModel.renameImage(this.renameImageId, this.renameText);
     if (this.viewModel.successMessage.length > 0) {
+      promptAction.showToast({ message: this.viewModel.successMessage });
+    }
+  }
+
+  private openDescFlow(entry: LocalImageEntry): void {
+    this.descImageId = entry.image.id;
+    this.descText = entry.image.description;
+    this.descProblem = '';
+    this.descSheetMounted = true;
+  }
+
+  private async confirmDesc(): Promise<void> {
+    const problem: string = describeImageDescriptionProblem(this.descText);
+    if (problem.length > 0) {
+      this.descProblem = problem;
+      return;
+    }
+    this.descSheetShow = false;
+    await this.viewModel.updateDescription(this.descImageId, this.descText);
+    if (this.viewModel.successMessage.length > 0) {
+      promptAction.showToast({ message: this.viewModel.successMessage });
+    }
+  }
+
+  private openTagFlow(entry: LocalImageEntry): void {
+    this.tagImageId = entry.image.id;
+    this.tagImageName = entry.image.name;
+    this.tagSelection = entry.tagIds.slice();
+    this.tagSheetMounted = true;
+  }
+
+  private toggleTagSelection(id: string): void {
+    const next: string[] = [];
+    let removed: boolean = false;
+    for (let i = 0; i < this.tagSelection.length; i++) {
+      if (this.tagSelection[i] === id) {
+        removed = true;
+      } else {
+        next.push(this.tagSelection[i]);
+      }
+    }
+    if (!removed) {
+      next.push(id);
+    }
+    this.tagSelection = next;
+  }
+
+  private async confirmTags(): Promise<void> {
+    const imageId: string = this.tagImageId;
+    const selection: string[] = this.tagSelection.slice();
+    this.tagSheetShow = false;
+    await this.viewModel.setImageTags(imageId, selection);
+    if (this.viewModel.successMessage.length > 0) {
+      promptAction.showToast({ message: this.viewModel.successMessage });
+    }
+  }
+
+  private openCreateTag(): void {
+    if (this.viewModel.isOperating) {
+      return;
+    }
+    this.tagNameText = '';
+    this.tagNameProblem = '';
+    this.tagCreateMounted = true;
+  }
+
+  private async confirmCreateTag(): Promise<void> {
+    if (this.tagNameText.trim().length === 0) {
+      this.tagNameProblem = '标签名不能为空';
+      return;
+    }
+    this.tagCreateShow = false;
+    const ok: boolean = await this.viewModel.createTag(this.tagNameText);
+    if (ok && this.viewModel.successMessage.length > 0) {
       promptAction.showToast({ message: this.viewModel.successMessage });
     }
   }

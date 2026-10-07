@@ -332,24 +332,18 @@ export function decodeScope(value: string): PresetScope {
   return DEFAULT_PRESET_SCOPE;
 }
 
-// ===== 受管"本地图片清单"预设的固定 id =====
+// ===== 本地图片"标签"与预设的关系 =====
 
 /**
- * 受管预设:由 LocalImageService 按图片库自动维护正文,列表页只读、禁止删除。
- * 用固定 id 而非新增数据库列,避免改 PromptPreset 实体与校验器。
+ * v50 起**不再有"受管图片清单预设"**：
+ * 标签就是**普通预设**（把图片名写进正文即打上该标签，由用户自行编辑/删除/启用），
+ * 故本判定恒为 false。
+ *
+ * 保留该函数只是为了不去改动预设列表页 / 编辑页里已有的 isManagedPreset 分支
+ * （它们是死分支，待引用清零后连同本函数一起删除）。
  */
-const MANAGED_IMAGE_PRESET_PREFIX: string = 'arkimg-';
-/** 全局图片清单预设的固定 id */
-export const MANAGED_IMAGE_GLOBAL_PRESET_ID: string = 'arkimg-global';
-
-/** 某角色专属图片清单预设的固定 id */
-export function managedImageCharacterPresetId(characterId: string): string {
-  return MANAGED_IMAGE_PRESET_PREFIX + 'char-' + characterId;
-}
-
-/** 是否为受管图片清单预设(含全局与各角色) */
 export function isManagedImagePresetId(id: string): boolean {
-  return id.startsWith(MANAGED_IMAGE_PRESET_PREFIX);
+  return false;
 }
 
 /**
