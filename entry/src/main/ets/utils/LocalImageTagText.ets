@@ -29,6 +29,42 @@ export function buildTagEntryLine(name: string, description: string): string {
   return ENTRY_PREFIX + trimmedName + ENTRY_SEPARATOR + trimmedDesc;
 }
 
+// ===== 标签预设的固定开头 =====
+
+/** 固定开头的标记(幂等判据) */
+const TAG_PRESET_HEADER_MARK: string = '【本地图片】';
+
+/**
+ * 新建标签(= 提示词预设)时写入的固定开头。
+ *
+ * 作用:光有图片名清单模型不知道那是"可用的图",必须显式告诉它调用方式。
+ * 引用的语法与 parser/ChatTextParser 的 LOCAL_IMAGE_RE(`![alt](arkimg:名字)`)一致。
+ *
+ * 约束:整段**不得以 `- ` 起头** —— listTagEntryNames / hasTagEntry 只认 `- ` 行,
+ * 否则开头会被反查成一张叫该文字的图片(见本文件顶部「约定」)。
+ */
+export const TAG_PRESET_HEADER: string = TAG_PRESET_HEADER_MARK
+  + '需要配图时，在回复中直接输出：![简短描述](arkimg:图片名)\n'
+  + '「图片名」必须与下方清单里的名字完全一致，不要改动或编造名字。\n\n'
+  + '可用图片：';
+
+/** 正文是否已带固定开头 */
+export function hasTagPresetHeader(text: string): boolean {
+  return text.indexOf(TAG_PRESET_HEADER_MARK) >= 0;
+}
+
+/**
+ * 让正文带上固定开头(幂等:已有则原样返回)。
+ * 用于新建标签,以及补齐早期建立(正文为空)的标签。
+ */
+export function ensureTagPresetHeader(text: string): string {
+  if (hasTagPresetHeader(text)) {
+    return text;
+  }
+  const trimmed: string = text.trim();
+  return trimmed.length === 0 ? TAG_PRESET_HEADER : TAG_PRESET_HEADER + '\n' + trimmed;
+}
+
 /** 该行是否是一条标签条目 */
 function isEntryLine(line: string): boolean {
   return line.trim().startsWith(ENTRY_PREFIX);

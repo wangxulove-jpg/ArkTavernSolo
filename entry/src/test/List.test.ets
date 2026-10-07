@@ -21,6 +21,7 @@ import presetExportTest from './preset_export.test';
 import memoryPromptBuilderTest from './memory_prompt_builder.test';
 import localImageTest from './local_image.test';
 import localImageTagTextTest from './local_image_tag_text.test';
+import localImageCaptionTest from './local_image_caption.test';
 
 export default function testsuite() {
   promptSegmentOrderTest();
@@ -41,4 +42,5 @@ export default function testsuite() {
   memoryPromptBuilderTest();
   localImageTest();
   localImageTagTextTest();
+  localImageCaptionTest();
 }

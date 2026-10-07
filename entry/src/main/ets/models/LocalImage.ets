@@ -122,6 +122,39 @@ export function describeImageNameProblem(name: string): string {
   return '';
 }
 
+/**
+ * 把一段任意文本消毒成本项目合法的图片名(供 AI 命名结果落库前使用)。
+ *
+ * 规则与 isValidImageName 一致:
+ * - 去掉所有空白字符与 FORBIDDEN_NAME_CHARS
+ * - 截断到 IMAGE_NAME_MAX_LENGTH
+ * - 结果为空时退回 fallback(通常传原名字);fallback 也非法则返回空串
+ *
+ * @param raw 待消毒的文本(如模型输出)
+ * @param fallback 消毒后为空时的兜底名字
+ */
+export function sanitizeImageName(raw: string, fallback: string): string {
+  const kept: string[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const ch: string = raw.charAt(i);
+    if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') {
+      continue;
+    }
+    if (FORBIDDEN_NAME_CHARS.indexOf(ch) >= 0) {
+      continue;
+    }
+    kept.push(ch);
+  }
+  const compact: string = kept.join('');
+  const capped: string = compact.length > IMAGE_NAME_MAX_LENGTH
+    ? compact.substring(0, IMAGE_NAME_MAX_LENGTH)
+    : compact;
+  if (capped.length > 0) {
+    return capped;
+  }
+  return isValidImageName(fallback) ? fallback.trim() : '';
+}
+
 // ===== 描述处理 =====
 
 /** 描述内的连续空白(含换行)压成单个空格(ArkTS 禁正则字面量,故用 new RegExp) */

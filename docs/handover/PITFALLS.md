@@ -127,6 +127,9 @@
 | P-101 | 图片的**名字是它在提示词里的唯一标识**，但库内改名/改描述/删图后没有同步回"引用它的文本"（预设正文）→ 出现三类静默错位：改名后标签条目成了幽灵名（图片行显示"未分类"、模型按旧名引用却已解析不到）、描述改了正文里还是旧描述、删图后正文残留死条目 | 库内变更必须**回写引用处**：`LocalImageService.renameImage` / `updateImageDescription` / `removeImage` 统一走 `rewritePresetEntries`（只改"提到该名字"的预设，逐行 `upsert/remove`，正文未变则跳过写入）。判断"是否提到"用与写入同一套解析（`utils/LocalImageTagText.hasTagEntry`）——**格式与解析只写一处** |
 | P-102 | 看到 `local_images.character_id` 列还在，以为"图片还有全局/角色归属"（v50 已停用该概念，代码不再读写；迁移只增不改故列保留） | **勿依赖该列**：图片池模型下所有图片等价，分组一律用标签（= 预设正文）。新写查询/迁移时不要引用它；`nameTaken(nameKey)` 已是全局唯一语义 |
 | P-103 | 以为还有"受管图片清单预设"（列表页只读、导出排除、`arkimg-global` / `arkimg-char-*` 自动维护） | v50 起**没有受管预设**：标签就是普通预设，用户可编辑/删除/导出/启用；`isManagedImagePresetId()` 现在**恒返回 false**（只为不动预设列表/编辑页的 `isManagedPreset` 分支而保留，是死分支，引用清零后连同函数一起删）。v49 期间若产生过 `arkimg-*` 预设，现在会以普通预设出现，可直接删 |
+| P-104 | 把资源当字符串拼接：`$r('app.string.x') + 字符串` → 界面显示 **`[object Object]…`**（2026-10-07 本地图片库标签行）。`$r()` 返回的是 **Resource 对象**，`Resource + string` 会走对象 `toString()` | 资源与动态文本**必须分开渲染**（两个 `Text` + `Row`/`Flex`，资源那个不参与拼接）。同类要警惕的还有模板串 `${$r(...)}`、`Resource` 与数组 `join`。**扫证过：全仓仅此一处**；新增拼接前先确认右侧是不是普通 string |
+| P-105 | 给请求加多模态内容块时，用「接口联合类型」表达（`type Part = TextPart \| ImagePart`，再往里塞对象字面量）→ ArkTS 严格模式下**字面量无法推断目标类型**直接编译失败（2026-10-07 AI 图片命名，`OpenAIContentPart`） | 用**单接口 + 可选字段**、由 `type` 决定哪组字段有效（`{ type, text?, image_url? }`），构造时逐层写**显式类型注解的局部变量**、不新增 `as`。`JSON.stringify` 会丢弃 `undefined` 键，不会产出脏字段 |
+| P-106 | 视觉输入（图片）挂错消息角色：放到 `system`/`assistant` 消息上 → 端点直接 **400**（DeepSeek 明确"仅 user / developer 消息可带图"；2026-10-07 AI 图片命名）。另一类同类坑：把 base64 图片按保存上限（50MB）校验 → 请求体膨胀到约 68MB 必被拒 | ① 图片**只挂最后一条 user 消息**，并在 `validateRequest` 加守卫（带图但无 user 消息 → InvalidRequest）；② 送 AI 的图片体积用**独立的小上限**（本项目 4MB），与"保存到沙箱"的上限分开；③ deepseek 侧用 `image_url.detail='low'`（服务端降到 512×512、单图 ≤384 tokens）即可，不必在端上做压缩 |
 
 ## 7. 文档与协作
 

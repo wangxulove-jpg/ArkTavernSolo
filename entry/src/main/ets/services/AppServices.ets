@@ -31,6 +31,7 @@ import { Character } from '../models/Character';
 import { LocalImageAssetStore } from '../storage/LocalImageAssetStore';
 import { LocalImageRepository } from '../repositories/LocalImageRepository';
 import { LocalImageService } from './LocalImageService';
+import { LocalImageCaptionService } from './ai/LocalImageCaptionService';
 import { LorebookStore } from '../storage/LorebookStore';
 import { LorebookSelectionStore } from '../storage/LorebookSelectionStore';
 import { CharacterService } from './CharacterService';
@@ -175,6 +176,8 @@ export class AppServices {
   private readonly localImageAssetStore: LocalImageAssetStore;
   /** LocalImageService 本地图片库业务服务 */
   private readonly localImageService: LocalImageService;
+  /** LocalImageCaptionService 本地图片 AI 自动命名服务(视觉任务,不对页面公开) */
+  private readonly localImageCaptionService: LocalImageCaptionService;
   /** ConversationBranchRepository 对话分支仓储(不对页面公开,T-6.4A) */
   private readonly conversationBranchRepository: ConversationBranchRepository;
   /** ConversationBranchPersistenceService 对话分支持久化服务(不对页面公开,T-6.4A) */
@@ -310,6 +313,12 @@ export class AppServices {
       this.localImageRepository,
       this.localImageAssetStore,
       this.promptPresetService
+    );
+    // AI 自动命名:ModelService(唯一 AI 出口) + 本地图片服务 + 图片文件存储
+    this.localImageCaptionService = new LocalImageCaptionService(
+      this.modelService,
+      this.localImageService,
+      this.localImageAssetStore
     );
     const macroReplacer: MacroReplacer = new MacroReplacer();
     this.promptBuilder = new PromptBuilder(this.lorebookService, macroReplacer);
@@ -777,7 +786,10 @@ export class AppServices {
    */
   static createLocalImageLibraryViewModel(): LocalImageLibraryViewModel {
     const services: AppServices = AppServices.getInstance();
-    return new LocalImageLibraryViewModel(services.localImageService);
+    return new LocalImageLibraryViewModel(
+      services.localImageService,
+      services.localImageCaptionService
+    );
   }
 
   /**

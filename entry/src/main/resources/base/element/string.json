@@ -4458,7 +4458,7 @@
     },
     {
       "name": "local_image_tag_create_hint",
-      "value": "会新建一个空正文的提示词预设，正文在你勾选图片时自动写入"
+      "value": "会新建一个提示词预设，正文预置「如何用图片」的说明；勾选图片时会在下方追加图片清单"
     },
     {
       "name": "local_image_tag_name_placeholder",
@@ -4475,6 +4475,74 @@
     {
       "name": "local_image_description_placeholder",
       "value": "告诉模型这图是什么（可空）"
+    },
+    {
+      "name": "local_image_detail_title",
+      "value": "图片详情"
+    },
+    {
+      "name": "local_image_detail_empty_description",
+      "value": "暂无描述"
+    },
+    {
+      "name": "local_image_batch_select",
+      "value": "多选"
+    },
+    {
+      "name": "local_image_batch_exit",
+      "value": "取消多选"
+    },
+    {
+      "name": "local_image_batch_selected",
+      "value": "已选 %d 张"
+    },
+    {
+      "name": "local_image_batch_categorize",
+      "value": "批量分类"
+    },
+    {
+      "name": "local_image_batch_mode_add",
+      "value": "添加标签"
+    },
+    {
+      "name": "local_image_batch_mode_remove",
+      "value": "移除标签"
+    },
+    {
+      "name": "local_image_batch_hint",
+      "value": "勾选标签后，对所选图片统一添加或移除；不影响其它已有标签"
+    },
+    {
+      "name": "local_image_action_ai_caption",
+      "value": "AI 自动命名"
+    },
+    {
+      "name": "local_image_caption_sheet_title",
+      "value": "AI 命名建议"
+    },
+    {
+      "name": "local_image_caption_loading",
+      "value": "正在识别图片…"
+    },
+    {
+      "name": "local_image_caption_suggested_name",
+      "value": "建议名字"
+    },
+    {
+      "name": "local_image_caption_suggested_description",
+      "value": "建议描述"
+    },
+    {
+      "name": "local_image_caption_empty_description",
+      "value": "（无描述）"
+    },
+    {
+      "name": "local_image_caption_apply",
+      "value": "采用"
+    },
+    {
+      "name": "local_image_caption_retry",
+      "value": "重新生成"
     }
   ]
 }

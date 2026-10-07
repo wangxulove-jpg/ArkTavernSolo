@@ -120,15 +120,15 @@ struct PromptPresetListPage {
       Column() {
         Row() {
           SymbolGlyph($r('sys.symbol.chevron_left'))
-            .fontSize(24)
+            .fontSize(22)
             .fontColor([ThemePalette.textPrimaryColor(this.effectiveTheme)])
-            .padding(8)
+            .padding(6)
             .onClick(() => {
               router.back();
             })
 
           Text('提示词预设')
-            .fontSize($r('app.float.nav_title_font_size'))
+            .fontSize(18)
             .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
             .fontWeight(FontWeight.Medium)
             .layoutWeight(1)
@@ -137,29 +137,29 @@ struct PromptPresetListPage {
             .padding({ left: 8 })
 
           Button('导入')
-            .fontSize(13)
+            .fontSize(12)
             .backgroundColor(Color.Transparent)
             .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-            .height(32)
-            .padding({ left: 10, right: 10 })
+            .height(28)
+            .padding({ left: 8, right: 8 })
             .enabled(!this.importing)
             .onClick(() => {
               void this.pickPresetFile();
             })
 
           Button('导出')
-            .fontSize(13)
+            .fontSize(12)
             .backgroundColor(Color.Transparent)
             .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-            .height(32)
-            .padding({ left: 10, right: 10 })
+            .height(28)
+            .padding({ left: 8, right: 8 })
             .enabled(!this.exporting && this.viewModel.presets.length > 0)
             .onClick(() => {
               void this.pickPresetExportFile();
             })
         }
         .width('100%')
-        .padding({ top: this.statusBarHeight + 12, left: 12, right: 12, bottom: 12 })
+        .padding({ top: this.statusBarHeight + 10, left: 12, right: 12, bottom: 8 })
         .alignItems(VerticalAlign.Center)
 
         if (this.viewModel.errorMessage.length > 0) {
@@ -204,7 +204,7 @@ struct PromptPresetListPage {
               ForEach(this.viewModel.presets, (preset: PromptPreset) => {
                 this.presetCard(preset);
               }, (preset: PromptPreset) => preset.id + '_' + this.refreshKey.toString())
-              Blank().height(80);
+              Blank().height(64);
             }
             .width('100%')
           }
@@ -212,8 +212,8 @@ struct PromptPresetListPage {
           .scrollBar(BarState.Auto)
           .edgeEffect(EdgeEffect.Spring)
           .width('100%')
-          .height('100%')
-          .padding({ left: 16, right: 16, top: 8 })
+          .layoutWeight(1)
+          .padding({ left: 12, right: 12, top: 6 })
           .align(Alignment.Top)
         }
       }
@@ -222,11 +222,11 @@ struct PromptPresetListPage {
 
       if (!this.viewModel.isLoading && this.viewModel.presets.length >= 0) {
         Button('+ 新建预设')
-          .fontSize(14)
+          .fontSize(13)
           .fontColor($r('app.color.app_on_accent'))
           .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
-          .borderRadius(24)
-          .padding({ left: 20, right: 20, top: 10, bottom: 10 })
+          .borderRadius(22)
+          .padding({ left: 16, right: 16, top: 8, bottom: 8 })
           .position({ x: '70%', y: '90%' })
           .onClick(() => {
             router.pushUrl({
@@ -245,63 +245,41 @@ struct PromptPresetListPage {
   @Builder
   presetCard(preset: PromptPreset) {
     Column() {
-      Row() {
-        Text(preset.name)
-          .fontSize(16)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .layoutWeight(1)
+      // 标题独占整行:避免与徽标争抢宽度而被挤压/遮挡
+      Text(preset.name)
+        .fontSize(15)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%')
 
-        if (this.viewModel.isSelected(preset.id)) {
-          Text('已选')
-            .fontSize(11)
-            .fontColor($r('app.color.app_on_accent'))
-            .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
-            .borderRadius(4)
-            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-            .margin({ left: 8 })
+      // 徽标独立一行,自动换行(已选 / 末尾 / 作用域 / 自动维护)
+      if (this.viewModel.isSelected(preset.id) || this.viewModel.isTail(preset.id)
+        || this.viewModel.getScopeLabel(preset.id) !== '全局'
+        || this.viewModel.isManagedPreset(preset.id)) {
+        Flex({ wrap: FlexWrap.Wrap }) {
+          if (this.viewModel.isSelected(preset.id)) {
+            this.presetBadge('已选', true)
+          }
+          if (this.viewModel.isTail(preset.id)) {
+            this.presetBadge('末尾', false)
+          }
+          // v52: 作用域徽标(全局为默认值,不占位;绑定了角色才显示角色名)
+          if (this.viewModel.getScopeLabel(preset.id) !== '全局') {
+            this.presetBadge(this.viewModel.getScopeLabel(preset.id), false)
+          }
+          // v52: 受管图片清单预设由图片库自动维护
+          if (this.viewModel.isManagedPreset(preset.id)) {
+            this.presetBadge('自动维护', false)
+          }
         }
-
-        if (this.viewModel.isTail(preset.id)) {
-          Text('末尾')
-            .fontSize(11)
-            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-            .borderRadius(4)
-            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-            .margin({ left: 8 })
-        }
-
-        // v52: 作用域徽标(全局为默认值,不占位;绑定了角色才显示角色名)
-        if (this.viewModel.getScopeLabel(preset.id) !== '全局') {
-          Text(this.viewModel.getScopeLabel(preset.id))
-            .fontSize(11)
-            .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
-            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-            .borderRadius(4)
-            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-            .margin({ left: 8 })
-        }
-
-        // v52: 受管图片清单预设由图片库自动维护
-        if (this.viewModel.isManagedPreset(preset.id)) {
-          Text('自动维护')
-            .fontSize(11)
-            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-            .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
-            .borderRadius(4)
-            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-            .margin({ left: 8 })
-        }
+        .width('100%')
       }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
 
       if (preset.description.length > 0) {
         Text(preset.description)
-          .fontSize(13)
+          .fontSize(12)
           .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
           .maxLines(2)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -310,17 +288,18 @@ struct PromptPresetListPage {
       }
 
       Text(this.viewModel.getPresetSummary(preset))
-        .fontSize(12)
+        .fontSize(11)
         .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
-        .margin({ top: 4 })
+        .margin({ top: 3 })
         .width('100%')
 
       Row() {
         Button(this.viewModel.isSelected(preset.id) ? '取消选择' : '选择')
-          .fontSize(12)
+          .fontSize(11)
           .fontColor(ThemePalette.accentColor(this.effectiveTheme))
           .backgroundColor(Color.Transparent)
-          .padding({ left: 0, right: 8 })
+          .height(24)
+          .padding({ left: 0, right: 6 })
           .onClick(() => {
             this.viewModel.toggle(preset.id);
           })
@@ -328,14 +307,15 @@ struct PromptPresetListPage {
         if (this.viewModel.isManagedPreset(preset.id)) {
           // v52: 受管预设由「本地图片库」自动维护(位置固定在末尾),不允许编辑/删除
           Text('由本地图片库自动维护')
-            .fontSize(11)
+            .fontSize(10)
             .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
         } else {
           Button('编辑')
-            .fontSize(12)
+            .fontSize(11)
             .fontColor(ThemePalette.accentColor(this.effectiveTheme))
             .backgroundColor(Color.Transparent)
-            .padding({ left: 0, right: 8 })
+            .height(24)
+            .padding({ left: 0, right: 6 })
             .onClick(() => {
               router.pushUrl({
                 url: 'pages/PromptPresetEditPage',
@@ -344,9 +324,10 @@ struct PromptPresetListPage {
             })
 
           Button('删除')
-            .fontSize(12)
+            .fontSize(11)
             .fontColor($r('app.color.app_danger'))
             .backgroundColor(Color.Transparent)
+            .height(24)
             .padding({ left: 0, right: 0 })
             .onClick(() => {
               AlertDialog.show({
@@ -370,15 +351,28 @@ struct PromptPresetListPage {
         }
       }
       .width('100%')
-      .margin({ top: 8 })
+      .margin({ top: 6 })
       .justifyContent(FlexAlign.End)
     }
     .width('100%')
-    .padding(14)
+    .padding(10)
     .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
     .borderRadius($r('app.float.app_radius_md'))
     .border({ width: 1, color: ThemePalette.dividerColor(this.effectiveTheme) })
-    .margin({ bottom: 8 })
+    .margin({ bottom: 6 })
+  }
+
+  /** 预设徽标(accent=true 为强调色底;用于已选/末尾/作用域/自动维护) */
+  @Builder
+  presetBadge(label: string, accent: boolean) {
+    Text(label)
+      .fontSize(10)
+      .fontColor(accent ? $r('app.color.app_on_accent') : ThemePalette.textSecondaryColor(this.effectiveTheme))
+      .backgroundColor(accent ? ThemePalette.accentColor(this.effectiveTheme) : ThemePalette.surface2Color(this.effectiveTheme))
+      .borderRadius(4)
+      .padding({ left: 5, right: 5, top: 1, bottom: 1 })
+      .margin({ right: 5, top: 4 })
+      .maxLines(1)
   }
 }
 

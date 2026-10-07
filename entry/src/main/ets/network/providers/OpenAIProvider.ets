@@ -41,6 +41,8 @@ import { AiProvider } from './AiProvider';
 import {
   OpenAIChatRequestBody,
   OpenAIRequestMessage,
+  OpenAIContentPart,
+  OpenAIImageUrl,
   OpenAIChatResponseBody,
   OpenAIResponseFormat,
   OpenAIErrorDetail,
@@ -52,6 +54,8 @@ import {
 } from './OpenAITypes';
 import { buildChatCompletionsUrl, buildModelsUrl, UrlBuildResult } from '../streaming/OpenAiUrlBuilder';
 import { Logger } from '../../utils/Logger';
+import { ChatRole } from '../../models/ChatRole';
+import { ChatMessage } from '../../models/ChatMessage';
 import { ModelListItem } from '../../models/ModelListResult';
 import {
   ChatStreamCallbacks,
@@ -405,6 +409,15 @@ export function validateRequest(request: ChatRequest): NetworkError | null {
       'Invalid maxTokens: ' + request.maxTokens.toString()
     );
   }
+  // 视觉输入守卫:图片只能附加到 user 消息(DeepSeek/OpenAI 兼容端点均如此,否则 400)
+  if (request.imageDataUrls !== undefined && request.imageDataUrls.length > 0) {
+    if (findLastUserMessageIndex(request.messages) < 0) {
+      return createNetworkError(
+        NetworkErrorType.InvalidRequest,
+        'imageDataUrls requires at least one user message'
+      );
+    }
+  }
   return null;
 }
 
@@ -433,14 +446,58 @@ export function validateRequest(request: ChatRequest): NetworkError | null {
  * @param forceStream 强制 stream 值(默认 false)
  * @returns JSON 字符串
  */
+/** 视觉任务固定用低清晰度档:服务端先降采样(如 512×512),最省 token;非视觉端点忽略该字段 */
+const VISION_DETAIL_LOW: string = 'low';
+
+/** 最后一条 user 消息的下标(没有则返回 -1;图片只能挂在 user 消息上) */
+function findLastUserMessageIndex(messages: ChatMessage[]): number {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === ChatRole.User) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * 把一条消息的文本 + 若干图片装配成 OpenAI 内容块数组。
+ * 文本为空时只输出图片块(避免产出空文本块被端点拒绝)。
+ */
+function buildVisionContentParts(text: string, imageUrls: string[]): OpenAIContentPart[] {
+  const parts: OpenAIContentPart[] = [];
+  if (text.length > 0) {
+    const textPart: OpenAIContentPart = { type: 'text', text: text };
+    parts.push(textPart);
+  }
+  for (let i = 0; i < imageUrls.length; i++) {
+    const imageUrl: OpenAIImageUrl = { url: imageUrls[i], detail: VISION_DETAIL_LOW };
+    const imagePart: OpenAIContentPart = { type: 'image_url', image_url: imageUrl };
+    parts.push(imagePart);
+  }
+  return parts;
+}
+
 export function buildRequestBody(request: ChatRequest, forceStream: boolean = false): string {
+  const imageUrls: string[] = request.imageDataUrls !== undefined ? request.imageDataUrls : [];
+  // 图片只附加到最后一条 user 消息;无图时为 -1 ⇒ 输出与改造前完全一致
+  const imageTargetIndex: number = imageUrls.length > 0
+    ? findLastUserMessageIndex(request.messages)
+    : -1;
+
   const messages: OpenAIRequestMessage[] = [];
   for (let i = 0; i < request.messages.length; i++) {
     const msg = request.messages[i];
-    messages.push({
-      role: roleToString(msg.role),
-      content: msg.content
-    });
+    if (i === imageTargetIndex) {
+      messages.push({
+        role: roleToString(msg.role),
+        content: buildVisionContentParts(msg.content, imageUrls)
+      });
+    } else {
+      messages.push({
+        role: roleToString(msg.role),
+        content: msg.content
+      });
+    }
   }
 
   const effort: string | undefined = request.reasoningEffort;

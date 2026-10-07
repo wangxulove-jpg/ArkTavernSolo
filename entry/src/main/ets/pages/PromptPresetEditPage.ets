@@ -63,7 +63,7 @@ struct PromptPresetEditPage {
       // 标题栏(复用设置子页面规范:app_surface_1 背景 + app_text_primary 文字)
       Row() {
         Button('取消')
-          .fontSize(14)
+          .fontSize(13)
           .backgroundColor(Color.Transparent)
           .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
           .onClick(() => {
@@ -73,25 +73,26 @@ struct PromptPresetEditPage {
         Blank()
 
         Text(this.isEditing ? '编辑预设' : '新建预设')
-          .fontSize(18)
+          .fontSize(16)
           .fontWeight(FontWeight.Medium)
           .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
 
         Blank()
 
         Button('保存')
-          .fontSize(14)
+          .fontSize(13)
           .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
           .fontColor($r('app.color.app_on_accent'))
           .borderRadius(6)
-          .padding({ left: 12, right: 12 })
+          .height(30)
+          .padding({ left: 10, right: 10 })
           .enabled(!this.isSaving && this.formState.nameInput.trim().length > 0)
           .onClick(async () => {
             await this.handleSave();
           })
       }
       .width('100%')
-      .padding({ left: 12, right: 12, top: this.statusBarHeight + 8, bottom: 8 })
+      .padding({ left: 12, right: 12, top: this.statusBarHeight + 6, bottom: 6 })
       .alignItems(VerticalAlign.Center)
       .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
 
@@ -147,7 +148,7 @@ struct PromptPresetEditPage {
             Blank().height(this.navigationBarHeight + 16)
           }
           .width('100%')
-          .padding({ left: 16, right: 16, top: 16 })
+          .padding({ left: 12, right: 12, top: 12 })
         }
         .layoutWeight(1)
         .scrollBar(BarState.Auto)
@@ -168,11 +169,11 @@ struct PromptPresetEditPage {
   basicInfoCard() {
     Column() {
       Text('基本信息')
-        .fontSize(15)
+        .fontSize(14)
         .fontWeight(FontWeight.Medium)
         .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
         .width('100%')
-        .margin({ bottom: 12 })
+        .margin({ bottom: 8 })
 
       // 1. 名称 *
       this.fieldLabel('名称 *')
@@ -180,7 +181,7 @@ struct PromptPresetEditPage {
         .maxLength(100)
         .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
         .borderRadius(8)
-        .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+        .padding({ left: 12, right: 12, top: 8, bottom: 8 })
         .onChange((value: string) => {
           const updated = copyFormState(this.formState);
           updated.nameInput = value;
@@ -189,13 +190,14 @@ struct PromptPresetEditPage {
         .width('100%')
       this.fieldError('name')
 
-      // 2. 描述
+      // 2. 描述(多行输入,长文本完整可见,不再被单行截断)
       this.fieldLabel('描述(可选)')
-      TextInput({ placeholder: '输入描述', text: this.formState.descriptionInput })
+      TextArea({ placeholder: '输入描述', text: this.formState.descriptionInput })
         .maxLength(1000)
         .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
         .borderRadius(8)
-        .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+        .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+        .height(60)
         .onChange((value: string) => {
           const updated = copyFormState(this.formState);
           updated.descriptionInput = value;
@@ -208,14 +210,14 @@ struct PromptPresetEditPage {
       TextArea({ placeholder: '输入附加 System Prompt', text: this.formState.systemPromptInput })
         .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
         .borderRadius(8)
-        .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+        .padding({ left: 12, right: 12, top: 8, bottom: 8 })
         .onChange((value: string) => {
           const updated = copyFormState(this.formState);
           updated.systemPromptInput = value;
           this.formState = updated;
         })
         .width('100%')
-        .height(120)
+        .height(96)
         .maxLength(10000)
 
       // 4. 注入位置(v51):开头(默认) / 末尾
@@ -230,10 +232,10 @@ struct PromptPresetEditPage {
 
       if (this.isManagedPreset) {
         Text('此预设由「本地图片库」自动维护:正文清单随图片增删自动重写,手动修改会在下次对账时被覆盖。如需自定义规则,请新建一条预设。')
-          .fontSize(12)
+          .fontSize(11)
           .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
           .width('100%')
-          .margin({ top: 12 })
+          .margin({ top: 8 })
       }
 
       // 5. 绑定角色卡(v52):全局(默认,所有会话生效) / 仅某张角色卡
@@ -242,7 +244,7 @@ struct PromptPresetEditPage {
         .fontSize(11)
         .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
         .width('100%')
-        .margin({ bottom: 6 })
+        .margin({ bottom: 4 })
 
       Scroll() {
         Column() {
@@ -254,16 +256,16 @@ struct PromptPresetEditPage {
         }
         .width('100%')
       }
-      .constraintSize({ maxHeight: 190 })
+      .constraintSize({ maxHeight: 160 })
       .width('100%')
       .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
       .borderRadius(8)
     }
     .width('100%')
-    .padding(16)
+    .padding(12)
     .backgroundColor(ThemePalette.surface1Color(this.effectiveTheme))
     .borderRadius(12)
-    .margin({ bottom: 12 })
+    .margin({ bottom: 10 })
   }
 
   /**
@@ -483,7 +485,7 @@ struct PromptPresetEditPage {
       Row() {
         Column() {
           Text(label)
-            .fontSize(14)
+            .fontSize(13)
             .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
             .width('100%')
           Text(desc)
@@ -499,13 +501,13 @@ struct PromptPresetEditPage {
 
         if (this.formState.position === value) {
           Text('✓')
-            .fontSize(16)
+            .fontSize(15)
             .fontColor(ThemePalette.accentColor(this.effectiveTheme))
             .margin({ left: 8 })
         }
       }
       .width('100%')
-      .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+      .padding({ left: 12, right: 12, top: 8, bottom: 8 })
       .alignItems(VerticalAlign.Center)
     }
     .width('100%')
@@ -536,7 +538,7 @@ struct PromptPresetEditPage {
       Row() {
         Column() {
           Text(label)
-            .fontSize(14)
+            .fontSize(13)
             .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
             .width('100%')
             .maxLines(1)
@@ -551,12 +553,12 @@ struct PromptPresetEditPage {
 
         if (this.formState.scopeCharacterId === characterId) {
           Text('✓')
-            .fontSize(16)
+            .fontSize(15)
             .fontColor(ThemePalette.accentColor(this.effectiveTheme))
         }
       }
       .width('100%')
-      .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+      .padding({ left: 12, right: 12, top: 8, bottom: 8 })
       .onClick(() => {
         this.selectPresetScope(characterId);
       })
@@ -575,11 +577,11 @@ struct PromptPresetEditPage {
   @Builder
   fieldLabel(label: string) {
     Text(label)
-      .fontSize(13)
+      .fontSize(12)
       .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
       .fontWeight(FontWeight.Regular)
       .width('100%')
-      .margin({ top: 12, bottom: 6 })
+      .margin({ top: 8, bottom: 4 })
   }
 
   @Builder

@@ -17,11 +17,16 @@ import {
   describeImageDescriptionProblem
 } from '../models/LocalImage';
 import { PromptPreset } from '../models/PromptPreset';
+import { ImageCaptionSuggestion } from '../models/LocalImageCaption';
 import { LocalImageService } from '../services/LocalImageService';
+import { LocalImageCaptionService } from '../services/ai/LocalImageCaptionService';
 import { listTagEntryNames } from '../utils/LocalImageTagText';
 import { Logger } from '../utils/Logger';
 
 const LOG_TAG: string = 'LocalImageLibraryViewModel';
+
+/** AI 命名面板状态 */
+export type CaptionState = 'idle' | 'loading' | 'ready' | 'error';
 
 /** 筛选:全部图片 */
 export const IMAGE_FILTER_ALL: string = '';
@@ -60,8 +65,6 @@ export class LocalImageLibraryViewModel {
   entries: LocalImageEntry[] = [];
   /** 全部预设(都可当标签用) */
   tagOptions: LocalImageTagOption[] = [];
-  /** 至少被一张图提到的标签(顶部筛选芯片) */
-  usedTagOptions: LocalImageTagOption[] = [];
   /** 当前筛选(IMAGE_FILTER_ALL / IMAGE_FILTER_NONE / 预设 id) */
   activeFilter: string = IMAGE_FILTER_ALL;
   /** 列表数据版本(每次刷新自增,ForEach key 用) */
@@ -74,11 +77,23 @@ export class LocalImageLibraryViewModel {
   showDeleteConfirm: boolean = false;
   pendingDeleteId: string = '';
 
+  /** AI 命名面板状态(详情卡上的「AI 自动命名」触发) */
+  captionState: CaptionState = 'idle';
+  /** 当前正在命名的图片 id */
+  captionImageId: string = '';
+  /** AI 建议的名字(已按本项目规则消毒) */
+  captionName: string = '';
+  /** AI 建议的描述 */
+  captionDescription: string = '';
+  captionError: string = '';
+
   private readonly imageService: LocalImageService;
+  private readonly captionService: LocalImageCaptionService;
   private disposed: boolean = false;
 
-  constructor(imageService: LocalImageService) {
+  constructor(imageService: LocalImageService, captionService: LocalImageCaptionService) {
     this.imageService = imageService;
+    this.captionService = captionService;
   }
 
   async initialize(): Promise<void> {
@@ -147,7 +162,6 @@ export class LocalImageLibraryViewModel {
       }
 
       this.tagOptions = options;
-      this.usedTagOptions = options.filter((option: LocalImageTagOption): boolean => option.imageCount > 0);
       this.entries = entries;
       this.version = this.version + 1;
     } catch (e) {
@@ -354,6 +368,126 @@ export class LocalImageLibraryViewModel {
       }
     }
     return [];
+  }
+
+  /** 按 id 找展示条目(图片详情卡用;找不到返回 null) */
+  findEntry(imageId: string): LocalImageEntry | null {
+    for (let i = 0; i < this.entries.length; i++) {
+      if (this.entries[i].image.id === imageId) {
+        return this.entries[i];
+      }
+    }
+    return null;
+  }
+
+  /** 批量:给多张图统一添加标签(逐个把条目写进这些预设正文,不影响其它标签) */
+  async addTagsToImages(imageIds: string[], tagIds: string[]): Promise<void> {
+    await this.batchApplyTags(imageIds, tagIds, false);
+  }
+
+  /** 批量:从多张图统一移除标签(逐个从这些预设正文删掉条目,不影响其它标签) */
+  async removeTagsFromImages(imageIds: string[], tagIds: string[]): Promise<void> {
+    await this.batchApplyTags(imageIds, tagIds, true);
+  }
+
+  private async batchApplyTags(imageIds: string[], tagIds: string[], remove: boolean): Promise<void> {
+    if (this.disposed || this.isOperating || imageIds.length === 0 || tagIds.length === 0) {
+      return;
+    }
+    this.isOperating = true;
+    this.errorMessage = '';
+    this.successMessage = '';
+    try {
+      for (let i = 0; i < imageIds.length; i++) {
+        if (remove) {
+          await this.imageService.detachImageFromPresets(imageIds[i], tagIds);
+        } else {
+          await this.imageService.attachImageToPresets(imageIds[i], tagIds);
+        }
+      }
+      this.successMessage = '已为 ' + imageIds.length.toString() + ' 张图片'
+        + (remove ? '移除标签' : '添加标签');
+      await this.refresh();
+    } catch (e) {
+      this.errorMessage = (e as Error).message ?? String(e);
+      Logger.error(LOG_TAG, 'batchApplyTags failed: ' + String(e));
+    } finally {
+      this.isOperating = false;
+    }
+  }
+
+  /**
+   * 请求 AI 为一图片生成命名建议(不落库,只填 captionName / captionDescription)。
+   * 面板状态由 captionState 驱动:loading → ready / error
+   */
+  async requestCaption(imageId: string): Promise<void> {
+    if (this.disposed) {
+      return;
+    }
+    this.captionImageId = imageId;
+    this.captionName = '';
+    this.captionDescription = '';
+    this.captionError = '';
+    this.captionState = 'loading';
+    try {
+      const suggestion: ImageCaptionSuggestion = await this.captionService.suggestCaption(imageId);
+      if (this.disposed) {
+        return;
+      }
+      this.captionName = suggestion.name;
+      this.captionDescription = suggestion.description;
+      this.captionState = 'ready';
+    } catch (e) {
+      if (this.disposed) {
+        return;
+      }
+      this.captionError = (e as Error).message ?? String(e);
+      this.captionState = 'error';
+      Logger.warn(LOG_TAG, 'requestCaption failed: ' + String(e));
+    }
+  }
+
+  /**
+   * 采用当前建议:改名 + 改描述并落库(两者都会同步改写标签预设正文)。
+   * 失败时保留建议、把原因写进 captionError(面板内就近展示,便于改完重试)。
+   */
+  async applyCaption(): Promise<void> {
+    if (this.disposed || this.isOperating) {
+      return;
+    }
+    const imageId: string = this.captionImageId;
+    if (imageId.length === 0) {
+      return;
+    }
+    const name: string = this.captionName;
+    const description: string = this.captionDescription;
+    this.isOperating = true;
+    this.errorMessage = '';
+    this.successMessage = '';
+    this.captionError = '';
+    try {
+      if (name.length > 0) {
+        await this.imageService.renameImage(imageId, name);
+      }
+      await this.imageService.updateImageDescription(imageId, description);
+      this.successMessage = '已应用 AI 命名';
+      this.resetCaption();
+      await this.refresh();
+    } catch (e) {
+      this.captionError = (e as Error).message ?? String(e);
+      Logger.error(LOG_TAG, 'applyCaption failed: ' + String(e));
+    } finally {
+      this.isOperating = false;
+    }
+  }
+
+  /** 关闭 AI 命名面板(清空建议与状态) */
+  resetCaption(): void {
+    this.captionState = 'idle';
+    this.captionImageId = '';
+    this.captionName = '';
+    this.captionDescription = '';
+    this.captionError = '';
   }
 
   requestDelete(id: string): void {

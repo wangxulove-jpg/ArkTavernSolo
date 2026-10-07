@@ -32,6 +32,8 @@ import { LocalImageRepository } from '../repositories/LocalImageRepository';
 import { LocalImageAssetStore } from '../storage/LocalImageAssetStore';
 import { toResolutionMap } from '../utils/LocalImageResolution';
 import {
+  TAG_PRESET_HEADER,
+  ensureTagPresetHeader,
   upsertTagEntry,
   removeTagEntry,
   hasTagEntry
@@ -70,6 +72,11 @@ export class LocalImageService {
     return await this.repository.listAll();
   }
 
+  /** 按 id 取一张图(供 AI 命名任务取 fileUri;找不到返回 null) */
+  async getImage(id: string): Promise<LocalImage | null> {
+    return await this.repository.getById(id);
+  }
+
   /**
    * 全部提示词预设(供图片库页当作"标签"使用)。
    * 读取失败返回空数组(库页降级为"没有标签",不影响图片本身)。
@@ -83,7 +90,12 @@ export class LocalImageService {
     }
   }
 
-  /** 新建一个空正文的标签预设(正文由"把图片分到该标签"时逐行写入) */
+  /**
+   * 新建一个标签预设。
+   * 正文**预置固定开头**(TAG_PRESET_HEADER):告诉模型这些条目是可用图片、以及
+   * 用 ![描述](arkimg:名字) 引用它们；只写名字清单模型是无法调用这些图的。
+   * 图片条目由"把图片分到该标签"时逐行追加到开头之后。
+   */
   async createTagPreset(name: string): Promise<void> {
     const trimmed: string = name.trim();
     if (trimmed.length === 0) {
@@ -92,7 +104,7 @@ export class LocalImageService {
     await this.presetService.create({
       name: trimmed,
       description: '本地图片标签(由「本地图片库」维护条目,可手动编辑)',
-      systemPrompt: ''
+      systemPrompt: TAG_PRESET_HEADER
     });
   }
 
@@ -203,6 +215,7 @@ export class LocalImageService {
   /**
    * 把一张图分到若干标签:在这些预设正文里写入/更新 `- 名字：描述`。
    * 幂等:正文未变化时跳过写入。
+   * 若正文缺少固定开头(早期建立的空正文标签),先补上开头再追加条目。
    */
   async attachImageToPresets(imageId: string, presetIds: string[]): Promise<void> {
     const image: LocalImage | null = await this.repository.getById(imageId);
@@ -215,7 +228,8 @@ export class LocalImageService {
       if (preset === null) {
         continue;
       }
-      const nextText: string = upsertTagEntry(preset.systemPrompt, image.name, image.description);
+      const withHeader: string = ensureTagPresetHeader(preset.systemPrompt);
+      const nextText: string = upsertTagEntry(withHeader, image.name, image.description);
       if (nextText === preset.systemPrompt) {
         continue;
       }

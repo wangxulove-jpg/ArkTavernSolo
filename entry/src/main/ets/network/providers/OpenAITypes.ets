@@ -19,15 +19,47 @@ import { ChatRole } from '../../models/ChatRole';
 // ===== 请求体类型定义 =====
 
 /**
+ * OpenAI 图片块里的 image_url 对象。
+ *
+ * detail 为可选:
+ * - 'low':服务端先降采样(如 512×512),更快更省 token
+ * - 'high' / 'original' / 'auto':保留原图
+ * - 非视觉端点会忽略该字段
+ */
+export interface OpenAIImageUrl {
+  readonly url: string;
+  readonly detail?: string;
+}
+
+/**
+ * OpenAI 多模态内容块(仅用于带图片的消息)。
+ *
+ * 注意:ArkTS 严格模式下"对象字面量赋给 interface 联合类型"不可用,
+ * 故这里用**单接口 + 可选字段**,由 `type` 决定哪些字段有效:
+ * - type='text'      → text 有效
+ * - type='image_url' → image_url 有效
+ * JSON.stringify 会丢弃 undefined 字段,不会产出脏键。
+ */
+export interface OpenAIContentPart {
+  readonly type: string;
+  readonly text?: string;
+  readonly image_url?: OpenAIImageUrl;
+}
+
+/**
  * OpenAI Chat Completions 请求消息。
  *
  * Phase 4A-3 扩展:
  * - tool_calls: 仅 role="assistant" 时使用, 回传上一轮 AI 的工具调用
  * - tool_call_id: 仅 role="tool" 时使用, 关联到对应 tool_calls.id
+ *
+ * 视觉扩展:
+ * - content 为 string(纯文本,默认,聊天主链路)
+ * - content 为 OpenAIContentPart[](该消息带图片时,仅用户主动触发的视觉任务)
  */
 export interface OpenAIRequestMessage {
   readonly role: string;
-  readonly content: string;
+  readonly content: string | OpenAIContentPart[];
   readonly tool_calls?: Object[];
   readonly tool_call_id?: string;
 }

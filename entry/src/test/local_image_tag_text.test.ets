@@ -13,11 +13,14 @@
 
 import { describe, it, expect } from '@ohos/hypium';
 import {
+  TAG_PRESET_HEADER,
   buildTagEntryLine,
   upsertTagEntry,
   removeTagEntry,
   listTagEntryNames,
-  hasTagEntry
+  hasTagEntry,
+  hasTagPresetHeader,
+  ensureTagPresetHeader
 } from '../main/ets/utils/LocalImageTagText';
 import { getSchemaStatements } from '../main/ets/database/DatabaseSchema';
 import {
@@ -119,6 +122,35 @@ export default function localImageTagTextTest() {
       const original: string = '以下是可用表情：';
       const added: string = upsertTagEntry(original, '笑', '开心');
       expect(removeTagEntry(added, '笑')).assertEqual(original);
+    });
+
+    // ===== 固定开头(新建标签时写入,告诉模型如何引用图片) =====
+
+    it('header_lines_are_not_treated_as_image_entries', 0, () => {
+      // 开头里的图片语法示例不得被反查成图片条目
+      expect(listTagEntryNames(TAG_PRESET_HEADER).length).assertEqual(0);
+      expect(hasTagEntry(TAG_PRESET_HEADER, '笑')).assertFalse();
+      expect(hasTagPresetHeader(TAG_PRESET_HEADER)).assertTrue();
+    });
+
+    it('ensure_header_prepends_once_and_is_idempotent', 0, () => {
+      expect(ensureTagPresetHeader('')).assertEqual(TAG_PRESET_HEADER);
+      expect(ensureTagPresetHeader('   ')).assertEqual(TAG_PRESET_HEADER);
+      const once: string = ensureTagPresetHeader('- 笑：开心');
+      expect(once).assertEqual(TAG_PRESET_HEADER + '\n- 笑：开心');
+      // 已有开头 → 原样返回(补齐旧标签时不会重复插入)
+      expect(ensureTagPresetHeader(once)).assertEqual(once);
+    });
+
+    it('header_stays_first_after_upsert', 0, () => {
+      const next: string = upsertTagEntry(ensureTagPresetHeader(''), '笑', '开心');
+      expect(next.indexOf(TAG_PRESET_HEADER) === 0).assertTrue();
+      expect(listTagEntryNames(next).join(',')).assertEqual('笑');
+    });
+
+    it('header_survives_removing_last_entry', 0, () => {
+      const text: string = upsertTagEntry(ensureTagPresetHeader(''), '笑', '开心');
+      expect(removeTagEntry(text, '笑')).assertEqual(TAG_PRESET_HEADER);
     });
   });
 

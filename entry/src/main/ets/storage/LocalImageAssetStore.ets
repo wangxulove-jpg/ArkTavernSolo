@@ -21,6 +21,7 @@
 
 import { common } from '@kit.AbilityKit';
 import { fileIo } from '@kit.CoreFileKit';
+import { util } from '@kit.ArkTS';
 import { Logger } from '../utils/Logger';
 
 const LOG_TAG: string = 'LocalImageAssetStore';
@@ -32,6 +33,29 @@ const SUPPORTED_EXTENSIONS: string[] = ['.png', '.jpg', '.jpeg', '.webp', '.bmp'
 const DEFAULT_EXTENSION: string = '.png';
 /** 单文件大小上限 50MB */
 const MAX_FILE_SIZE: number = 50 * 1024 * 1024;
+/**
+ * 送 AI 视觉任务时的单图体积上限 4MB。
+ * 与 MAX_FILE_SIZE 分开:base64 会让体积膨胀约 1.37 倍,
+ * 50MB 上限对进请求体(且是移动网络上传)明显过大。
+ */
+const VISION_IMAGE_MAX_BYTES: number = 4 * 1024 * 1024;
+
+/** 扩展名 → MIME(不在表内按 image/png) */
+function mimeTypeForExtension(ext: string): string {
+  if (ext === '.jpg' || ext === '.jpeg') {
+    return 'image/jpeg';
+  }
+  if (ext === '.webp') {
+    return 'image/webp';
+  }
+  if (ext === '.gif') {
+    return 'image/gif';
+  }
+  if (ext === '.bmp') {
+    return 'image/bmp';
+  }
+  return 'image/png';
+}
 
 export class LocalImageAssetStore {
   private baseDir: string = '';
@@ -96,15 +120,16 @@ export class LocalImageAssetStore {
    * 不使用图片转码,避免 GIF 动画被转成静态 PNG 丢失动画。
    *
    * @param sourceUri 源文件 URI
+   * @param maxBytes 允许的最大字节数
    * @returns 源文件字节
-   * @throws Error 文件超过 50MB
+   * @throws Error 文件超过 maxBytes
    */
-  private readSourceBytes(sourceUri: string): ArrayBuffer {
+  private readSourceBytes(sourceUri: string, maxBytes: number): ArrayBuffer {
     const srcFile: fileIo.File = fileIo.openSync(sourceUri, fileIo.OpenMode.READ_ONLY);
     try {
       const stat: fileIo.Stat = fileIo.statSync(srcFile.fd);
-      if (stat.size > MAX_FILE_SIZE) {
-        throw new Error('图片文件过大,不能超过 50MB');
+      if (stat.size > maxBytes) {
+        throw new Error('图片文件过大,超过上限 ' + maxBytes.toString() + ' 字节');
       }
       const bytes: ArrayBuffer = new ArrayBuffer(stat.size);
       fileIo.readSync(srcFile.fd, bytes);
@@ -112,6 +137,34 @@ export class LocalImageAssetStore {
     } finally {
       fileIo.closeSync(srcFile);
     }
+  }
+
+  /**
+   * 读沙箱图片并编码为 base64 data URL(供"AI 视觉任务"作为图片输入)。
+   *
+   * 与 saveImage 不同,这里用**独立的小体积上限**(VISION_IMAGE_MAX_BYTES):
+   * base64 会让体积膨胀约 1.37 倍,过大的原图会让请求体极度臃肿。
+   *
+   * @param fileUri 沙箱内 file:// URI
+   * @returns `data:<mime>;base64,<数据>`
+   * @throws Error 文件不可读或超过上限
+   */
+  async readImageAsDataUrl(fileUri: string): Promise<string> {
+    this.requireInit();
+    const ext: string = this.extractExtension(fileUri);
+    let bytes: ArrayBuffer;
+    try {
+      bytes = this.readSourceBytes(fileUri, VISION_IMAGE_MAX_BYTES);
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'readImageAsDataUrl failed: ' + String(e));
+      if (String(e).indexOf('图片文件过大') >= 0) {
+        throw new Error('图片过大,无法用于 AI 识别(上限 4MB)');
+      }
+      throw new Error('读取图片失败');
+    }
+    const helper: util.Base64Helper = new util.Base64Helper();
+    const encoded: string = helper.encodeToStringSync(new Uint8Array(bytes));
+    return 'data:' + mimeTypeForExtension(ext) + ';base64,' + encoded;
   }
 
   /**
@@ -132,7 +185,7 @@ export class LocalImageAssetStore {
     const ext: string = this.extractExtension(sourceUri);
     const destPath: string = this.baseDir + '/' + IMAGE_PREFIX + imageId + '_' + timestamp + ext;
     try {
-      const bytes: ArrayBuffer = this.readSourceBytes(sourceUri);
+      const bytes: ArrayBuffer = this.readSourceBytes(sourceUri, MAX_FILE_SIZE);
       const destFile: fileIo.File =
         fileIo.openSync(destPath, fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.CREATE);
       try {
