@@ -17,6 +17,7 @@
  * - quoteStyle: 引用样式
  * - codeStyle: 代码样式
  * - imageWidthRatio: 消息内图片宽度占气泡的比例(v52,Aa 面板可调)
+ * - mediaAutoPlay: 消息内视频是否自动播放(v51;默认关闭 = 视频默认暂停,放大后才播放)
  */
 
 import { AppPreferences } from '../storage/AppPreferences';
@@ -64,6 +65,8 @@ export interface ChatTextStyle {
   readonly codeStyle: CodeStyle;
   /** v52: 消息内图片宽度占气泡的比例(0.3~1.0;1.0 = 铺满气泡宽度) */
   readonly imageWidthRatio: number;
+  /** v51: 消息内视频是否自动播放(默认 false = 默认暂停,点击放大后才播放) */
+  readonly mediaAutoPlay: boolean;
 }
 
 /** 默认设置 */
@@ -76,7 +79,8 @@ export const DEFAULT_CHAT_TEXT_STYLE: ChatTextStyle = {
   fontFamily: CHAT_FONT_SYSTEM,
   quoteStyle: 'line',
   codeStyle: 'bg',
-  imageWidthRatio: 1.0
+  imageWidthRatio: 1.0,
+  mediaAutoPlay: false
 };
 
 // Preferences keys
@@ -90,6 +94,8 @@ const KEY_QUOTE_STYLE: string = 'chat_text_quote_style';
 const KEY_CODE_STYLE: string = 'chat_text_code_style';
 /** v52: 消息内图片宽度比例 */
 const KEY_IMAGE_WIDTH_RATIO: string = 'chat_text_image_width_ratio';
+/** v51: 消息内视频是否自动播放 */
+const KEY_MEDIA_AUTO_PLAY: string = 'chat_text_media_auto_play';
 
 /**
  * 聊天文本样式设置管理器。
@@ -122,6 +128,7 @@ export class ChatTextStyleSettings {
       const quoteStyleStr: string = await this.prefs.getString(KEY_QUOTE_STYLE, DEFAULT_CHAT_TEXT_STYLE.quoteStyle);
       const codeStyleStr: string = await this.prefs.getString(KEY_CODE_STYLE, DEFAULT_CHAT_TEXT_STYLE.codeStyle);
       const imageWidthStr: string = await this.prefs.getString(KEY_IMAGE_WIDTH_RATIO, DEFAULT_CHAT_TEXT_STYLE.imageWidthRatio.toString());
+      const mediaAutoPlay: boolean = await this.prefs.getBoolean(KEY_MEDIA_AUTO_PLAY, DEFAULT_CHAT_TEXT_STYLE.mediaAutoPlay);
 
       const fontSize: number = parseInt(fontSizeStr, 10);
       const lineHeight: number = parseFloat(lineHeightStr);
@@ -136,7 +143,8 @@ export class ChatTextStyleSettings {
         fontFamily: fontFamilyStr.length > 0 ? fontFamilyStr : DEFAULT_CHAT_TEXT_STYLE.fontFamily,
         quoteStyle: quoteStyleStr === 'indent' ? 'indent' : 'line',
         codeStyle: codeStyleStr === 'plain' ? 'plain' : 'bg',
-        imageWidthRatio: normalizeImageWidthRatio(imageWidthRatio)
+        imageWidthRatio: normalizeImageWidthRatio(imageWidthRatio),
+        mediaAutoPlay: mediaAutoPlay
       };
     } catch (e) {
       Logger.warn(LOG_TAG, 'load failed, use default: ' + (e as Error).message);
@@ -174,7 +182,10 @@ export class ChatTextStyleSettings {
       codeStyle: partial.codeStyle !== undefined ? partial.codeStyle : this.current.codeStyle,
       imageWidthRatio: partial.imageWidthRatio !== undefined
         ? normalizeImageWidthRatio(partial.imageWidthRatio)
-        : this.current.imageWidthRatio
+        : this.current.imageWidthRatio,
+      mediaAutoPlay: partial.mediaAutoPlay !== undefined
+        ? partial.mediaAutoPlay
+        : this.current.mediaAutoPlay
     };
     await this.persist(next);
     this.current = next;
@@ -204,6 +215,7 @@ export class ChatTextStyleSettings {
       await this.prefs.putString(KEY_QUOTE_STYLE, style.quoteStyle);
       await this.prefs.putString(KEY_CODE_STYLE, style.codeStyle);
       await this.prefs.putString(KEY_IMAGE_WIDTH_RATIO, style.imageWidthRatio.toString());
+      await this.prefs.putBoolean(KEY_MEDIA_AUTO_PLAY, style.mediaAutoPlay);
     } catch (e) {
       Logger.warn(LOG_TAG, 'persist failed: ' + (e as Error).message);
     }

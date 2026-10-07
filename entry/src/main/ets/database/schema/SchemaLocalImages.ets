@@ -12,6 +12,7 @@ import {
   COLUMN_ID,
   COLUMN_IMAGE_DESCRIPTION,
   COLUMN_IMAGE_FILE_URI,
+  COLUMN_IMAGE_MEDIA_TYPE,
   COLUMN_IMAGE_NAME_KEY,
   COLUMN_LINK_CATEGORY_ID,
   COLUMN_LINK_TARGET_ID,
@@ -129,4 +130,21 @@ export const ALTER_LOCAL_IMAGES_ADD_DESCRIPTION: string =
 /** v50 新增 DDL 语句(新安装与迁移共用) */
 export const V50_NEW_DDL_STATEMENTS: string[] = [
   ALTER_LOCAL_IMAGES_ADD_DESCRIPTION
+];
+
+// ===== v51: 本地图片库支持视频(给 local_images 补媒体类型列) =====
+
+/**
+ * v50→v51:仅给 local_images 补一列 media_type(媒体类型:image / gif / video)。
+ * 说明:
+ * - 默认 'image' 兜底旧行;真实类型由 Repository 映射层按 file_uri 扩展名回退推断(见 Mapper)。
+ * - **不并入已发布的 CREATE / ALTER DDL**;新装走 "v48 建表 → v50 ALTER → v51 ALTER" 的链。
+ * - 无数据迁移(类型可从 file_uri 扩展名推断)。
+ */
+export const ALTER_LOCAL_IMAGES_ADD_MEDIA_TYPE: string =
+  `ALTER TABLE ${TABLE_LOCAL_IMAGES} ADD COLUMN ${COLUMN_IMAGE_MEDIA_TYPE} TEXT NOT NULL DEFAULT 'image'`;
+
+/** v51 新增 DDL 语句(新安装与迁移共用) */
+export const V51_NEW_DDL_STATEMENTS: string[] = [
+  ALTER_LOCAL_IMAGES_ADD_MEDIA_TYPE
 ];

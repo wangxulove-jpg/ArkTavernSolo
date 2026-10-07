@@ -1011,16 +1011,19 @@ export interface TableChatRenderChunk {
   readonly rows: TableChunkRow[];
 }
 
-/** 图片分块(markdown ![](url) / <img src> / 本地图 ![alt](arkimg:名字)) */
+/** 图片分块(markdown ![](url) / <img src> / 本地图 ![alt](arkimg:名字) / 本地视频 ![alt](arkvid:名字)) */
 export interface ImageChatRenderChunk {
   readonly type: 'image';
   readonly id: string;
   /** 远程图片 URL(kind==='remote' 时非空) */
   readonly url: string;
   readonly alt: string;
-  /** remote = 网络图片(https);local = 本地图片库(按 name 在渲染层解析) */
-  readonly kind: 'remote' | 'local';
-  /** 本地图片名(kind==='local' 时非空) */
+  /**
+   * remote = 网络图片(https);local = 本地图片库(按 name 解析,图片/GIF);
+   * video = 本地视频库(按 name 解析,渲染层用 Video 组件,默认暂停)
+   */
+  readonly kind: 'remote' | 'local' | 'video';
+  /** 本地媒体名(kind==='local' | 'video' 时非空) */
   readonly name: string;
   /** 原始语法源码(markdown 或 HTML 标签原文;图片未加载时渲染层占位展示) */
   readonly source: string;
@@ -1200,7 +1203,7 @@ interface ImageHit {
   readonly end: number;
   readonly url: string;
   readonly alt: string;
-  readonly kind: 'remote' | 'local';
+  readonly kind: 'remote' | 'local' | 'video';
   readonly name: string;
 }
 
@@ -1212,6 +1215,11 @@ const MD_IMAGE_RE: RegExp = /!\[([^\]]*)\]\((https:\/\/[^)\s]+)\)/g;
  * 与 https 图片互不干扰(两者 URL 段形状不同),仍需在 sanitizeHtmlTags 之前抽取。
  */
 const LOCAL_IMAGE_RE: RegExp = /!\[([^\]]*)\]\(arkimg:([^)\s]+)\)/g;
+/**
+ * 本地视频语法:![alt](arkvid:名字)。
+ * 与图片语法形状相同、仅前缀不同;渲染层用 Video 组件(默认暂停)而非 Image。
+ */
+const VIDEO_LOCAL_RE: RegExp = /!\[([^\]]*)\]\(arkvid:([^)\s]+)\)/g;
 /** HTML img 标签(属性顺序任意;src 是否 https 由抽取逻辑判断) */
 const IMG_TAG_RE: RegExp = /<img\b[^>]*>/gi;
 /** img 标签内 src 属性(双引号/单引号) */
@@ -1259,6 +1267,13 @@ function extractImageLinks(text: string): ImageExtraction {
   while (m !== null) {
     hits.push({ start: m.index, end: m.index + m[0].length, url: '', alt: m[1], kind: 'local', name: m[2] });
     m = LOCAL_IMAGE_RE.exec(text);
+  }
+  // 本地视频库语法 ![alt](arkvid:名字):同样只登记 name,渲染层用 Video 组件
+  VIDEO_LOCAL_RE.lastIndex = 0;
+  m = VIDEO_LOCAL_RE.exec(text);
+  while (m !== null) {
+    hits.push({ start: m.index, end: m.index + m[0].length, url: '', alt: m[1], kind: 'video', name: m[2] });
+    m = VIDEO_LOCAL_RE.exec(text);
   }
   IMG_TAG_RE.lastIndex = 0;
   m = IMG_TAG_RE.exec(text);

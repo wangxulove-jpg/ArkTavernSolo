@@ -25,12 +25,14 @@ import {
   describeImageNameProblem,
   describeImageDescriptionProblem,
   normalizeImageName,
-  normalizeImageDescription
+  normalizeImageDescription,
+  isSupportedMediaFileName,
+  mediaTypeFromFileName
 } from '../models/LocalImage';
 import { PromptPreset } from '../models/PromptPreset';
 import { LocalImageRepository } from '../repositories/LocalImageRepository';
 import { LocalImageAssetStore } from '../storage/LocalImageAssetStore';
-import { toResolutionMap } from '../utils/LocalImageResolution';
+import { toResolutionMap, LocalImageResolution } from '../utils/LocalImageResolution';
 import {
   TAG_PRESET_HEADER,
   ensureTagPresetHeader,
@@ -109,10 +111,10 @@ export class LocalImageService {
   }
 
   /**
-   * 名字 → 文件 URI 的解析映射(供聊天渲染层)。
+   * 名字 → 解析结果(文件 URI + 媒体类型)的映射(供聊天渲染层)。
    * 图片池模型:不做任何范围过滤,全部图片都进映射。
    */
-  async buildResolutionMap(): Promise<Record<string, string>> {
+  async buildResolutionMap(): Promise<Record<string, LocalImageResolution>> {
     try {
       return toResolutionMap(await this.repository.listAll());
     } catch (e) {
@@ -130,6 +132,9 @@ export class LocalImageService {
    * @param description 给模型看的描述(可空)
    */
   async addImage(sourceUri: string, name: string, description: string): Promise<LocalImage> {
+    if (!isSupportedMediaFileName(sourceUri)) {
+      throw new Error('不支持的文件类型(仅支持图片 / GIF / 视频)');
+    }
     if (!isValidImageName(name)) {
       throw new Error(describeImageNameProblem(name));
     }
@@ -149,6 +154,7 @@ export class LocalImageService {
       id: id,
       name: trimmedName,
       fileUri: fileUri,
+      mediaType: mediaTypeFromFileName(sourceUri),
       description: description
     });
     try {

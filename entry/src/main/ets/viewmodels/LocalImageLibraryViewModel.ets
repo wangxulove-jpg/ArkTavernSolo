@@ -259,7 +259,7 @@ export class LocalImageLibraryViewModel {
       this.isOperating = false;
     }
     if (success > 0) {
-      this.successMessage = '成功导入 ' + success.toString() + ' 张图片';
+      this.successMessage = '成功导入 ' + success.toString() + ' 个文件';
     }
     if (failures.length > 0) {
       this.errorMessage = '部分图片导入失败:' + failures.join(';');

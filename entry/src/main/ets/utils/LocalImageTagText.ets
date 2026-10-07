@@ -45,6 +45,7 @@ const TAG_PRESET_HEADER_MARK: string = '【本地图片】';
  */
 export const TAG_PRESET_HEADER: string = TAG_PRESET_HEADER_MARK
   + '需要配图时，在回复中直接输出：![简短描述](arkimg:图片名)\n'
+  + '若该名字是视频，请改用：![简短描述](arkvid:视频名)\n'
   + '「图片名」必须与下方清单里的名字完全一致，不要改动或编造名字。\n\n'
   + '可用图片：';
 

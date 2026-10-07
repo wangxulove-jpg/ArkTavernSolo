@@ -23,16 +23,22 @@ import { common } from '@kit.AbilityKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { Logger } from '../utils/Logger';
+import { ALL_MEDIA_EXTENSIONS, mediaTypeFromFileName, LocalImageMediaType } from '../models/LocalImage';
 
 const LOG_TAG: string = 'LocalImageAssetStore';
 const IMAGE_DIR: string = 'local_images';
 const IMAGE_PREFIX: string = 'img_';
-/** 支持的图片扩展名(小写,含点) */
-const SUPPORTED_EXTENSIONS: string[] = ['.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif'];
+/** 支持的媒体扩展名(小写,含点;图片 + GIF + 视频,白名单唯一定义在 models/LocalImage) */
+const SUPPORTED_EXTENSIONS: string[] = ALL_MEDIA_EXTENSIONS;
 /** 默认扩展名(无法识别时使用) */
 const DEFAULT_EXTENSION: string = '.png';
 /** 单文件大小上限 50MB */
 const MAX_FILE_SIZE: number = 50 * 1024 * 1024;
+/**
+ * 视频单文件大小上限 300MB。
+ * 与图片分开:视频体积普遍远大于图片,50MB 会挡住正常短视频。
+ */
+const MAX_VIDEO_FILE_SIZE: number = 300 * 1024 * 1024;
 /**
  * 送 AI 视觉任务时的单图体积上限 4MB。
  * 与 MAX_FILE_SIZE 分开:base64 会让体积膨胀约 1.37 倍,
@@ -53,6 +59,21 @@ function mimeTypeForExtension(ext: string): string {
   }
   if (ext === '.bmp') {
     return 'image/bmp';
+  }
+  if (ext === '.mp4' || ext === '.m4v') {
+    return 'video/mp4';
+  }
+  if (ext === '.mkv') {
+    return 'video/x-matroska';
+  }
+  if (ext === '.ts') {
+    return 'video/mp2t';
+  }
+  if (ext === '.mov') {
+    return 'video/quicktime';
+  }
+  if (ext === '.webm') {
+    return 'video/webm';
   }
   return 'image/png';
 }
@@ -151,6 +172,10 @@ export class LocalImageAssetStore {
    */
   async readImageAsDataUrl(fileUri: string): Promise<string> {
     this.requireInit();
+    // 视频不能作为视觉任务输入(base64 无意义且体积巨大):在边界直接拒绝
+    if (mediaTypeFromFileName(fileUri) === 'video') {
+      throw new Error('视频不支持 AI 识别命名');
+    }
     const ext: string = this.extractExtension(fileUri);
     let bytes: ArrayBuffer;
     try {
@@ -183,9 +208,11 @@ export class LocalImageAssetStore {
     this.requireInit();
     const timestamp: number = Date.now();
     const ext: string = this.extractExtension(sourceUri);
+    const mediaType: LocalImageMediaType = mediaTypeFromFileName(sourceUri);
+    const maxBytes: number = mediaType === 'video' ? MAX_VIDEO_FILE_SIZE : MAX_FILE_SIZE;
     const destPath: string = this.baseDir + '/' + IMAGE_PREFIX + imageId + '_' + timestamp + ext;
     try {
-      const bytes: ArrayBuffer = this.readSourceBytes(sourceUri, MAX_FILE_SIZE);
+      const bytes: ArrayBuffer = this.readSourceBytes(sourceUri, maxBytes);
       const destFile: fileIo.File =
         fileIo.openSync(destPath, fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.CREATE);
       try {
@@ -197,7 +224,7 @@ export class LocalImageAssetStore {
     } catch (e) {
       Logger.error(LOG_TAG, 'saveImage failed: ' + String(e));
       if (String(e).indexOf('图片文件过大') >= 0) {
-        throw new Error('图片文件过大,不能超过 50MB');
+        throw new Error(mediaType === 'video' ? '视频文件过大,不能超过 300MB' : '图片文件过大,不能超过 50MB');
       }
       throw new Error('保存图片失败: ' + String(e));
     }

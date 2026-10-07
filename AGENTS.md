@@ -11,7 +11,7 @@
 |---|---|
 | 平台 | HarmonyOS NEXT（API 24 / SDK 6.1.1） |
 | 语言 / 框架 | ArkTS / ArkUI（State Management **V1**） |
-| 存储 | 关系型数据库（RDB，当前 schema 版本 **50**）+ Preferences + Asset KeyStore |
+| 存储 | 关系型数据库（RDB，当前 schema 版本 **51**）+ Preferences + Asset KeyStore |
 | 与 ArkTavern 关系 | 完整版含群聊/世界/VRM；Solo 是单聊精简版，同设备共存，数据隔离（所有存储键前缀 `arktavern_solo`） |
 
 ## 2. 接手流程（新会话按顺序执行）
@@ -125,7 +125,7 @@ $env:DEVECO_SDK_HOME = "D:\DevEco_studio\DevEco Studio\sdk"
 
 ## 6. 数据库纪律
 
-- 当前版本 **50**（`database/DatabaseConstants.ets` 的 `DATABASE_VERSION`）
+- 当前版本 **51**（`database/DatabaseConstants.ets` 的 `DATABASE_VERSION`）
 - 迁移**只增不改**：禁止 DROP TABLE / DROP COLUMN；新增列必须新增迁移版本，**逐版连续**，禁止跳版本
 - 行映射用 `getColumnIndex >= 0` 安全回退，保证旧 schema 兼容
 - `senderType='character'` 的消息必须填 `senderCharacterId`，否则 MessageRepository 抛 `invalid data`

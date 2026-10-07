@@ -41,6 +41,85 @@ const ID_PREFIX: string = 'img-';
  */
 const FORBIDDEN_NAME_CHARS: string[] = ['[', ']', '(', ')', '<', '>', '"', "'", '`', '|'];
 
+// ===== 媒体类型(v51) =====
+
+/**
+ * 本地媒体类型(v51 起区分):
+ * - image: 静态图片(png/jpg/jpeg/webp/bmp),AI 用 `![描述](arkimg:名字)` 引用
+ * - gif:   动图(GIF),同样用 `arkimg:名字` 引用(渲染层按 Image 显示,系统默认播放)
+ * - video: 视频(mp4/mkv/ts 等),AI 用 `![描述](arkvid:名字)` 引用;默认暂停,放大后播放
+ */
+export type LocalImageMediaType = 'image' | 'gif' | 'video';
+
+/** 静态图片扩展名(小写,含点) */
+export const IMAGE_EXTENSIONS: string[] = ['.png', '.jpg', '.jpeg', '.webp', '.bmp'];
+/** 动图扩展名 */
+export const GIF_EXTENSIONS: string[] = ['.gif'];
+/** 视频扩展名(ArkUI Video 明确支持 mp4/mkv/ts;mov/webm/m4v 作容错保留) */
+export const VIDEO_EXTENSIONS: string[] = ['.mp4', '.mkv', '.ts', '.mov', '.webm', '.m4v'];
+/** 全部支持的媒体扩展名(导入白名单) */
+export const ALL_MEDIA_EXTENSIONS: string[] = [...IMAGE_EXTENSIONS, ...GIF_EXTENSIONS, ...VIDEO_EXTENSIONS];
+
+/**
+ * 从 URI / 文件名取小写扩展名(含点)。
+ * 无法识别(无点 / 点在末尾)时返回空串。
+ * 会先剥离 query 与 fragment(拍照/媒体库 URI 常带参数)。
+ */
+export function extensionOf(sourceUri: string): string {
+  let path: string = sourceUri;
+  const queryIdx: number = path.indexOf('?');
+  if (queryIdx >= 0) {
+    path = path.substring(0, queryIdx);
+  }
+  const fragIdx: number = path.indexOf('#');
+  if (fragIdx >= 0) {
+    path = path.substring(0, fragIdx);
+  }
+  const lastSlash: number = path.lastIndexOf('/');
+  const filename: string = lastSlash >= 0 ? path.substring(lastSlash + 1) : path;
+  const lastDot: number = filename.lastIndexOf('.');
+  if (lastDot < 0 || lastDot === filename.length - 1) {
+    return '';
+  }
+  return filename.substring(lastDot).toLowerCase();
+}
+
+/**
+ * 由文件名 / URI 判定媒体类型。
+ * 未识别扩展名一律按 image 处理(读旧数据时的安全回退)。
+ */
+export function mediaTypeFromFileName(sourceUri: string): LocalImageMediaType {
+  const ext: string = extensionOf(sourceUri);
+  if (GIF_EXTENSIONS.indexOf(ext) >= 0) {
+    return 'gif';
+  }
+  if (VIDEO_EXTENSIONS.indexOf(ext) >= 0) {
+    return 'video';
+  }
+  return 'image';
+}
+
+/** 该 URI / 文件名是否为受支持的媒体文件(扩展名在白名单内) */
+export function isSupportedMediaFileName(sourceUri: string): boolean {
+  return ALL_MEDIA_EXTENSIONS.indexOf(extensionOf(sourceUri)) >= 0;
+}
+
+/** 媒体类型取值是否合法 */
+export function isValidMediaType(value: string): boolean {
+  return value === 'image' || value === 'gif' || value === 'video';
+}
+
+/** 把任意字符串收敛为合法媒体类型('gif' / 'video' 精确匹配,其余一律 'image') */
+export function coerceMediaType(value: string): LocalImageMediaType {
+  if (value === 'gif') {
+    return 'gif';
+  }
+  if (value === 'video') {
+    return 'video';
+  }
+  return 'image';
+}
+
 // ===== 模型接口 =====
 
 /**
@@ -55,6 +134,8 @@ export interface LocalImage {
   readonly nameKey: string;
   /** 沙箱内的文件 URI(file://...) */
   readonly fileUri: string;
+  /** 媒体类型(v51):image / gif / video;决定聊天内引用语法与渲染组件 */
+  readonly mediaType: LocalImageMediaType;
   /** 给模型看的描述(可空;写进标签预设时与名字一起列出) */
   readonly description: string;
   readonly createdAt: number;
@@ -66,6 +147,8 @@ export interface CreateLocalImageOptions {
   readonly id?: string;
   readonly name: string;
   readonly fileUri: string;
+  /** 媒体类型;不传时按 fileUri 扩展名推断 */
+  readonly mediaType?: LocalImageMediaType;
   readonly description?: string;
   readonly createdAt?: number;
 }
@@ -194,6 +277,7 @@ export function createLocalImage(options: CreateLocalImageOptions): LocalImage {
     name: options.name.trim(),
     nameKey: normalizeImageName(options.name),
     fileUri: options.fileUri,
+    mediaType: options.mediaType !== undefined ? options.mediaType : mediaTypeFromFileName(options.fileUri),
     description: options.description !== undefined ? normalizeImageDescription(options.description) : '',
     createdAt: now,
     updatedAt: now
@@ -218,6 +302,9 @@ export function validateLocalImage(image: LocalImage): void {
   }
   if (image.fileUri.length === 0) {
     throw DatabaseError.invalidData('local image fileUri empty');
+  }
+  if (!isValidMediaType(image.mediaType)) {
+    throw DatabaseError.invalidData('local image mediaType invalid');
   }
   if (!isValidImageDescription(image.description)) {
     throw DatabaseError.invalidData('local image description too long');

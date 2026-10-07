@@ -6,7 +6,7 @@
  */
 
 export const DATABASE_NAME: string = 'arktavern_solo.db';
-export const DATABASE_VERSION: number = 50;
+export const DATABASE_VERSION: number = 51;
 
 export const TABLE_CHARACTERS: string = 'characters';
 export const TABLE_CHATS: string = 'chats';
@@ -929,3 +929,9 @@ export const INDEX_LOCAL_IMAGE_CATEGORY_LINKS_TARGET: string = 'idx_local_image_
 // character_id 自 v50 起**停用**(列保留不删,迁移只增不改),代码不再读写。
 /** local_images.description 列名(给模型看的图片描述,可空) */
 export const COLUMN_IMAGE_DESCRIPTION: string = 'description';
+
+// ===== v51: 本地图片库支持视频(只加一列) =====
+// media_type = 'image' | 'gif' | 'video';决定聊天内引用语法(arkimg: / arkvid:)与渲染组件。
+// 旧行该列为空时按 file_uri 扩展名回退(image),见 LocalImageRepositoryMapper。
+/** local_images.media_type 列名 */
+export const COLUMN_IMAGE_MEDIA_TYPE: string = 'media_type';

@@ -11,6 +11,7 @@ import { ChatMessage, ChatMessageStatus } from '../models/ChatMessage';
 import { ChatRole } from '../models/ChatRole';
 import { ChatMessageSource } from '../models/ChatMessageSource';
 import { ChatTextStyle } from '../utils/ChatTextStyleSettings';
+import { LocalImageResolution } from '../utils/LocalImageResolution';
 import { ChatMarkdownColorTheme, ChatSymbolColorRule } from '../utils/ChatTextColorTheme';
 import { ThemePalette } from '../theme/ThemePalette';
 import { ChatMessageBubble } from './ChatMessageBubble';
@@ -29,8 +30,8 @@ export struct ChatMessageList {
   @Prop colorTheme: ChatMarkdownColorTheme | null = null;
   /** 自定义符号配色规则(透传给气泡内富文本) */
   @Prop symbolRules: ChatSymbolColorRule[] = [];
-  /** 本地图片库解析映射(名字 → 沙箱 URI),透传给 ChatMessageBubble → ChatRichText */
-  @Prop localImages: Record<string, string> = {};
+  /** 本地图片/视频库解析映射(名字 → { 沙箱 URI, 媒体类型 }),透传给 ChatMessageBubble → ChatRichText */
+  @Prop localImages: Record<string, LocalImageResolution> = {};
   /** 聊天文字样式设置 */
   @Prop chatTextStyle: ChatTextStyle | null = null;
   /** 角色头像 URI */

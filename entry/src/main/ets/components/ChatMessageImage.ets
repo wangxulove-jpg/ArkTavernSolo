@@ -1,15 +1,17 @@
 /**
- * ChatMessageImage 消息内图片组件
+ * ChatMessageImage 消息内图片/视频组件
  *
- * 渲染 ChatTextParser 抽出的 image 分块(markdown ![](url) / <img src> / 本地图 ![alt](arkimg:名),仅 https)。
+ * 渲染 ChatTextParser 抽出的 image 分块(markdown ![](url) / <img src> / 本地图 ![alt](arkimg:名) /
+ * 本地视频 ![alt](arkvid:名),仅 https 网络图允许)。
  *
  * 职责:
- * - 显示网络图片(HTTPS)或本地图片库图片(file://),宽度随气泡自适应(objectFit Contain 不裁切)
+ * - 图片:显示网络图片(HTTPS)或本地图片库图片/GIF(file://),宽度随气泡自适应(objectFit Contain 不裁切)
+ * - 视频:用 Video 组件播放本地视频;**默认暂停**(仅显示首帧 + 播放角标),点击放大后才播放;
+ *   Aa 面板「视频自动播放」开启时气泡内直接播放
  * - 加载期间显示占位(原始语法源码 + 加载动画),加载完成只显示图片;失败/地址缺失显示失败占位
- * - 点击图片全屏放大,再点(或点背景)收起;开关走 geometryTransition 一镜到底(从图片位置展开,从哪来回哪去)
- * - 全屏预览支持双指缩放(以手指捏合点为锚点),放大后可单指拖动查看(与手指 1:1)
- *   —— 缩放走布局尺寸、平移走布局 offset,一律不用 scale/translate 变换:变换属性的叠加顺序
- *      不由调用者掌握,实测会导致拖动不跟手、缩放锚点失效(见 PITFALLS P-97)
+ * - 点击全屏放大,再点(或点背景)收起;开关走 geometryTransition 一镜到底(从图片位置展开,从哪来回哪去)
+ * - 全屏预览(图片)支持双指缩放(以手指捏合点为锚点),放大后可单指拖动查看(与手指 1:1)
+ *   —— 缩放走布局尺寸、平移走布局 offset,一律不用 scale/translate 变换(见 PITFALLS P-97)
  * - 不缓存图片字节到本地(由系统 Image 组件管理内存缓存,与 MarketCharacterAvatar 同口径)
  *
  * 不复用 MarketCharacterAvatar 的原因:它绑定 MarketCharacter 模型与固定宽高/NSFW 门控语义;
@@ -28,6 +30,11 @@ const PREVIEW_TRANSITION_DURATION: number = 300;
 /** 取不到屏幕尺寸时的兜底值(vp) */
 const FALLBACK_SCREEN_W: number = 360;
 const FALLBACK_SCREEN_H: number = 720;
+/**
+ * 视频默认宽高比(16:9)。
+ * ArkUI Video 不上报媒体实际尺寸,气泡与预览统一按此比例框,内部 objectFit Contain 不裁切。
+ */
+const VIDEO_ASPECT_RATIO: number = 16 / 9;
 
 /**
  * 每张图片一个唯一的共享元素 id。
@@ -89,12 +96,22 @@ function fingerMidpoint(event: GestureEvent): FingerMidpoint {
 
 @Component
 export struct ChatMessageImage {
-  /** 图片地址:网络 https URL 或本地图片库的沙箱 file:// URI(由解析层/渲染层保证) */
+  /** 图片地址:网络 https URL 或本地媒体库的沙箱 file:// URI(由解析层/渲染层保证) */
   @Prop url: string = '';
   /** 替代文本(加载失败占位与无障碍用) */
   @Prop alt: string = '';
   /** 原始语法源码(markdown/HTML 标签原文;未加载时占位展示,使用户知道这里有一张图) */
   @Prop source: string = '';
+  /**
+   * 是否为视频(chunk.kind === 'video')。
+   * true 时用 Video 组件渲染(默认暂停),false 时用 Image(图片/GIF)。
+   */
+  @Prop isVideo: boolean = false;
+  /**
+   * 气泡内视频是否自动播放(来自 Aa 面板「视频自动播放」,默认 false)。
+   * 关闭时仅显示首帧 + 播放角标,点击放大后才播放。
+   */
+  @Prop autoPlayMedia: boolean = false;
   /**
    * 宽度占气泡的比例(0.3~1.0)。
    * 来自聊天外观设置(Aa 面板「图片大小」),由 ChatRichText 经 settings 透传。
@@ -103,6 +120,8 @@ export struct ChatMessageImage {
 
   /** 小图加载状态(内部) */
   @State loadState: ImageLoadState = 'loading';
+  /** 视频是否正在播放(内部;用于控制播放角标显隐) */
+  @State videoPlaying: boolean = false;
   /** 全屏预览是否展开(内部) */
   @State previewVisible: boolean = false;
   /** 预览大图是否加载中(内部) */
@@ -134,6 +153,10 @@ export struct ChatMessageImage {
   private panHasOrigin: boolean = false;
   /** 捏合是否进行中(用于让单指拖动让位,避免两指位移被算两遍) */
   private pinchActive: boolean = false;
+  /** 气泡内视频控制器(暂停/播放;默认不播放) */
+  private readonly videoController: VideoController = new VideoController();
+  /** 全屏预览视频控制器(放大后自动播放) */
+  private readonly previewVideoController: VideoController = new VideoController();
 
   /** 图片宽度(百分比字符串;比例只看气泡宽度,不改变高宽比) */
   private imageWidth(): string {
@@ -152,6 +175,16 @@ export struct ChatMessageImage {
   /** 预览大图高度(同宽度说明) */
   private previewImageHeight(): Length {
     return this.previewH > 0 ? this.previewH * this.zoomScale : '100%';
+  }
+
+  /** 预览视频宽度(未测到屏幕尺寸时退回整屏,避免 0 尺寸;视频不做缩放,直接用 fit 后尺寸) */
+  private previewVideoWidth(): Length {
+    return this.previewW > 0 ? this.previewW : '100%';
+  }
+
+  /** 预览视频高度(同宽度说明) */
+  private previewVideoHeight(): Length {
+    return this.previewH > 0 ? this.previewH : '100%';
   }
 
   /** 占位是否处于失败态(地址缺失或加载失败) */
@@ -232,7 +265,9 @@ export struct ChatMessageImage {
       this.screenW = FALLBACK_SCREEN_W;
       this.screenH = FALLBACK_SCREEN_H;
     }
-    const ratio: number = this.thumbRatio > 0 ? this.thumbRatio : 1;
+    const ratio: number = this.isVideo
+      ? VIDEO_ASPECT_RATIO
+      : (this.thumbRatio > 0 ? this.thumbRatio : 1);
     if (this.screenW / this.screenH > ratio) {
       this.previewH = this.screenH;
       this.previewW = this.screenH * ratio;
@@ -305,6 +340,9 @@ export struct ChatMessageImage {
     if (this.url.length === 0) {
       // 地址缺失(本地图未命中):没有可加载对象,直接显示占位
       this.placeholderView()
+    } else if (this.isVideo) {
+      // 视频:默认暂停(仅首帧 + 播放角标),点击放大后才播放
+      this.videoBubble()
     } else {
       Stack({ alignContent: Alignment.Center }) {
         // 图片常驻挂载(加载完成前不可见),占位绘制在其上层;加载完成后占位移除,只剩图片
@@ -473,6 +511,119 @@ export struct ChatMessageImage {
           .height(56)
           .color($r('app.color.app_on_accent'))
       }
+    }
+    .width('100%')
+    .height('100%')
+    .transition(TransitionEffect.OPACITY)
+  }
+
+  /**
+   * 气泡内视频视图:默认暂停,显示首帧 + 播放角标;Aa 面板开启「视频自动播放」时直接播放。
+   * 视频尺寸按固定宽高比框(objectFit Contain 不裁切)。
+   * 点击整块放大 → 预览层播放。
+   */
+  @Builder
+  private videoBubble(): void {
+    if (this.loadState === 'failed') {
+      this.placeholderView()
+    } else {
+      Stack({ alignContent: Alignment.Center }) {
+        Video({
+          src: this.url,
+          controller: this.videoController,
+          currentProgressRate: 1.0
+        })
+          .width('100%')
+          .aspectRatio(VIDEO_ASPECT_RATIO)
+          .objectFit(ImageFit.Contain)
+          .borderRadius(8)
+          .clip(true)
+          // 默认暂停(autoPlayMedia 关闭);开启后气泡内自动播放
+          .autoPlay(this.autoPlayMedia)
+          .controls(false)
+          .loop(false)
+          // 与预览视频绑定同一 id:开关预览时系统自动做"从视频位置展开/收回"的一镜到底
+          .geometryTransition(this.sharedId)
+          .onPrepared(() => {
+            this.loadState = 'loaded';
+          })
+          .onStart(() => {
+            this.videoPlaying = true;
+          })
+          .onPause(() => {
+            this.videoPlaying = false;
+          })
+          .onFinish(() => {
+            this.videoPlaying = false;
+          })
+          .onError(() => {
+            this.loadState = 'failed';
+          })
+        if (this.loadState === 'loading') {
+          LoadingProgress()
+            .width(32)
+            .height(32)
+            .color($r('app.color.app_on_accent'))
+        } else if (!this.videoPlaying) {
+          // 播放角标:提示"点击放大后可播放"(hitTestBehavior None 让点击穿透到外层)
+          Column() {
+            Text('▶')
+              .fontSize(22)
+              .fontColor($r('app.color.app_on_accent'))
+          }
+          .width(56)
+          .height(56)
+          .borderRadius(28)
+          .backgroundColor('rgba(0,0,0,0.45)')
+          .justifyContent(FlexAlign.Center)
+          .alignItems(HorizontalAlign.Center)
+          .hitTestBehavior(HitTestMode.None)
+        }
+      }
+      .width(this.imageWidth())
+      .onClick(() => {
+        this.openPreview();
+      })
+      .bindContentCover(this.previewVisible, this.previewVideoOverlay(), {
+        modalTransition: ModalTransition.NONE,
+        onWillDismiss: (): void => {
+          this.closePreview();
+        },
+        onDisappear: (): void => {
+          this.resetZoom();
+        }
+      })
+    }
+  }
+
+  /**
+   * 视频全屏预览层:遮罩点按收起;视频带一镜到底并**自动播放**,带系统播放控件。
+   * 视频不参与双指缩放/拖动(与播放控件冲突),故不绑定手势。
+   */
+  @Builder
+  private previewVideoOverlay(): void {
+    Stack({ alignContent: Alignment.Center }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor($r('app.color.app_scrim'))
+        .onClick(() => {
+          this.closePreview();
+        })
+      Video({
+        src: this.url,
+        controller: this.previewVideoController,
+        currentProgressRate: 1.0
+      })
+        .width(this.previewVideoWidth())
+        .height(this.previewVideoHeight())
+        .objectFit(ImageFit.Contain)
+        // 放大后自动播放(需求:只有点击放大后才能播放)
+        .autoPlay(true)
+        .controls(true)
+        .loop(false)
+        .geometryTransition(this.sharedId)
+        .transition(TransitionEffect.OPACITY)
     }
     .width('100%')
     .height('100%')

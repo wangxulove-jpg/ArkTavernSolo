@@ -33,6 +33,7 @@ import { ChatRole } from '../models/ChatRole';
 import { CharacterImageView } from './CharacterImageView';
 import { ChatRichText, ChatSenderType } from './ChatRichText';
 import { ChatTextStyle } from '../utils/ChatTextStyleSettings';
+import { LocalImageResolution } from '../utils/LocalImageResolution';
 import { ChatMarkdownColorTheme, ChatSymbolColorRule } from '../utils/ChatTextColorTheme';
 import { ChatMessageRenderState } from '../models/ChatMessageRenderState';
 import { ThemePalette } from '../theme/ThemePalette';
@@ -80,7 +81,7 @@ export struct ChatMessageBubble {
    */
   @Prop symbolRules: ChatSymbolColorRule[] = [];
   /** 本地图片库解析映射(名字 → 沙箱 URI),透传给 ChatRichText */
-  @Prop localImages: Record<string, string> = {};
+  @Prop localImages: Record<string, LocalImageResolution> = {};
   /** 气泡背景不透明度(0.40~0.90,仅控制背景 Alpha,不影响文字/头像/按钮) */
   @Prop bubbleOpacity: number = 1.0;
   /** 当前是否为深色模式(用于动态计算气泡背景 RGB) */

@@ -23,7 +23,8 @@ import { V1_TO_V2_STATEMENTS, V2_TO_V3_STATEMENTS, V3_TO_V4_STATEMENTS, V4_TO_V5
   V46_TO_V47_DDL_STATEMENTS,
   V47_TO_V48_DDL_STATEMENTS,
   V48_TO_V49_DDL_STATEMENTS,
-  V49_TO_V50_DDL_STATEMENTS
+  V49_TO_V50_DDL_STATEMENTS,
+  V50_TO_V51_DDL_STATEMENTS
 } from './DatabaseSchema';
 import {
   TABLE_CHATS,
@@ -1604,6 +1605,25 @@ class V49ToV50Migration implements DatabaseMigration {
   async migrate(store: relationalStore.RdbStore): Promise<void> {
     for (let i = 0; i < V49_TO_V50_DDL_STATEMENTS.length; i++) {
       await store.executeSql(V49_TO_V50_DDL_STATEMENTS[i]);
+    }
+  }
+}
+
+/**
+ * v50→v51:本地图片库支持视频——仅给 local_images 补 media_type 列。
+ * 无数据迁移(类型可由 file_uri 扩展名推断)。
+ */
+export function createV50ToV51Migration(): DatabaseMigration {
+  return new V50ToV51Migration();
+}
+
+class V50ToV51Migration implements DatabaseMigration {
+  readonly fromVersion: number = 50;
+  readonly toVersion: number = 51;
+
+  async migrate(store: relationalStore.RdbStore): Promise<void> {
+    for (let i = 0; i < V50_TO_V51_DDL_STATEMENTS.length; i++) {
+      await store.executeSql(V50_TO_V51_DDL_STATEMENTS[i]);
     }
   }
 }

@@ -18,7 +18,7 @@
  */
 
 import { relationalStore } from '@kit.ArkData';
-import { LocalImage } from '../models/LocalImage';
+import { LocalImage, LocalImageMediaType, mediaTypeFromFileName, isValidMediaType, coerceMediaType } from '../models/LocalImage';
 import { DatabaseError } from '../models/DatabaseError';
 import { isValidTimestamp } from './RepositoryMappers';
 import {
@@ -27,6 +27,7 @@ import {
   COLUMN_IMAGE_NAME_KEY,
   COLUMN_IMAGE_FILE_URI,
   COLUMN_IMAGE_DESCRIPTION,
+  COLUMN_IMAGE_MEDIA_TYPE,
   COLUMN_CREATED_AT,
   COLUMN_UPDATED_AT
 } from '../database/DatabaseConstants';
@@ -78,6 +79,12 @@ export function localImageFromRow(
   const ciDescription: number = rs.getColumnIndex(COLUMN_IMAGE_DESCRIPTION);
   const description: string = readString(rs, ciDescription);
 
+  // v51 新列:旧库该列不存在(ci < 0)或为空时,按 file_uri 扩展名回退推断
+  const ciMediaType: number = rs.getColumnIndex(COLUMN_IMAGE_MEDIA_TYPE);
+  const rawMediaType: string = readString(rs, ciMediaType);
+  const mediaType: LocalImageMediaType =
+    isValidMediaType(rawMediaType) ? coerceMediaType(rawMediaType) : mediaTypeFromFileName(fileUri);
+
   const ciCreatedAt: number = rs.getColumnIndex(COLUMN_CREATED_AT);
   const createdAt: number = readLong(rs, ciCreatedAt);
   if (!isValidTimestamp(createdAt)) {
@@ -95,6 +102,7 @@ export function localImageFromRow(
     name: name,
     nameKey: nameKey,
     fileUri: fileUri,
+    mediaType: mediaType,
     description: description,
     createdAt: createdAt,
     updatedAt: updatedAt
@@ -114,6 +122,7 @@ export function buildLocalImageValues(
   bucket[COLUMN_NAME] = image.name;
   bucket[COLUMN_IMAGE_NAME_KEY] = image.nameKey;
   bucket[COLUMN_IMAGE_FILE_URI] = image.fileUri;
+  bucket[COLUMN_IMAGE_MEDIA_TYPE] = image.mediaType;
   bucket[COLUMN_IMAGE_DESCRIPTION] = image.description;
   bucket[COLUMN_CREATED_AT] = image.createdAt;
   bucket[COLUMN_UPDATED_AT] = image.updatedAt;

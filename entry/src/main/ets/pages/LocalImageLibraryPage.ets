@@ -22,8 +22,10 @@ import {
   describeImageNameProblem,
   describeImageDescriptionProblem,
   IMAGE_NAME_MAX_LENGTH,
-  IMAGE_DESCRIPTION_MAX_LENGTH
+  IMAGE_DESCRIPTION_MAX_LENGTH,
+  LocalImageMediaType
 } from '../models/LocalImage';
+import { toPlayableUri } from '../utils/LocalImageResolution';
 import { AppServices } from '../services/AppServices';
 import { CharacterImageView } from '../components/CharacterImageView';
 import { EmptyStateView } from '../components/EmptyStateView';
@@ -589,25 +591,35 @@ struct LocalImageLibraryPage {
           .margin({ right: 10 })
         }
 
-        CharacterImageView({
-          imageUri: entry.image.fileUri,
-          fallbackName: entry.image.name,
-          imgWidth: 44,
-          imgHeight: 44,
-          imgBorderRadius: $r('app.float.app_radius_sm'),
-          displayMode: 'thumbnail'
-        })
+        // 缩略图:图片/GIF 直接显示;视频用 ▶ 占位块(不抽帧,避免列表开销)
+        if (entry.image.mediaType === 'video') {
+          this.videoThumb()
+        } else {
+          CharacterImageView({
+            imageUri: entry.image.fileUri,
+            fallbackName: entry.image.name,
+            imgWidth: 44,
+            imgHeight: 44,
+            imgBorderRadius: $r('app.float.app_radius_sm'),
+            displayMode: 'thumbnail'
+          })
+        }
 
-        // 文字区:名称 / 描述 / 标签各占一行,紧凑排布
+        // 文字区:名称(+ 类型角标) / 描述 / 标签各占一行,紧凑排布
         Column() {
-          Text(entry.image.name)
-            .fontSize($r('app.float.app_font_body'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
-            .textAlign(TextAlign.Start)
+          Row({ space: 6 }) {
+            Text(entry.image.name)
+              .fontSize($r('app.float.app_font_body'))
+              .fontWeight(FontWeight.Medium)
+              .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .layoutWeight(1)
+              .textAlign(TextAlign.Start)
+            this.mediaTypeBadge(entry.image.mediaType)
+          }
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
           if (entry.image.description.length > 0) {
             Text(entry.image.description)
               .fontSize($r('app.float.app_font_caption'))
@@ -669,6 +681,51 @@ struct LocalImageLibraryPage {
     .width('100%')
   }
 
+  /** 视频缩略图占位块(44×44;列表内不抽帧,用 ▶ 标识媒体类型) */
+  @Builder
+  videoThumb() {
+    Column() {
+      Text('▶')
+        .fontSize(16)
+        .fontColor($r('app.color.app_on_accent'))
+    }
+    .width(44)
+    .height(44)
+    .borderRadius($r('app.float.app_radius_sm'))
+    .backgroundColor(ThemePalette.surface3Color(this.effectiveTheme))
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+  }
+
+  /** 媒体类型角标:图片不显示(image 为默认类型);GIF / 视频显示以作区分 */
+  @Builder
+  mediaTypeBadge(mediaType: LocalImageMediaType) {
+    if (mediaType !== 'image') {
+      Text(this.mediaTypeLabel(mediaType))
+        .fontSize(10)
+        .fontColor(mediaType === 'video'
+          ? $r('app.color.app_on_accent')
+          : ThemePalette.textSecondaryColor(this.effectiveTheme))
+        .backgroundColor(mediaType === 'video'
+          ? ThemePalette.accentColor(this.effectiveTheme)
+          : ThemePalette.surface2Color(this.effectiveTheme))
+        .borderRadius(6)
+        .padding({ left: 6, right: 6, top: 1, bottom: 1 })
+        .maxLines(1)
+    }
+  }
+
+  /** 媒体类型展示文案 */
+  private mediaTypeLabel(mediaType: LocalImageMediaType): string {
+    if (mediaType === 'video') {
+      return '视频';
+    }
+    if (mediaType === 'gif') {
+      return 'GIF';
+    }
+    return '图片';
+  }
+
   // ===== 图片详情大卡片(点击图片打开) =====
 
   @Builder
@@ -714,15 +771,30 @@ struct LocalImageLibraryPage {
       .alignItems(VerticalAlign.Center)
 
       Row() {
-        CharacterImageView({
-          imageUri: entry.image.fileUri,
-          fallbackName: entry.image.name,
-          imgWidth: 200,
-          imgHeight: 200,
-          imgBorderRadius: $r('app.float.app_radius_md'),
-          displayMode: 'cover',
-          objectFit: ImageFit.Contain
-        })
+        if (entry.image.mediaType === 'video') {
+          // 视频:可播放(默认暂停,手动点播放);不参与 AI 视觉命名
+          Video({
+            src: toPlayableUri(entry.image.fileUri, entry.image.mediaType),
+            currentProgressRate: 1.0
+          })
+            .width(200)
+            .height(200)
+            .objectFit(ImageFit.Contain)
+            .autoPlay(false)
+            .controls(true)
+            .borderRadius($r('app.float.app_radius_md'))
+            .clip(true)
+        } else {
+          CharacterImageView({
+            imageUri: entry.image.fileUri,
+            fallbackName: entry.image.name,
+            imgWidth: 200,
+            imgHeight: 200,
+            imgBorderRadius: $r('app.float.app_radius_md'),
+            displayMode: 'cover',
+            objectFit: ImageFit.Contain
+          })
+        }
       }
       .width('100%')
       .justifyContent(FlexAlign.Center)
@@ -782,19 +854,21 @@ struct LocalImageLibraryPage {
         .color(ThemePalette.dividerColor(this.effectiveTheme))
         .margin({ top: 12, bottom: 4 })
 
-      // AI 自动命名(视觉任务):结果先进建议面板,用户确认后才写入
-      Button($r('app.string.local_image_action_ai_caption'))
-        .fontSize(13)
-        .fontColor(ThemePalette.accentColor(this.effectiveTheme))
-        .backgroundColor($r('app.color.app_accent_surface'))
-        .borderRadius($r('app.float.app_radius_sm'))
-        .height(38)
-        .width('100%')
-        .margin({ top: 8, bottom: 4 })
-        .enabled(!this.captionLoadingOrApplying())
-        .onClick(() => {
-          this.openCaptionSheet(entry.image.id);
-        })
+      // AI 自动命名(视觉任务):结果先进建议面板,用户确认后才写入。视频不支持视觉命名,故不展示入口
+      if (entry.image.mediaType !== 'video') {
+        Button($r('app.string.local_image_action_ai_caption'))
+          .fontSize(13)
+          .fontColor(ThemePalette.accentColor(this.effectiveTheme))
+          .backgroundColor($r('app.color.app_accent_surface'))
+          .borderRadius($r('app.float.app_radius_sm'))
+          .height(38)
+          .width('100%')
+          .margin({ top: 8, bottom: 4 })
+          .enabled(!this.captionLoadingOrApplying())
+          .onClick(() => {
+            this.openCaptionSheet(entry.image.id);
+          })
+      }
 
       Row({ space: 4 }) {
         Button($r('app.string.local_image_action_rename'))
@@ -1802,7 +1876,7 @@ struct LocalImageLibraryPage {
     try {
       const photoPicker = new photoAccessHelper.PhotoViewPicker();
       const selectOption = new photoAccessHelper.PhotoSelectOptions();
-      selectOption.MIMEType = photoAccessHelper.PhotoViewMIMETypes.IMAGE_TYPE;
+      selectOption.MIMEType = photoAccessHelper.PhotoViewMIMETypes.IMAGE_VIDEO_TYPE;
       selectOption.maxSelectNumber = MAX_PICK_COUNT;
       const result = await photoPicker.select(selectOption);
       if (!result || !result.photoUris || result.photoUris.length === 0) {

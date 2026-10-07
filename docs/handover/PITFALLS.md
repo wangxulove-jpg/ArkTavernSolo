@@ -93,7 +93,7 @@
 
 | # | 坑 | 正确做法 / 证据 |
 |---|---|---|
-| P-50 | 改历史迁移 / DROP 表列 | **迁移只增不改、版本连续、禁 DROP**；新增列 = 新增迁移版本。`DATABASE_VERSION` 当前 **47** |
+| P-50 | 改历史迁移 / DROP 表列 | **迁移只增不改、版本连续、禁 DROP**；新增列 = 新增迁移版本。`DATABASE_VERSION` 当前 **51** |
 | P-51 | 用 schema 快照函数"顺手修历史语义" | `getSchemaStatements(v)` = 「从空库建到 v」；P3-3 实测 `39/40/41` 曾被并到 V42 快照（多出 world_id 列/索引）→ 已改为 → `V41_SCHEMA_STATEMENTS`。**任何 DDL 文本差异按 bug 处理**，改前先对照逐版 diff |
 | P-52 | 行映射硬取列索引 | 用 `getColumnIndex >= 0` **安全回退**，保证旧 schema 兼容 |
 | P-53 | `senderType='character'` 的消息没填 `senderCharacterId` | `MessageRepository` 会抛 `invalid data` |
@@ -130,6 +130,8 @@
 | P-104 | 把资源当字符串拼接：`$r('app.string.x') + 字符串` → 界面显示 **`[object Object]…`**（2026-10-07 本地图片库标签行）。`$r()` 返回的是 **Resource 对象**，`Resource + string` 会走对象 `toString()` | 资源与动态文本**必须分开渲染**（两个 `Text` + `Row`/`Flex`，资源那个不参与拼接）。同类要警惕的还有模板串 `${$r(...)}`、`Resource` 与数组 `join`。**扫证过：全仓仅此一处**；新增拼接前先确认右侧是不是普通 string |
 | P-105 | 给请求加多模态内容块时，用「接口联合类型」表达（`type Part = TextPart \| ImagePart`，再往里塞对象字面量）→ ArkTS 严格模式下**字面量无法推断目标类型**直接编译失败（2026-10-07 AI 图片命名，`OpenAIContentPart`） | 用**单接口 + 可选字段**、由 `type` 决定哪组字段有效（`{ type, text?, image_url? }`），构造时逐层写**显式类型注解的局部变量**、不新增 `as`。`JSON.stringify` 会丢弃 `undefined` 键，不会产出脏字段 |
 | P-106 | 视觉输入（图片）挂错消息角色：放到 `system`/`assistant` 消息上 → 端点直接 **400**（DeepSeek 明确"仅 user / developer 消息可带图"；2026-10-07 AI 图片命名）。另一类同类坑：把 base64 图片按保存上限（50MB）校验 → 请求体膨胀到约 68MB 必被拒 | ① 图片**只挂最后一条 user 消息**，并在 `validateRequest` 加守卫（带图但无 user 消息 → InvalidRequest）；② 送 AI 的图片体积用**独立的小上限**（本项目 4MB），与"保存到沙箱"的上限分开；③ deepseek 侧用 `image_url.detail='low'`（服务端降到 512×512、单图 ≤384 tokens）即可，不必在端上做压缩 |
+| P-107 | 把 `local_images.file_uri`（`file:///绝对路径` 形式）直接喂给 ArkUI **Video** 组件 → 视频不加载/黑屏：Video 的 `src` 明确**只认沙箱 URI `file://<bundleName>/<sandboxPath>`**（`Image` 组件接受 `file:///绝对路径`，两者口径不同；2026-10-07 本地视频） | **落库仍统一存 `file:///绝对路径`**（不改存储层——改了 `LocalImageAssetStore.deleteByUri` 剥前缀就删不掉文件）；**读取侧**用 `fileUri.getUriFromPath(path)`（`@kit.CoreFileKit`）转成 Video 形式，统一收口在 `utils/LocalImageResolution.toPlayableUri(uri, mediaType)`（聊天渲染与图片库详情播放共用） |
+| P-108 | ArkUI **Image 组件没有"暂停动图"属性**（GIF/WEBP 可见即播放）；文档提到的 `AnimatedDrawableDescriptor` + `AnimationController` 需真机验证且 Previewer 不支持（2026-10-07 本地视频/动图需求评估） | 若确需"GIF 默认暂停"，只能走 `AnimatedDrawableDescriptor({ autoPlay:false })` + `getAnimationController()`（API 21+），或"气泡内先渲染首帧静态图、放大后才加载动图"；**本期未实现 GIF 暂停**（用户拍板暂缓），勿以为 `Image` 有开关 |
 
 ## 7. 文档与协作
 

@@ -52,6 +52,7 @@ import { motion } from '@kit.MultimodalAwarenessKit';
 import { inputMethod } from '@kit.IMEKit';
 import { AppServices } from '../services/AppServices';
 import { ChatTextStyle } from '../utils/ChatTextStyleSettings';
+import { LocalImageResolution } from '../utils/LocalImageResolution';
 import {
   ChatTextColorMode,
   ChatMarkdownColorTheme,
@@ -267,7 +268,7 @@ struct ChatPage {
    * AI 回复正文里的 ![描述](arkimg:名字) 由此解析成实际文件;由页面加载后透传给消息组件
    * (组件不得直接访问服务/数据库)。
    */
-  @State localImages: Record<string, string> = {};
+  @State localImages: Record<string, LocalImageResolution> = {};
 
   /** 显示设置面板可见性(轻量卡片,非 Dialog) */
   @State chatAppearancePanelVisible: boolean = false;
@@ -1050,11 +1051,11 @@ struct ChatPage {
    */
   private refreshLocalImages(): void {
     AppServices.whenReady()
-      .then((): Promise<Record<string, string>> => {
+      .then((): Promise<Record<string, LocalImageResolution>> => {
         // v50 图片池模型:解析映射 = 全部图片(不再按角色过滤)
         return AppServices.getLocalImageService().buildResolutionMap();
       })
-      .then((map: Record<string, string>): void => {
+      .then((map: Record<string, LocalImageResolution>): void => {
         this.localImages = map;
       })
       .catch((e: Error): void => {
@@ -2744,6 +2745,9 @@ struct ChatPage {
       },
       onApplyImageWidthRatio: (ratio: number): void => {
         this.applyImageWidthRatio(ratio);
+      },
+      onApplyMediaAutoPlay: (enabled: boolean): void => {
+        this.applyMediaAutoPlay(enabled);
       },
       onApplyFontFamily: (family: string): void => {
         this.applyFontFamily(family);
@@ -5117,6 +5121,18 @@ struct ChatPage {
       })
       .catch((e: Object): void => {
         Logger.warn(LOG_TAG, 'applyImageWidthRatio failed: ' + (e as Error).message);
+      });
+  }
+
+  /** v51: 应用「视频自动播放」开关(实时更新 ChatTextStyle;默认关闭 = 视频默认暂停) */
+  private applyMediaAutoPlay(enabled: boolean): void {
+    const settings = AppServices.getInstance().chatTextStyleSettings;
+    settings.update({ mediaAutoPlay: enabled })
+      .then((): void => {
+        this.chatTextStyle = settings.get();
+      })
+      .catch((e: Object): void => {
+        Logger.warn(LOG_TAG, 'applyMediaAutoPlay failed: ' + (e as Error).message);
       });
   }
 

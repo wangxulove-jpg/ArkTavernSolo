@@ -267,7 +267,8 @@ import {
   CREATE_UNIQUE_INDEX_LOCAL_IMAGE_CATEGORY_LINKS,
   V48_NEW_DDL_STATEMENTS,
   V49_NEW_DDL_STATEMENTS,
-  V50_NEW_DDL_STATEMENTS
+  V50_NEW_DDL_STATEMENTS,
+  V51_NEW_DDL_STATEMENTS
 } from './schema/SchemaLocalImages';
 
 export const VERSION_1_STATEMENTS: string[] = [
@@ -1276,6 +1277,22 @@ export const V50_SCHEMA_STATEMENTS: string[] = [
   ...V49_TO_V50_DDL_STATEMENTS
 ];
 
+// ===== v51: 本地图片库支持视频(仅给 local_images 补 media_type 列) =====
+
+/**
+ * v50→v51 迁移 DDL:仅一条 ALTER 加列(文本,默认 'image')。
+ * 安全性:纯 ALTER ADD COLUMN,不改任何已有列与数据;无数据迁移。
+ */
+export const V50_TO_V51_DDL_STATEMENTS: string[] = [
+  ...V51_NEW_DDL_STATEMENTS
+];
+
+/** v51 完整 Schema(新安装使用) */
+export const V51_SCHEMA_STATEMENTS: string[] = [
+  ...V50_SCHEMA_STATEMENTS,
+  ...V50_TO_V51_DDL_STATEMENTS
+];
+
 /**
  * 版本 → 完整建库语句注册表(P3-3③:逐版 if 链改写为 Registry)。
  * 每个条目代表"从空库建到该版本"的完整语句序列;取值时统一返回浅拷贝。
@@ -1337,6 +1354,7 @@ SCHEMA_BY_VERSION.set(47, V47_SCHEMA_STATEMENTS);
 SCHEMA_BY_VERSION.set(48, V48_SCHEMA_STATEMENTS);
 SCHEMA_BY_VERSION.set(49, V49_SCHEMA_STATEMENTS);
 SCHEMA_BY_VERSION.set(50, V50_SCHEMA_STATEMENTS);
+SCHEMA_BY_VERSION.set(51, V51_SCHEMA_STATEMENTS);
 
 /** 返回指定版本的完整建库语句(未知版本返回空数组)。 */
 export function getSchemaStatements(version: number): string[] {

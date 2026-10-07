@@ -26,7 +26,8 @@ import { getSchemaStatements } from '../main/ets/database/DatabaseSchema';
 import {
   MigrationPath,
   buildMigrationPath,
-  createV49ToV50Migration
+  createV49ToV50Migration,
+  createV50ToV51Migration
 } from '../main/ets/database/DatabaseMigration';
 import { DATABASE_VERSION } from '../main/ets/database/DatabaseConstants';
 
@@ -156,8 +157,8 @@ export default function localImageTagTextTest() {
 
   describe('databaseV50Migration', () => {
 
-    it('version_is_50_and_chain_has_step', 0, () => {
-      expect(DATABASE_VERSION).assertEqual(50);
+    it('database_version_is_51_and_v50_chain_has_step', 0, () => {
+      expect(DATABASE_VERSION).assertEqual(51);
       const path: MigrationPath = buildMigrationPath(49, 50, [createV49ToV50Migration()]);
       expect(path.steps.length).assertEqual(1);
       expect(path.steps[0].fromVersion).assertEqual(49);
@@ -176,6 +177,28 @@ export default function localImageTagTextTest() {
         expect(v50[i]).assertEqual(v49[i]);
       }
       expect(v50[v49.length].indexOf('description') >= 0).assertTrue();
+    });
+  });
+
+  describe('databaseV51Migration', () => {
+
+    it('v51_chain_has_step_from_50', 0, () => {
+      const path: MigrationPath = buildMigrationPath(50, 51, [createV50ToV51Migration()]);
+      expect(path.steps.length).assertEqual(1);
+      expect(path.steps[0].fromVersion).assertEqual(50);
+      expect(path.steps[0].toVersion).assertEqual(51);
+    });
+
+    it('v51_schema_appends_one_statement_to_v50', 0, () => {
+      const v50: string[] = getSchemaStatements(50);
+      const v51: string[] = getSchemaStatements(51);
+      expect(v50.length > 0).assertTrue();
+      // v51 只在 v50 之后追加 1 条 ALTER;前缀逐字节不变
+      expect(v51.length).assertEqual(v50.length + 1);
+      for (let i = 0; i < v50.length; i++) {
+        expect(v51[i]).assertEqual(v50[i]);
+      }
+      expect(v51[v50.length].indexOf('media_type') >= 0).assertTrue();
     });
   });
 }

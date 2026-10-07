@@ -38,8 +38,8 @@ bridge/：仅承载「页面 ↔ 组件」的宿主契约（例：FrontendCardHo
 | 分支地图页（缩进树，无画布/缩放） | `pages/BranchMapPage.ets` | `viewmodels/BranchMapViewModel` → `services/ConversationBranchPersistenceService`；行文案 `utils/BranchTreeFlatten` | UI→VM→S |
 | 会话生命周期（新建/切换/删除/新建章节） | `services/ChatSessionService.ets` | `services/ChatPersistenceService` / `services/WorldGroupService` | S |
 | 消息删除 / 编辑 | `services/ChatMessageService.ets` | — | S |
-| 消息富文本渲染（Markdown 子集 / 折叠块 / 分支选项 / 表格 / **消息内网络图片 + 本地图片库图片**） | `components/ChatRichText.ets` / `components/ChatMessageBubble.ets` | 解析管线 `parser/ChatTextParser.parseChatChunks`（`ChatRenderChunk` 五类分块；图片抽取 `extractImageLinks` 必须在 `sanitizeHtmlTags` **之前**——见 PITFALLS P-92；网络图仅 https，markdown `![]()` 与 `<img src>` 双语法；**本地图 `![描述](arkimg:名字)`** → `kind='local'` + `name`，URI 由 `ChatRichText` 的 `localImages` prop 解析、未命中显示「未找到图片」）；图片组件 `components/ChatMessageImage`（未加载显示**源码占位 + 加载动画**，加载完成只显示图片；点击图片走 **`geometryTransition` 一镜到底**放大/收回（`modalTransition: NONE` + `animateTo`，见 PITFALLS P-96），预览支持**双指缩放（以手指捏合点为锚点）+ 拖动（缩放走布局尺寸、平移走布局 offset，锚点用窗口坐标，见 PITFALLS P-97）**；源码取自 `ImageChatRenderChunk.source`） | UI→parser |
-| **本地图片库（图片池 + 标签即预设）**（v48 建表 / v50 图片池模型） | `pages/LocalImageLibraryPage.ets` → `viewmodels/LocalImageLibraryViewModel` | `services/LocalImageService`（图片 CRUD + **标签正文读写** `attachImageToPresets`/`detachImageFromPresets` + `buildResolutionMap`）→ `repositories/LocalImageRepository` / `storage/LocalImageAssetStore`（`filesDir/local_images`，GIF 不转码）；**模型**：所有图片一个池子，**不分全局/角色**（`local_images.character_id` 自 v50 停用）；每张图 = 唯一名字（模型用 `![描述](arkimg:名字)` 引用）+ 可空**描述**；**标签就是普通提示词预设** —— 正文出现 `- 名字：描述` 即视为打上该标签（反推，见 `utils/LocalImageTagText`），不存任何关联表；改名/改描述/删图会**同步回**提到它的预设正文；渲染解析 = 全部图片（`utils/LocalImageResolution.toResolutionMap`），AI 能用哪些图完全由"会话启用了哪些预设"决定（`prompt_preset_scopes_v1` + 已选集合）。**AI 自动命名**：详情卡「AI 自动命名」按钮 → `services/ai/LocalImageCaptionService`（读沙箱图 → base64 data URL → `ModelService.sendChat`；图片挂在**最后一条 user 消息**、`detail:'low'` 省 token）→ `models/LocalImageCaption` 纯函数解析 → **先出建议、用户「采用」才写库**（复用 renameImage/updateImageDescription 的正文同步）；请求层唯一改动是 `ChatRequest.imageDataUrls`（仅此任务携带，聊天主链路零影响） | UI→VM→S→Repo |
+| 消息富文本渲染（Markdown 子集 / 折叠块 / 分支选项 / 表格 / **消息内网络图片 + 本地图片库图片**） | `components/ChatRichText.ets` / `components/ChatMessageBubble.ets` | 解析管线 `parser/ChatTextParser.parseChatChunks`（`ChatRenderChunk` 五类分块；图片抽取 `extractImageLinks` 必须在 `sanitizeHtmlTags` **之前**——见 PITFALLS P-92；网络图仅 https，markdown `![]()` 与 `<img src>` 双语法；**本地图 `![描述](arkimg:名字)`、本地视频 `![描述](arkvid:名字)`** → `kind='local'|'video'` + `name`，URI 由 `ChatRichText` 的 `localImages` prop（值 = `{ uri, mediaType }`）解析、未命中显示「未找到图片/视频」；`kind='video'` 或库内类型为 video 均按视频渲染）；图片组件 `components/ChatMessageImage`（未加载显示**源码占位 + 加载动画**，加载完成只显示图片；点击图片走 **`geometryTransition` 一镜到底**放大/收回（`modalTransition: NONE` + `animateTo`，见 PITFALLS P-96），预览支持**双指缩放（以手指捏合点为锚点）+ 拖动（缩放走布局尺寸、平移走布局 offset，锚点用窗口坐标，见 PITFALLS P-97）**；源码取自 `ImageChatRenderChunk.source`；**视频**用 `Video` 组件渲染——默认暂停 + ▶ 角标，点击放大（一镜到底）后自动播放，Aa 面板「视频自动播放」可改为气泡内直接播放） | UI→parser |
+| **本地媒体库（图片池 + 标签即预设）**（v48 建表 / v50 图片池模型 / **v51 支持视频**） | `pages/LocalImageLibraryPage.ets` → `viewmodels/LocalImageLibraryViewModel` | `services/LocalImageService`（图片 CRUD + **标签正文读写** `attachImageToPresets`/`detachImageFromPresets` + `buildResolutionMap`）→ `repositories/LocalImageRepository` / `storage/LocalImageAssetStore`（`filesDir/local_images`，GIF 不转码）；**模型**：所有图片一个池子，**不分全局/角色**（`local_images.character_id` 自 v50 停用）；每张图 = 唯一名字（图片/GIF 用 `![描述](arkimg:名字)` 引用、视频用 `![描述](arkvid:名字)`）+ **媒体类型 mediaType**（v51：image/gif/video，按扩展名判定）+ 可空**描述**；导入选择器取 `IMAGE_VIDEO_TYPE`（图片 + GIF + 视频），非白名单扩展名在 `LocalImageService.addImage` 拒绝；`LocalImageAssetStore` 对视频单独放宽体积上限（300MB）且不做视觉命名（`readImageAsDataUrl` 直接拒绝视频）；**标签就是普通提示词预设** —— 正文出现 `- 名字：描述` 即视为打上该标签（反推，见 `utils/LocalImageTagText`），不存任何关联表；改名/改描述/删图会**同步回**提到它的预设正文；渲染解析 = 全部图片（`utils/LocalImageResolution.toResolutionMap`），AI 能用哪些图完全由"会话启用了哪些预设"决定（`prompt_preset_scopes_v1` + 已选集合）。**AI 自动命名**：详情卡「AI 自动命名」按钮 → `services/ai/LocalImageCaptionService`（读沙箱图 → base64 data URL → `ModelService.sendChat`；图片挂在**最后一条 user 消息**、`detail:'low'` 省 token）→ `models/LocalImageCaption` 纯函数解析 → **先出建议、用户「采用」才写库**（复用 renameImage/updateImageDescription 的正文同步）；请求层唯一改动是 `ChatRequest.imageDataUrls`（仅此任务携带，聊天主链路零影响） | UI→VM→S→Repo |
 | 上下文维护（记忆总结触发 / 记忆失效 / 世界书激活刷新） | `services/ChatContextMaintenanceService.ets` | `services/MemoryService` / `services/LorebookPinService` | S |
 | 用户称呼 / Persona 注入 | `services/ChatUserIdentityService.ets` | `services/PersonaService` | S |
 | **Prompt 如何拼装** | `services/PromptBuilder.ets` | `services/MacroReplacer` / `RecentMessageSelector` / `HistoryTrimmer` / `PromptSegment` 段序 | S |
@@ -72,10 +72,10 @@ bridge/：仅承载「页面 ↔ 组件」的宿主契约（例：FrontendCardHo
 
 | 我想改… | 第一定位 |
 |---|---|
-| 表名 / 列名 / 索引名（唯一来源） | `database/DatabaseConstants.ets`（`DATABASE_VERSION` = 50） |
+| 表名 / 列名 / 索引名（唯一来源） | `database/DatabaseConstants.ets`（`DATABASE_VERSION` = 51） |
 | **DDL 常量**（CREATE/ALTER） | `database/schema/Schema{Core,Lorebook,Presets,Swipe,Branch,Memory,World,LocalImages}.ets`（P3-3② 按域拆分） |
 | 版本组装 / `getSchemaStatements` | `database/DatabaseSchema.ets`（`SCHEMA_BY_VERSION` Map 注册表，P3-3③） |
-| **新增数据库迁移** | `database/DatabaseMigration.ets`（**只增不改、版本连续、禁 DROP**；当前到 v50。**新增一版要改 4 处**，见 PITFALLS P-99） |
+| **新增数据库迁移** | `database/DatabaseMigration.ets`（**只增不改、版本连续、禁 DROP**；当前到 v51。**新增一版要改 4 处**，见 PITFALLS P-99） |
 | 数据库连接 / 事务 | `database/DbHelper.ets`（`runInTransaction` / `getStore` / `getVersion`） |
 | **新增 Repository** | 仿 `repositories/CharacterRepository.ets`（+ 同名 `*RepositoryMapper.ets`）；事务内复用传 `store` |
 | **跨表事务编排** | 仿 `services/ChatPersistenceService.ets`（`dbHelper.runInTransaction`）；**新服务不得新增 DbHelper 直连**（P3-4 口径 C） |
@@ -112,7 +112,7 @@ bridge/：仅承载「页面 ↔ 组件」的宿主契约（例：FrontendCardHo
 | TokenBudget / ContextBudgetConfig | `models/TokenBudget.ets` / `ContextBudgetConfig.ets` |
 | MessageSwipe / 候选上限 | `models/MessageSwipe.ets` |
 | 世界分组 | `models/WorldGroup.ets` |
-| **本地图片** | `models/LocalImage.ets`（id / name / nameKey / fileUri / **description**；`character_id` 已于 v50 停用）|
+| **本地图片 / 视频** | `models/LocalImage.ets`（id / name / nameKey / fileUri / **mediaType**（v51：image\|gif\|video）/ **description**；`character_id` 已于 v50 停用；扩展名判定 `mediaTypeFromFileName`、白名单 `isSupportedMediaFileName`）|
 | TTS 模型 | `models/TtsReadMode.ets` / `TtsEngine.ets` |
 | 市场模型 | `models/MarketCharacter*.ets` |
 

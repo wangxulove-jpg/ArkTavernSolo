@@ -92,6 +92,8 @@ export struct ChatAppearancePanel {
   onApplyFontSize: (fontSize: number) => void = (_: number) => {};
   /** v52: 应用消息内图片大小(宽度占气泡比例 0.3~1.0) */
   onApplyImageWidthRatio: (ratio: number) => void = (_: number) => {};
+  /** v51: 应用「视频自动播放」开关(默认关闭 = 视频默认暂停,点击放大后才播放) */
+  onApplyMediaAutoPlay: (enabled: boolean) => void = (_: boolean) => {};
   /** 切换正文字体族(含持久化) */
   onApplyFontFamily: (family: string) => void = (_: string) => {};
   /** 切换文字配色模式(含持久化) */
@@ -339,6 +341,35 @@ export struct ChatAppearancePanel {
         }
         .width('100%')
         .margin({ top: 4 })
+
+        Divider()
+          .color(ThemePalette.dividerColor(this.effectiveTheme))
+          .margin({ top: 16, bottom: 12 })
+
+        // ===== 视频自动播放(v51:默认关闭 = 视频默认暂停,点击放大后才播放) =====
+        Row() {
+          Column() {
+            Text('视频自动播放')
+              .fontSize($r('app.float.app_font_caption'))
+              .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+            Text('关闭时视频默认暂停，点击放大后才播放')
+              .fontSize(11)
+              .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+              .margin({ top: 2 })
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+
+          Toggle({ type: ToggleType.Switch, isOn: this.chatTextStyle !== null
+            ? this.chatTextStyle!.mediaAutoPlay
+            : DEFAULT_CHAT_TEXT_STYLE.mediaAutoPlay })
+            .selectedColor(ThemePalette.accentColor(this.effectiveTheme))
+            .onChange((isOn: boolean) => {
+              this.onApplyMediaAutoPlay(isOn);
+            })
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
 
         Divider()
           .color(ThemePalette.dividerColor(this.effectiveTheme))

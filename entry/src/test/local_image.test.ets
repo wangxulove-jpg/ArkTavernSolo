@@ -21,7 +21,11 @@ import {
   describeImageNameProblem,
   describeImageDescriptionProblem,
   normalizeImageDescription,
-  IMAGE_DESCRIPTION_MAX_LENGTH
+  IMAGE_DESCRIPTION_MAX_LENGTH,
+  extensionOf,
+  mediaTypeFromFileName,
+  isSupportedMediaFileName,
+  coerceMediaType
 } from '../main/ets/models/LocalImage';
 import {
   ChatTextStyle,
@@ -47,6 +51,7 @@ function makeImage(id: string, name: string, description: string): LocalImage {
     name: name,
     nameKey: normalizeImageName(name),
     fileUri: 'file:///data/local_images/' + id + '.png',
+    mediaType: 'image',
     description: description,
     createdAt: 1,
     updatedAt: 1
@@ -221,6 +226,39 @@ export default function localImageTest() {
       // 默认样式是新装用户的比例来源
       const style: ChatTextStyle = DEFAULT_CHAT_TEXT_STYLE;
       expect(style.imageWidthRatio > 0).assertTrue();
+    });
+
+    // ===== 媒体类型(v51:图片 / GIF / 视频) =====
+
+    it('extension_extracts_lowercase_and_strips_query', 0, () => {
+      expect(extensionOf('file:///a/b/pic.PNG')).assertEqual('.png');
+      expect(extensionOf('/a/b/clip.mp4?token=x#f')).assertEqual('.mp4');
+      expect(extensionOf('/a/b/noext')).assertEqual('');
+    });
+
+    it('media_type_maps_extension_to_kind', 0, () => {
+      expect(mediaTypeFromFileName('/a/b/pic.png')).assertEqual('image');
+      expect(mediaTypeFromFileName('/a/b/anim.GIF')).assertEqual('gif');
+      expect(mediaTypeFromFileName('/a/b/clip.mp4')).assertEqual('video');
+      expect(mediaTypeFromFileName('/a/b/clip.MKV')).assertEqual('video');
+      // 未识别扩展名回退图片(旧数据安全)
+      expect(mediaTypeFromFileName('/a/b/unknown.xyz')).assertEqual('image');
+    });
+
+    it('supported_media_whitelist', 0, () => {
+      expect(isSupportedMediaFileName('/a/b/pic.jpg')).assertTrue();
+      expect(isSupportedMediaFileName('/a/b/anim.gif')).assertTrue();
+      expect(isSupportedMediaFileName('/a/b/clip.mp4')).assertTrue();
+      expect(isSupportedMediaFileName('/a/b/doc.pdf')).assertFalse();
+      expect(isSupportedMediaFileName('/a/b/noext')).assertFalse();
+    });
+
+    it('coerce_media_type_defaults_to_image', 0, () => {
+      expect(coerceMediaType('gif')).assertEqual('gif');
+      expect(coerceMediaType('video')).assertEqual('video');
+      expect(coerceMediaType('image')).assertEqual('image');
+      expect(coerceMediaType('')).assertEqual('image');
+      expect(coerceMediaType('bogus')).assertEqual('image');
     });
   });
 }
