@@ -86,6 +86,11 @@ export class LocalImageLibraryViewModel {
   /** AI 建议的描述 */
   captionDescription: string = '';
   captionError: string = '';
+  /**
+   * 用户自定义「描述方向」:拼在命名提示词开头,用于约束名字/描述的写法。
+   * 持久化在 Preferences(见 LocalImageCaptionService.loadGuidance/saveGuidance)。
+   */
+  captionGuidance: string = '';
 
   private readonly imageService: LocalImageService;
   private readonly captionService: LocalImageCaptionService;
@@ -97,6 +102,11 @@ export class LocalImageLibraryViewModel {
   }
 
   async initialize(): Promise<void> {
+    if (this.disposed) {
+      return;
+    }
+    // 描述方向先于第一次生成加载(读失败按空串,不影响命名)
+    this.captionGuidance = await this.captionService.loadGuidance();
     if (this.disposed) {
       return;
     }
@@ -430,7 +440,8 @@ export class LocalImageLibraryViewModel {
     this.captionError = '';
     this.captionState = 'loading';
     try {
-      const suggestion: ImageCaptionSuggestion = await this.captionService.suggestCaption(imageId);
+      const suggestion: ImageCaptionSuggestion =
+        await this.captionService.suggestCaption(imageId, this.captionGuidance);
       if (this.disposed) {
         return;
       }
@@ -481,7 +492,16 @@ export class LocalImageLibraryViewModel {
     }
   }
 
-  /** 关闭 AI 命名面板(清空建议与状态) */
+  /**
+   * 保存「描述方向」(库级全局偏好,对所有图片生效)。
+   * 由图片库顶部的设置面板调用;写入失败只记日志,不影响命名。
+   */
+  async saveCaptionGuidance(text: string): Promise<void> {
+    this.captionGuidance = text;
+    await this.captionService.saveGuidance(text);
+  }
+
+  /** 关闭 AI 命名面板(清空本次建议与状态;「描述方向」是页面级偏好,不在这里处理) */
   resetCaption(): void {
     this.captionState = 'idle';
     this.captionImageId = '';

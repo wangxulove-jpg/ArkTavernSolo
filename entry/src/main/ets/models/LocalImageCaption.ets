@@ -42,6 +42,28 @@ export const LOCAL_IMAGE_CAPTION_INSTRUCTION: string =
 /** 与图片同一条 user 消息里的文本 */
 export const LOCAL_IMAGE_CAPTION_USER_TEXT: string = '请为这张图片给出名字与描述。';
 
+/** 用户自定义「描述方向」的长度上限 */
+export const CAPTION_GUIDANCE_MAX_LENGTH: number = 300;
+
+/**
+ * 组装最终发给模型的任务指令。
+ *
+ * 用户填的「描述方向」**放在最前**(它优先级最高、用于覆盖/补充下面的固定要求),
+ * 空行之后接固定基础指令;方向为空时就是基础指令本身。
+ *
+ * @param guidance 用户在界面上填写的描述方向(可为空)
+ */
+export function buildCaptionInstruction(guidance: string): string {
+  const trimmed: string = guidance.trim();
+  if (trimmed.length === 0) {
+    return LOCAL_IMAGE_CAPTION_INSTRUCTION;
+  }
+  const capped: string = trimmed.length > CAPTION_GUIDANCE_MAX_LENGTH
+    ? trimmed.substring(0, CAPTION_GUIDANCE_MAX_LENGTH)
+    : trimmed;
+  return capped + '\n\n' + LOCAL_IMAGE_CAPTION_INSTRUCTION;
+}
+
 /**
  * 解析模型返回的文本。
  *

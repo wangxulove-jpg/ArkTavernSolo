@@ -318,7 +318,8 @@ export class AppServices {
     this.localImageCaptionService = new LocalImageCaptionService(
       this.modelService,
       this.localImageService,
-      this.localImageAssetStore
+      this.localImageAssetStore,
+      this.appPreferences
     );
     const macroReplacer: MacroReplacer = new MacroReplacer();
     this.promptBuilder = new PromptBuilder(this.lorebookService, macroReplacer);

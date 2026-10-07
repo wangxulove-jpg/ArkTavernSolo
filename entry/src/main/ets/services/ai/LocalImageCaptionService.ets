@@ -24,30 +24,39 @@ import { LocalImage, sanitizeImageName } from '../../models/LocalImage';
 import {
   CaptionParseFailure,
   ImageCaptionSuggestion,
-  LOCAL_IMAGE_CAPTION_INSTRUCTION,
   LOCAL_IMAGE_CAPTION_USER_TEXT,
+  buildCaptionInstruction,
   classifyCaptionFailure,
   parseImageCaptionResponse,
   summarizeRawResponse
 } from '../../models/LocalImageCaption';
 import { LocalImageService } from '../LocalImageService';
 import { LocalImageAssetStore } from '../../storage/LocalImageAssetStore';
+import { AppPreferences } from '../../storage/AppPreferences';
 import { ModelService } from '../ModelService';
 import { Logger } from '../../utils/Logger';
 
 const LOG_TAG: string = 'LocalImageCaptionService';
+
+/** 「描述方向」本地偏好键(用户自定义要求,拼在提示词开头) */
+const GUIDANCE_KEY: string = 'local_image_caption_guidance_v1';
 
 /** 一次性任务消息 id(不持久化,仅为模型必填字段) */
 const SYSTEM_MESSAGE_ID: string = 'caption-sys';
 const USER_MESSAGE_ID: string = 'caption-usr';
 
 /**
- * 生成参数:命名是确定性任务,采样压低。
- * maxTokens 给足 800:思考型模型会先花配额在思考上,300 很容易把 JSON 截断(实测失败原因之一)。
+ * 生成参数。
+ *
+ * 关键:`reasoningEffort: 'none'` **关掉思考** —— 命名是纯抽取任务,不需要推理;
+ * 不关的话思考会吃掉大部分输出配额,导致 JSON 被截断或只剩很短的内容
+ * (与聊天页「思考强度」同一套字段,`'none'` = 发送 reasoning_effort=none)。
+ * maxTokens 同步放大到 2000:万一某些 Provider 忽略 reasoning_effort,仍留足输出空间。
  */
 const CAPTION_TEMPERATURE: number = 0.3;
 const CAPTION_TOP_P: number = 0.9;
-const CAPTION_MAX_TOKENS: number = 800;
+const CAPTION_MAX_TOKENS: number = 2000;
+const CAPTION_REASONING_EFFORT: string = 'none';
 /** 失败时在提示里附带的模型原文长度上限 */
 const RAW_EXCERPT_MAX_LENGTH: number = 160;
 
@@ -58,25 +67,48 @@ export class LocalImageCaptionService {
   private readonly modelService: ModelService;
   private readonly localImageService: LocalImageService;
   private readonly assetStore: LocalImageAssetStore;
+  private readonly preferences: AppPreferences;
 
   constructor(
     modelService: ModelService,
     localImageService: LocalImageService,
-    assetStore: LocalImageAssetStore
+    assetStore: LocalImageAssetStore,
+    preferences: AppPreferences
   ) {
     this.modelService = modelService;
     this.localImageService = localImageService;
     this.assetStore = assetStore;
+    this.preferences = preferences;
+  }
+
+  /** 读取用户上次填写的「描述方向」(读失败按空串处理) */
+  async loadGuidance(): Promise<string> {
+    try {
+      return await this.preferences.getString(GUIDANCE_KEY, '');
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'loadGuidance failed: ' + String(e));
+      return '';
+    }
+  }
+
+  /** 保存「描述方向」(写失败只记日志,不影响命名) */
+  async saveGuidance(guidance: string): Promise<void> {
+    try {
+      await this.preferences.putString(GUIDANCE_KEY, guidance);
+    } catch (e) {
+      Logger.warn(LOG_TAG, 'saveGuidance failed: ' + String(e));
+    }
   }
 
   /**
    * 为一张图片生成命名建议(不落库)。
    *
    * @param imageId 图片 id
+   * @param guidance 用户自定义「描述方向」,拼在提示词开头(可为空)
    * @returns 建议:名字已按本项目规则消毒(消毒后为空则退回原名),描述已归一化截断
    * @throws Error 未配置模型 / 图片不可读或过大 / 请求失败 / 返回无法解析
    */
-  async suggestCaption(imageId: string): Promise<ImageCaptionSuggestion> {
+  async suggestCaption(imageId: string, guidance: string): Promise<ImageCaptionSuggestion> {
     const image: LocalImage | null = await this.localImageService.getImage(imageId);
     if (image === null) {
       throw new Error('图片不存在或已被删除');
@@ -96,7 +128,7 @@ export class LocalImageCaptionService {
 
     // 图片挂在最后一条 user 消息上(DeepSeek/OpenAI 兼容端点的硬要求)
     const messages: ChatMessage[] = [
-      createChatMessage(SYSTEM_MESSAGE_ID, ChatRole.System, LOCAL_IMAGE_CAPTION_INSTRUCTION, Date.now()),
+      createChatMessage(SYSTEM_MESSAGE_ID, ChatRole.System, buildCaptionInstruction(guidance), Date.now()),
       createChatMessage(USER_MESSAGE_ID, ChatRole.User, LOCAL_IMAGE_CAPTION_USER_TEXT, Date.now())
     ];
     const request: ChatRequest = {
@@ -107,6 +139,7 @@ export class LocalImageCaptionService {
       maxTokens: CAPTION_MAX_TOKENS,
       stream: false,
       responseFormatJson: true,
+      reasoningEffort: CAPTION_REASONING_EFFORT,
       imageDataUrls: [dataUrl]
     };
 

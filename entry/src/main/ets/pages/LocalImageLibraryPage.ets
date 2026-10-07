@@ -17,6 +17,7 @@ import {
   IMAGE_FILTER_ALL,
   IMAGE_FILTER_NONE
 } from '../viewmodels/LocalImageLibraryViewModel';
+import { CAPTION_GUIDANCE_MAX_LENGTH } from '../models/LocalImageCaption';
 import {
   describeImageNameProblem,
   describeImageDescriptionProblem,
@@ -90,6 +91,11 @@ struct LocalImageLibraryPage {
   @State captionSheetMounted: boolean = false;
   @State captionSheetShow: boolean = false;
 
+  /** 「描述方向」编辑面板(库级全局设置,页面顶部常驻入口) */
+  @State guidanceSheetMounted: boolean = false;
+  @State guidanceSheetShow: boolean = false;
+  @State guidanceDraft: string = '';
+
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   @StorageProp('navigationBarHeight') navigationBarHeight: number = 0;
   @StorageProp('effectiveTheme') effectiveTheme: string = 'dark';
@@ -113,6 +119,7 @@ struct LocalImageLibraryPage {
       Column() {
         this.header()
         this.errorBanner()
+        this.guidanceRow()
         this.content()
         if (this.batchMode) {
           this.batchBar()
@@ -141,6 +148,9 @@ struct LocalImageLibraryPage {
       }
       if (this.captionSheetMounted) {
         this.captionSheetHost()
+      }
+      if (this.guidanceSheetMounted) {
+        this.guidanceSheetHost()
       }
     }
     .width('100%')
@@ -207,6 +217,137 @@ struct LocalImageLibraryPage {
         .width('100%')
         .padding({ left: 16, right: 16, bottom: 8 })
     }
+  }
+
+  // ===== 顶部:描述方向(库级全局设置,对所有图片生效) =====
+
+  /** 常驻一行:显示当前描述方向,点击打开编辑面板 */
+  @Builder
+  guidanceRow() {
+    Row({ space: 8 }) {
+      Text($r('app.string.local_image_guidance_label'))
+        .fontSize(12)
+        .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+      if (this.viewModel.captionGuidance.length > 0) {
+        Text(this.viewModel.captionGuidance)
+          .fontSize(12)
+          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
+      } else {
+        Text($r('app.string.local_image_guidance_empty'))
+          .fontSize(12)
+          .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+          .layoutWeight(1)
+      }
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(14)
+        .fontColor([ThemePalette.textTertiaryColor(this.effectiveTheme)])
+    }
+    .width('100%')
+    .height(34)
+    .padding({ left: 16, right: 16 })
+    .alignItems(VerticalAlign.Center)
+    .onClick(() => {
+      this.openGuidanceSheet();
+    })
+  }
+
+  // ===== 描述方向编辑面板 =====
+
+  @Builder
+  guidanceSheetHost() {
+    Column()
+      .width('100%')
+      .height(0)
+      .backgroundColor(Color.Transparent)
+      .bindSheet(this.guidanceSheetShow, this.guidanceSheetContent(), {
+        height: SheetSize.FIT_CONTENT,
+        dragBar: false,
+        showClose: false,
+        backgroundColor: ThemePalette.surface1Color(this.effectiveTheme),
+        onDisappear: () => {
+          this.guidanceSheetMounted = false;
+        }
+      })
+      .onAppear(() => {
+        this.guidanceSheetShow = true;
+      })
+  }
+
+  @Builder
+  guidanceSheetContent() {
+    Column() {
+      Row() {
+        Column() {
+          Text($r('app.string.local_image_guidance_label'))
+            .fontSize($r('app.float.app_font_subtitle'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+          Text($r('app.string.local_image_guidance_hint'))
+            .fontSize($r('app.float.app_font_caption'))
+            .fontColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+            .margin({ top: 2 })
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+        SymbolGlyph($r('sys.symbol.xmark'))
+          .fontSize(22)
+          .fontColor([ThemePalette.textSecondaryColor(this.effectiveTheme)])
+          .onClick(() => {
+            this.guidanceSheetShow = false;
+          })
+      }
+      .width('100%')
+      .height(56)
+      .padding({ left: 16, right: 16 })
+      .alignItems(VerticalAlign.Center)
+
+      TextArea({
+        text: this.guidanceDraft,
+        placeholder: $r('app.string.local_image_caption_guidance_placeholder')
+      })
+        .width('100%')
+        .height(120)
+        .fontSize($r('app.float.app_font_body'))
+        .fontColor(ThemePalette.textPrimaryColor(this.effectiveTheme))
+        .placeholderColor(ThemePalette.textTertiaryColor(this.effectiveTheme))
+        .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+        .borderRadius($r('app.float.app_radius_sm'))
+        .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+        .maxLength(CAPTION_GUIDANCE_MAX_LENGTH)
+        .onChange((value: string) => {
+          this.guidanceDraft = value;
+        })
+
+      Row() {
+        Button($r('app.string.local_image_cancel'))
+          .fontSize($r('app.float.app_font_body'))
+          .fontColor(ThemePalette.textSecondaryColor(this.effectiveTheme))
+          .backgroundColor(ThemePalette.surface2Color(this.effectiveTheme))
+          .height(44)
+          .layoutWeight(1)
+          .onClick(() => {
+            this.guidanceSheetShow = false;
+          })
+
+        Button($r('app.string.local_image_guidance_save'))
+          .fontSize($r('app.float.app_font_body'))
+          .fontColor($r('app.color.app_on_accent'))
+          .backgroundColor(ThemePalette.accentColor(this.effectiveTheme))
+          .height(44)
+          .layoutWeight(1)
+          .margin({ left: 12 })
+          .onClick(() => {
+            void this.saveGuidance();
+          })
+      }
+      .width('100%')
+      .margin({ top: 16 })
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, bottom: 16 })
   }
 
   // ===== 内容区 ====
@@ -1559,6 +1700,18 @@ struct LocalImageLibraryPage {
   /** 命名请求进行中或正在写入(用于禁用详情卡上的 AI 按钮) */
   private captionLoadingOrApplying(): boolean {
     return this.viewModel.isOperating || this.viewModel.captionState === 'loading';
+  }
+
+  /** 打开「描述方向」编辑面板(草稿从当前值开始,取消不改动) */
+  private openGuidanceSheet(): void {
+    this.guidanceDraft = this.viewModel.captionGuidance;
+    this.guidanceSheetMounted = true;
+  }
+
+  /** 保存「描述方向」并关闭面板 */
+  private async saveGuidance(): Promise<void> {
+    this.guidanceSheetShow = false;
+    await this.viewModel.saveCaptionGuidance(this.guidanceDraft);
   }
 
   /** 打开 AI 命名面板并立即请求建议(结果只进面板,确认后才写入) */

@@ -4543,6 +4543,26 @@
     {
       "name": "local_image_caption_retry",
       "value": "重新生成"
+    },
+    {
+      "name": "local_image_caption_guidance_placeholder",
+      "value": "例如：用中性客观的措辞；每条 20 字以内；命名用「情绪_动作」格式"
+    },
+    {
+      "name": "local_image_guidance_label",
+      "value": "描述方向"
+    },
+    {
+      "name": "local_image_guidance_empty",
+      "value": "未设置"
+    },
+    {
+      "name": "local_image_guidance_hint",
+      "value": "发给模型时会拼在提示词最前；对库内所有图片生效"
+    },
+    {
+      "name": "local_image_guidance_save",
+      "value": "保存"
     }
   ]
 }

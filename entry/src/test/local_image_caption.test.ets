@@ -14,8 +14,10 @@
 import { describe, it, expect } from '@ohos/hypium';
 import {
   LOCAL_IMAGE_CAPTION_INSTRUCTION,
+  CAPTION_GUIDANCE_MAX_LENGTH,
   CaptionParseFailure,
   ImageCaptionSuggestion,
+  buildCaptionInstruction,
   classifyCaptionFailure,
   parseImageCaptionResponse,
   summarizeRawResponse
@@ -70,6 +72,26 @@ export default function localImageCaptionTest() {
     it('instruction_mentions_json', 0, () => {
       // 开启 response_format=json_object 时部分端点强制要求提示词含 "JSON"
       expect(LOCAL_IMAGE_CAPTION_INSTRUCTION.indexOf('JSON') >= 0).assertTrue();
+    });
+
+    // ===== 描述方向(用户自定义,拼在提示词最前) =====
+
+    it('instruction_without_guidance_is_base', 0, () => {
+      expect(buildCaptionInstruction('')).assertEqual(LOCAL_IMAGE_CAPTION_INSTRUCTION);
+      expect(buildCaptionInstruction('   ')).assertEqual(LOCAL_IMAGE_CAPTION_INSTRUCTION);
+    });
+
+    it('guidance_is_prepended_before_base', 0, () => {
+      const out: string = buildCaptionInstruction('用中性客观的措辞');
+      expect(out.startsWith('用中性客观的措辞\n\n')).assertTrue();
+      expect(out.endsWith(LOCAL_IMAGE_CAPTION_INSTRUCTION)).assertTrue();
+    });
+
+    it('guidance_is_trimmed_and_capped', 0, () => {
+      expect(buildCaptionInstruction('  方向  ').startsWith('方向\n\n')).assertTrue();
+      const long: string = '啊'.repeat(CAPTION_GUIDANCE_MAX_LENGTH + 30);
+      const out: string = buildCaptionInstruction(long);
+      expect(out.substring(0, out.indexOf('\n\n')).length).assertEqual(CAPTION_GUIDANCE_MAX_LENGTH);
     });
 
     // ===== 解析:命中 =====
